@@ -43,10 +43,19 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 | accounts@itinium.co.uk | accounts | Jane Williams |
 | admin@itinium.co.uk | head_office_admin | Mark Johnson |
 
+## Pages & Routes
+
+| Route | Page | Description |
+|-------|------|-------------|
+| `/login` | `login.tsx` | Split-panel login with Itinium branding |
+| `/` | `dashboard.tsx` | Welcome dashboard with role info + "New Collection" card |
+| `/collection/new` | `depot-form.tsx` | Battery collection submission form |
+
 ## Key Files
 
 - `artifacts/portal/src/pages/login.tsx` — Login page with split-panel design
 - `artifacts/portal/src/pages/dashboard.tsx` — Dashboard (post-login)
+- `artifacts/portal/src/pages/depot-form.tsx` — Depot submission form (tonnage bar, asset details, specs, photo capture, notes)
 - `artifacts/portal/src/App.tsx` — Routing with AuthGuard/GuestGuard
 - `artifacts/api-server/src/routes/auth.ts` — Auth API routes
 - `lib/db/src/schema/users.ts` — Users + sessions schema

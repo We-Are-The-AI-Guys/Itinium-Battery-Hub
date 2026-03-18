@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
+import DepotFormPage from "@/pages/depot-form";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -78,6 +79,11 @@ function AppRouter() {
       <Route path="/">
         <AuthGuard>
           <DashboardPage />
+        </AuthGuard>
+      </Route>
+      <Route path="/collection/new">
+        <AuthGuard>
+          <DepotFormPage />
         </AuthGuard>
       </Route>
       <Route component={NotFound} />

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Shield, LogOut } from "lucide-react";
+import { Link } from "wouter";
+import { Shield, LogOut, Plus, Battery, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface User {
@@ -59,19 +60,31 @@ export default function DashboardPage() {
         <h1 className="text-3xl font-bold text-[#1e293b] mb-2" data-testid="text-dashboard-heading">Welcome, {user?.fullName || "User"}</h1>
         <p className="text-[#64748b] mb-8">You are signed in as <span className="font-medium capitalize">{user?.role.replace(/_/g, " ") || "..."}</span>. The full portal is under development.</p>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-            <h3 className="text-sm font-medium text-[#64748b] mb-1">Your Role</h3>
+            <div className="flex items-center gap-2 mb-1">
+              <Battery className="w-4 h-4 text-[#0ea5e9]" />
+              <h3 className="text-sm font-medium text-[#64748b]">Your Role</h3>
+            </div>
             <p className="text-2xl font-bold text-[#0f2744] capitalize">{user?.role.replace(/_/g, " ") || "..."}</p>
           </div>
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-            <h3 className="text-sm font-medium text-[#64748b] mb-1">Email</h3>
-            <p className="text-lg font-medium text-[#1e293b]">{user?.email || "..."}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-            <h3 className="text-sm font-medium text-[#64748b] mb-1">Portal Status</h3>
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp className="w-4 h-4 text-[#0ea5e9]" />
+              <h3 className="text-sm font-medium text-[#64748b]">Portal Status</h3>
+            </div>
             <p className="text-lg font-medium text-[#10b981]">Active</p>
           </div>
+          <Link href="/collection/new" className="block" data-testid="link-new-collection-card">
+            <div className="bg-gradient-to-br from-[#0f2744] to-[#1a3a5c] rounded-xl border border-slate-200 p-6 shadow-sm text-white hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer">
+              <div className="flex items-center gap-2 mb-1">
+                <Plus className="w-4 h-4 text-[#0ea5e9]" />
+                <h3 className="text-sm font-medium text-slate-300">Quick Action</h3>
+              </div>
+              <p className="text-xl font-bold">New Collection</p>
+              <p className="text-sm text-slate-300 mt-1">Submit a battery collection</p>
+            </div>
+          </Link>
         </div>
       </main>
     </div>
