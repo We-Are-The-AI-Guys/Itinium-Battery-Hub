@@ -30,7 +30,7 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 ## Database Schema
 
 ### users
-- id, email (unique), password_hash, full_name, role, depot, created_at
+- id, email (unique), password_hash, full_name, role, depot, is_active (boolean), last_active_at, created_at
 - Roles: depot_user, team_leader, accounts, head_office_admin
 
 ### sessions
@@ -41,6 +41,10 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 - Battery details: pallet_number, asset_number, battery_serial, cell_type, voltage, weight, condition
 - Financial: invoice_status (pending_invoice/invoiced/paid), lme_rate_used, calculated_value
 - notes, submitted_by_id (FK → users), created_at
+- Indexes: status, submitted_at, composite (status, submitted_at)
+
+### lme_prices
+- id, price_date, usd_price (decimal), exchange_rate (decimal), gbp_price (decimal), source (manual/api), created_at
 
 ## Demo Accounts (all password: password123)
 
@@ -51,6 +55,8 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 | accounts@itinium.co.uk | accounts | Rachel Adams |
 | admin@itinium.co.uk | head_office_admin | Sarah Mitchell |
 
+Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, David Osei, Priya Sharma, Mark Thompson, Lisa Chen
+
 ## API Endpoints
 
 ### Auth
@@ -59,10 +65,21 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 - `POST /api/auth/logout` — end session
 
 ### Jobs (requires auth + role: team_leader/accounts/head_office_admin)
-- `GET /api/jobs?status=X&page=1&limit=10` — list jobs with filtering and pagination
+- `GET /api/jobs?status=X&invoiceStatus=X&search=X&limit=10&offset=0` — list jobs with filtering, search, and pagination
 
 ### Dashboard (requires auth + role: team_leader/accounts/head_office_admin)
 - `GET /api/dashboard/stats` — summary metrics (pendingJobs, monthlyTonnage, totalInvoiceValue, flaggedExceptions)
+
+### LME Pricing (requires auth + role: accounts/head_office_admin)
+- `GET /api/lme/current` — latest LME price entry
+- `POST /api/lme/update` — save manual price override (usdPrice, exchangeRate → auto-calculates gbpPrice)
+- `GET /api/lme/history?limit=20&offset=0` — price history with pagination
+
+### Users (requires auth + role: head_office_admin)
+- `GET /api/users?role=X&search=X&limit=10&offset=0` — list users with role filtering, search, and pagination
+- `POST /api/users` — create new user (bcrypt password hash, default password: Welcome123!)
+- `PATCH /api/users/:id` — update user (fullName, role, depot, isActive)
+- `GET /api/users/stats` — user count by role (total, depotUsers, teamLeaders, adminStaff)
 
 ## Pages & Routes
 
@@ -71,33 +88,44 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 | `/login` | `login.tsx` | Split-panel login with Itinium branding |
 | `/` | `dashboard.tsx` | Depot user dashboard; admin roles redirect to /dashboard |
 | `/dashboard` | `admin-dashboard.tsx` | Admin dashboard with sidebar, KPI cards, jobs table |
+| `/lme-pricing` | `lme-pricing.tsx` | LME Pricing & Accounts — manual price input, job value table, export cards |
+| `/users` | `user-management.tsx` | User Management — stats, user table with role filters, Add New User modal |
+| `/jobs` | `placeholder.tsx` | Job Management (placeholder) |
+| `/kpi` | `placeholder.tsx` | KPI Reporting (placeholder) |
 | `/collection/new` | `depot-form.tsx` | Battery collection submission form |
+
+## Route Guards
+
+- `AuthGuard` — requires authenticated session
+- `AdminGuard` — requires auth + role in [team_leader, accounts, head_office_admin]
+- `/lme-pricing` uses AdminGuard (accessible by accounts and head_office_admin via API-level role check)
+- `/users` uses AdminGuard (accessible by head_office_admin only via API-level role check)
 
 ## Shared Components
 
-- `sidebar-layout.tsx` — Reusable sidebar layout with dark navy sidebar, nav items, user info, header bar. Used by admin dashboard and will be used by LME Pricing, User Management pages.
+- `sidebar-layout.tsx` — Reusable sidebar layout with dark navy sidebar, nav items, user info, header bar. Used by admin dashboard, LME Pricing, User Management pages.
 
 ## Key Files
 
 - `artifacts/portal/src/components/sidebar-layout.tsx` — Shared sidebar layout component
 - `artifacts/portal/src/pages/admin-dashboard.tsx` — Admin dashboard with metrics + jobs table
+- `artifacts/portal/src/pages/lme-pricing.tsx` — LME Pricing & Accounts page
+- `artifacts/portal/src/pages/user-management.tsx` — User Management page
 - `artifacts/portal/src/pages/login.tsx` — Login page with split-panel design
 - `artifacts/portal/src/pages/dashboard.tsx` — Depot user dashboard
 - `artifacts/portal/src/pages/depot-form.tsx` — Depot submission form
-- `artifacts/portal/src/App.tsx` — Routing with AuthGuard/GuestGuard
+- `artifacts/portal/src/App.tsx` — Routing with AuthGuard/AdminGuard/GuestGuard
 - `artifacts/api-server/src/routes/auth.ts` — Auth API routes
 - `artifacts/api-server/src/routes/jobs.ts` — Jobs API routes with dashboard stats
+- `artifacts/api-server/src/routes/lme.ts` — LME pricing API routes
+- `artifacts/api-server/src/routes/users.ts` — User management API routes
 - `artifacts/api-server/src/middlewares/auth.ts` — requireAuth + requireRole middleware
-- `lib/db/src/schema/users.ts` — Users + sessions schema
-- `lib/db/src/schema/jobs.ts` — Jobs schema
-- `scripts/seed.ts` — Database seeder (4 users + 18 demo jobs)
+- `lib/db/src/schema/users.ts` — Users + sessions schema (includes isActive, lastActiveAt)
+- `lib/db/src/schema/jobs.ts` — Jobs schema with indexes
+- `lib/db/src/schema/lme-prices.ts` — LME prices schema
+- `scripts/seed.ts` — Database seeder (12 users + 18 demo jobs + 5 LME prices)
 
 ## Mockups
 
 UI mockups designed in mockup-sandbox canvas:
 - Login Page, Depot Submission Form, Admin Dashboard, LME Pricing & Accounts, User Management
-
-## Planned Features (Task #2)
-
-- LME Pricing & Accounts page with manual price input, job value table, export section
-- User Management page with user CRUD, role filtering, Add New User modal

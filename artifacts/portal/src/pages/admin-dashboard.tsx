@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import SidebarLayout from "@/components/sidebar-layout";
+import { SidebarLayout } from "@/components/sidebar-layout";
 
 interface DashboardStats {
   pendingJobs: number;
@@ -33,8 +33,8 @@ interface Job {
 }
 
 interface Pagination {
-  page: number;
   limit: number;
+  offset: number;
   total: number;
   totalPages: number;
 }
@@ -81,8 +81,8 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     const params = new URLSearchParams();
     if (activeFilter !== "All") params.set("status", activeFilter);
-    params.set("page", String(currentPage));
     params.set("limit", "8");
+    params.set("offset", String((currentPage - 1) * 8));
 
     fetch(`/api/jobs?${params}`, { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
@@ -305,8 +305,8 @@ export default function AdminDashboardPage() {
             <span className="text-sm text-slate-500">
               Showing{" "}
               <span className="font-medium text-slate-900">
-                {(pagination.page - 1) * pagination.limit + 1}-
-                {Math.min(pagination.page * pagination.limit, pagination.total)}
+                {pagination.offset + 1}-
+                {Math.min(pagination.offset + pagination.limit, pagination.total)}
               </span>{" "}
               of{" "}
               <span className="font-medium text-slate-900">
@@ -319,7 +319,7 @@ export default function AdminDashboardPage() {
                 variant="outline"
                 size="icon"
                 className="h-8 w-8 disabled:opacity-50"
-                disabled={pagination.page <= 1}
+                disabled={currentPage <= 1}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -358,7 +358,7 @@ export default function AdminDashboardPage() {
                 variant="outline"
                 size="icon"
                 className="h-8 w-8"
-                disabled={pagination.page >= pagination.totalPages}
+                disabled={currentPage >= pagination.totalPages}
                 onClick={() =>
                   setCurrentPage((p) =>
                     Math.min(pagination.totalPages, p + 1)

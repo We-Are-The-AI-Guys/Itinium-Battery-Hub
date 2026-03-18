@@ -639,6 +639,9 @@ importers:
       bcrypt:
         specifier: ^6.0.0
         version: 6.0.0
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.1(@types/pg@8.18.0)(pg@8.20.0)
     devDependencies:
       '@types/bcrypt':
         specifier: ^6.0.0

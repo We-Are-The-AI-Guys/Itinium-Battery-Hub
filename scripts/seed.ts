@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { usersTable, jobsTable } from "@workspace/db/schema";
+import { usersTable, jobsTable, lmePricesTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
@@ -11,6 +11,14 @@ async function seed() {
     { email: "team@itinium.co.uk", fullName: "Sarah Cooper", role: "team_leader", depot: "Birmingham Central" },
     { email: "accounts@itinium.co.uk", fullName: "Rachel Adams", role: "accounts", depot: null },
     { email: "admin@itinium.co.uk", fullName: "Sarah Mitchell", role: "head_office_admin", depot: null },
+    { email: "alex.j@greenfield.co.uk", fullName: "Alex Johnson", role: "depot_user", depot: "Birmingham Central" },
+    { email: "t.whitaker@metrowaste.co.uk", fullName: "Tom Whitaker", role: "team_leader", depot: "Manchester North" },
+    { email: "j.patel@ecocollect.co.uk", fullName: "James Patel", role: "depot_user", depot: "Leeds Hub" },
+    { email: "e.clarke@cleanpower.co.uk", fullName: "Emma Clarke", role: "depot_user", depot: "Bristol South" },
+    { email: "d.osei@thamesbatt.co.uk", fullName: "David Osei", role: "team_leader", depot: "Reading Central" },
+    { email: "p.sharma@nationalgrid.co.uk", fullName: "Priya Sharma", role: "depot_user", depot: "London Depot" },
+    { email: "m.thompson@northernenergy.co.uk", fullName: "Mark Thompson", role: "depot_user", depot: "Sheffield East" },
+    { email: "l.chen@itinium.co.uk", fullName: "Lisa Chen", role: "accounts", depot: null },
   ];
 
   for (const u of users) {
@@ -58,6 +66,20 @@ async function seed() {
   }
 
   console.log(`Seeded ${jobs.length} demo jobs`);
+
+  const lmePrices = [
+    { priceDate: "2026-03-15", usdPrice: "2185.50", exchangeRate: "0.789200", gbpPrice: "1724.30", source: "manual" },
+    { priceDate: "2026-03-01", usdPrice: "2152.00", exchangeRate: "0.789200", gbpPrice: "1698.20", source: "manual" },
+    { priceDate: "2026-02-15", usdPrice: "2120.75", exchangeRate: "0.791000", gbpPrice: "1677.51", source: "manual" },
+    { priceDate: "2026-02-01", usdPrice: "2098.30", exchangeRate: "0.785000", gbpPrice: "1647.17", source: "manual" },
+    { priceDate: "2026-01-15", usdPrice: "2065.00", exchangeRate: "0.788500", gbpPrice: "1628.24", source: "manual" },
+  ];
+
+  for (const p of lmePrices) {
+    await db.insert(lmePricesTable).values(p).onConflictDoNothing();
+  }
+
+  console.log(`Seeded ${lmePrices.length} LME price entries`);
   process.exit(0);
 }
 

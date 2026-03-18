@@ -34,6 +34,11 @@ router.post("/auth/login", async (req, res) => {
       return;
     }
 
+    if (!user.isActive) {
+      res.status(403).json({ message: "Account has been deactivated. Contact your administrator." });
+      return;
+    }
+
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
@@ -91,6 +96,11 @@ router.get("/auth/me", async (req, res) => {
 
     if (!user) {
       res.status(401).json({ message: "User not found" });
+      return;
+    }
+
+    if (!user.isActive) {
+      res.status(403).json({ message: "Account has been deactivated" });
       return;
     }
 

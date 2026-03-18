@@ -7,6 +7,8 @@ import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
 import AdminDashboardPage from "@/pages/admin-dashboard";
 import DepotFormPage from "@/pages/depot-form";
+import LmePricingPage from "@/pages/lme-pricing";
+import UserManagementPage from "@/pages/user-management";
 import PlaceholderPage from "@/pages/placeholder";
 import NotFound from "@/pages/not-found";
 
@@ -146,12 +148,12 @@ function AppRouter() {
       </Route>
       <Route path="/lme-pricing">
         <AdminGuard>
-          <PlaceholderPage title="LME Pricing" />
+          <LmePricingPage />
         </AdminGuard>
       </Route>
       <Route path="/users">
         <AdminGuard>
-          <PlaceholderPage title="User Management" />
+          <UserManagementPage />
         </AdminGuard>
       </Route>
       <Route path="/collection/new">

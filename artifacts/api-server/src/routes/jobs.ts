@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { jobsTable } from "@workspace/db/schema";
-import { eq, sql, and, count } from "drizzle-orm";
+import { eq, sql, and, count, ilike, or } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -12,14 +12,24 @@ router.get(
   requireRole("team_leader", "accounts", "head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
-      const { status, page = "1", limit = "10" } = req.query;
-      const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+      const { status, invoiceStatus, search, limit = "10", offset = "0" } = req.query;
       const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10) || 10));
-      const offset = (pageNum - 1) * limitNum;
+      const offsetNum = Math.max(0, parseInt(offset as string, 10) || 0);
 
       const conditions = [];
       if (status && status !== "All") {
         conditions.push(eq(jobsTable.status, (status as string).toLowerCase()));
+      }
+      if (invoiceStatus) {
+        conditions.push(eq(jobsTable.invoiceStatus, invoiceStatus as string));
+      }
+      if (search) {
+        conditions.push(
+          or(
+            ilike(jobsTable.reference, `%${search}%`),
+            ilike(jobsTable.clientName, `%${search}%`)
+          )!
+        );
       }
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -31,7 +41,7 @@ router.get(
           .where(whereClause)
           .orderBy(sql`${jobsTable.submittedAt} DESC`)
           .limit(limitNum)
-          .offset(offset),
+          .offset(offsetNum),
         db
           .select({ count: count() })
           .from(jobsTable)
@@ -42,9 +52,10 @@ router.get(
 
       res.json({
         jobs,
+        total,
         pagination: {
-          page: pageNum,
           limit: limitNum,
+          offset: offsetNum,
           total,
           totalPages: Math.ceil(total / limitNum),
         },

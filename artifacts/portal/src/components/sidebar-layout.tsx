@@ -64,7 +64,7 @@ interface SidebarLayoutProps {
   showSearch?: boolean;
 }
 
-export default function SidebarLayout({
+export function SidebarLayout({
   children,
   title,
   subtitle,
