@@ -151,7 +151,7 @@ export default function DepotFormPage() {
           <img
             src={itiniumLogo}
             alt="Itinium Partnership"
-            className="h-8"
+            className="h-10"
           />
         </div>
         <div className="flex items-center gap-3">

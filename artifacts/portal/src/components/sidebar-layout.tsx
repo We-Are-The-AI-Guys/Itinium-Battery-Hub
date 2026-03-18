@@ -101,7 +101,7 @@ export function SidebarLayout({
             <img
               src={itiniumLogo}
               alt="Itinium Partnership"
-              className="h-8"
+              className="h-12"
               style={{ filter: "brightness(0) invert(1)" }}
             />
           </div>

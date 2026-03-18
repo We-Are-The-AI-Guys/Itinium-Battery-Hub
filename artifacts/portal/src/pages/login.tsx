@@ -71,7 +71,7 @@ export default function LoginPage() {
             <img
               src={itiniumLogo}
               alt="Itinium Partnership"
-              className="h-12"
+              className="h-16"
               style={{ filter: "brightness(0) invert(1)" }}
             />
           </div>
@@ -118,7 +118,7 @@ export default function LoginPage() {
           <img
             src={itiniumLogo}
             alt="Itinium Partnership"
-            className="h-8"
+            className="h-10"
           />
         </div>
 

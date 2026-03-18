@@ -40,7 +40,7 @@ export default function DashboardPage() {
             <img
               src={itiniumLogo}
               alt="Itinium Partnership"
-              className="h-8"
+              className="h-10"
             />
             
             <span className="hidden sm:inline text-sm text-[#64748b] ml-2">Battery Collection Portal</span>
