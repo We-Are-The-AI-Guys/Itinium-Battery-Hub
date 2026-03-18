@@ -10,7 +10,7 @@ const router: IRouter = Router();
 router.get(
   "/lme/current",
   requireAuth,
-  requireRole("accounts", "head_office_admin", "team_leader"),
+  requireRole("accounts", "head_office_admin"),
   async (_req, res) => {
     try {
       const [latest] = await db
@@ -75,7 +75,7 @@ router.post(
 router.get(
   "/lme/history",
   requireAuth,
-  requireRole("accounts", "head_office_admin", "team_leader"),
+  requireRole("accounts", "head_office_admin"),
   async (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);

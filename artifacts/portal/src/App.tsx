@@ -53,7 +53,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
 const ADMIN_ROLES = ["team_leader", "accounts", "head_office_admin"];
 
-function AdminGuard({ children }: { children: React.ReactNode }) {
+function RoleGuard({ allowedRoles, children }: { allowedRoles: string[]; children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -82,11 +82,15 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
     return <Redirect to="/login" />;
   }
 
-  if (!ADMIN_ROLES.includes(user.role)) {
+  if (!allowedRoles.includes(user.role)) {
     return <Redirect to="/" />;
   }
 
   return <>{children}</>;
+}
+
+function AdminGuard({ children }: { children: React.ReactNode }) {
+  return <RoleGuard allowedRoles={ADMIN_ROLES}>{children}</RoleGuard>;
 }
 
 function GuestGuard({ children }: { children: React.ReactNode }) {
@@ -147,14 +151,14 @@ function AppRouter() {
         </AdminGuard>
       </Route>
       <Route path="/lme-pricing">
-        <AdminGuard>
+        <RoleGuard allowedRoles={["accounts", "head_office_admin"]}>
           <LmePricingPage />
-        </AdminGuard>
+        </RoleGuard>
       </Route>
       <Route path="/users">
-        <AdminGuard>
+        <RoleGuard allowedRoles={["head_office_admin"]}>
           <UserManagementPage />
-        </AdminGuard>
+        </RoleGuard>
       </Route>
       <Route path="/collection/new">
         <AuthGuard>

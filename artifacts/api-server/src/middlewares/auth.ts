@@ -39,6 +39,11 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
             return;
           }
 
+          if (!user.isActive) {
+            res.status(403).json({ message: "Account has been deactivated" });
+            return;
+          }
+
           req.user = {
             id: user.id,
             email: user.email,

@@ -94,6 +94,11 @@ export default function UserManagementPage() {
     depot: "",
   });
 
+  const [editingUser, setEditingUser] = useState<UserData | null>(null);
+  const [editForm, setEditForm] = useState({ fullName: "", role: "", depot: "" });
+  const [editError, setEditError] = useState("");
+  const [saving, setSaving] = useState(false);
+
   const fetchStats = useCallback(async () => {
     try {
       const res = await fetch("/api/users/stats", { credentials: "include" });
@@ -156,6 +161,46 @@ export default function UserManagementPage() {
       setFormError("Failed to create user");
     } finally {
       setCreating(false);
+    }
+  }
+
+  function openEditModal(user: UserData) {
+    setEditingUser(user);
+    setEditForm({ fullName: user.fullName, role: user.role, depot: user.depot || "" });
+    setEditError("");
+  }
+
+  async function handleEditUser() {
+    if (!editingUser) return;
+    setEditError("");
+    if (!editForm.fullName) {
+      setEditError("Name is required");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/users/${editingUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          fullName: editForm.fullName,
+          role: editForm.role,
+          depot: editForm.depot || null,
+        }),
+      });
+      if (res.ok) {
+        setEditingUser(null);
+        fetchUsers();
+        fetchStats();
+      } else {
+        const data = await res.json();
+        setEditError(data.message || "Failed to update user");
+      }
+    } catch {
+      setEditError("Failed to update user");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -331,6 +376,7 @@ export default function UserManagementPage() {
                             variant="outline"
                             size="sm"
                             className="h-7 px-2.5 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-[#0f2744] transition-colors"
+                            onClick={() => openEditModal(user)}
                           >
                             <Edit className="w-3.5 h-3.5 mr-1" />
                             Edit
@@ -513,6 +559,96 @@ export default function UserManagementPage() {
                 disabled={creating}
               >
                 {creating ? "Creating..." : "Create User"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-[2px]">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-[500px] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[#0f2744] flex items-center gap-2">
+                <Edit className="w-5 h-5 text-[#0ea5e9]" />
+                Edit User
+              </h3>
+              <button
+                onClick={() => setEditingUser(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {editError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
+                  {editError}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium text-slate-700">Full Name</label>
+                  <Input
+                    className="border-slate-200 focus-visible:ring-[#0ea5e9]"
+                    value={editForm.fullName}
+                    onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium text-slate-700">Email</label>
+                  <Input
+                    className="border-slate-200 bg-slate-50 text-slate-500 cursor-not-allowed"
+                    value={editingUser.email}
+                    disabled
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium text-slate-700">Role</label>
+                  <div className="relative">
+                    <select
+                      className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
+                      value={editForm.role}
+                      onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                    >
+                      <option value="depot_user">Depot User</option>
+                      <option value="team_leader">Team Leader</option>
+                      <option value="accounts">Accounts</option>
+                      <option value="head_office_admin">Head Office</option>
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium text-slate-700">Assigned Depot</label>
+                  <Input
+                    placeholder="e.g. Birmingham Central"
+                    className="border-slate-200 focus-visible:ring-[#0ea5e9]"
+                    value={editForm.depot}
+                    onChange={(e) => setEditForm({ ...editForm, depot: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setEditingUser(null)}
+                className="border-slate-200 text-slate-700 hover:bg-slate-100"
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-none shadow-sm"
+                onClick={handleEditUser}
+                disabled={saving}
+              >
+                {saving ? "Saving..." : "Save Changes"}
               </Button>
             </div>
           </div>
