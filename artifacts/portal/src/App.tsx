@@ -5,10 +5,19 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
+import AdminDashboardPage from "@/pages/admin-dashboard";
 import DepotFormPage from "@/pages/depot-form";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
+
+interface AuthUser {
+  id: number;
+  email: string;
+  fullName: string;
+  role: string;
+  depot: string | null;
+}
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const [isAuth, setIsAuth] = useState<boolean | null>(null);
@@ -34,6 +43,44 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (!isAuth) {
     return <Redirect to="/login" />;
+  }
+
+  return <>{children}</>;
+}
+
+const ADMIN_ROLES = ["team_leader", "accounts", "head_office_admin"];
+
+function AdminGuard({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/auth/me", { credentials: "include" })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.user) setUser(data.user);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
+        <div className="flex items-center gap-3 text-[#64748b]">
+          <div className="w-6 h-6 border-2 border-[#0ea5e9] border-t-transparent rounded-full animate-spin" />
+          <span>Loading...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Redirect to="/login" />;
+  }
+
+  if (!ADMIN_ROLES.includes(user.role)) {
+    return <Redirect to="/" />;
   }
 
   return <>{children}</>;
@@ -80,6 +127,11 @@ function AppRouter() {
         <AuthGuard>
           <DashboardPage />
         </AuthGuard>
+      </Route>
+      <Route path="/admin">
+        <AdminGuard>
+          <AdminDashboardPage />
+        </AdminGuard>
       </Route>
       <Route path="/collection/new">
         <AuthGuard>

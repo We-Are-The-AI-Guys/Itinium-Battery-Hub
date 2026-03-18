@@ -25,6 +25,20 @@ export default function DashboardPage() {
     window.location.href = import.meta.env.BASE_URL;
   }
 
+  const isAdminRole = user && ["team_leader", "accounts", "head_office_admin"].includes(user.role);
+
+  if (isAdminRole) {
+    window.location.href = import.meta.env.BASE_URL + "admin";
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
+        <div className="flex items-center gap-3 text-[#64748b]">
+          <div className="w-6 h-6 border-2 border-[#0ea5e9] border-t-transparent rounded-full animate-spin" />
+          <span>Loading...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f8fafc]">
       <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
@@ -58,7 +72,7 @@ export default function DashboardPage() {
 
       <main className="max-w-7xl mx-auto px-6 py-10">
         <h1 className="text-3xl font-bold text-[#1e293b] mb-2" data-testid="text-dashboard-heading">Welcome, {user?.fullName || "User"}</h1>
-        <p className="text-[#64748b] mb-8">You are signed in as <span className="font-medium capitalize">{user?.role.replace(/_/g, " ") || "..."}</span>. The full portal is under development.</p>
+        <p className="text-[#64748b] mb-8">You are signed in as <span className="font-medium capitalize">{user?.role.replace(/_/g, " ") || "..."}</span>.</p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
