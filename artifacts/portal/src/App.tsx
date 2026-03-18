@@ -128,7 +128,7 @@ function AppRouter() {
           <DashboardPage />
         </AuthGuard>
       </Route>
-      <Route path="/admin">
+      <Route path="/dashboard">
         <AdminGuard>
           <AdminDashboardPage />
         </AdminGuard>

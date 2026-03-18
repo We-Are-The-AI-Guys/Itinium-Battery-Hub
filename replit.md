@@ -69,8 +69,8 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 | Route | Page | Description |
 |-------|------|-------------|
 | `/login` | `login.tsx` | Split-panel login with Itinium branding |
-| `/` | `dashboard.tsx` | Depot user dashboard; admin roles redirect to /admin |
-| `/admin` | `admin-dashboard.tsx` | Admin dashboard with sidebar, KPI cards, jobs table |
+| `/` | `dashboard.tsx` | Depot user dashboard; admin roles redirect to /dashboard |
+| `/dashboard` | `admin-dashboard.tsx` | Admin dashboard with sidebar, KPI cards, jobs table |
 | `/collection/new` | `depot-form.tsx` | Battery collection submission form |
 
 ## Shared Components

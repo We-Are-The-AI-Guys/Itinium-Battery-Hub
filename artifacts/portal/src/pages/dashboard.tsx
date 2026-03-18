@@ -28,7 +28,7 @@ export default function DashboardPage() {
   const isAdminRole = user && ["team_leader", "accounts", "head_office_admin"].includes(user.role);
 
   if (isAdminRole) {
-    window.location.href = import.meta.env.BASE_URL + "admin";
+    window.location.href = import.meta.env.BASE_URL + "dashboard";
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
         <div className="flex items-center gap-3 text-[#64748b]">

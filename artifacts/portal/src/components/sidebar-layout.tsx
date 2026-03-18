@@ -13,6 +13,7 @@ import {
   Search,
   Bell,
   Calendar,
+  Plus,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -25,7 +26,7 @@ interface User {
 }
 
 const navItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/admin" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Briefcase, label: "Job Management", path: "/jobs" },
   { icon: BarChart3, label: "KPI Reporting", path: "/kpi" },
   { icon: LineChart, label: "LME Pricing", path: "/lme-pricing" },
@@ -33,6 +34,7 @@ const navItems = [
 ];
 
 const secondaryNavItems = [
+  { icon: Plus, label: "New Collection", path: "/collection/new" },
   { icon: Settings, label: "Settings", path: "/settings" },
   { icon: HelpCircle, label: "Help & Support", path: "/help" },
 ];
@@ -87,7 +89,7 @@ export default function SidebarLayout({
   }
 
   function isActive(path: string) {
-    if (path === "/admin") return location === "/admin" || location === "/" || location === "";
+    if (path === "/dashboard") return location === "/dashboard" || location === "/" || location === "";
     return location.startsWith(path);
   }
 
