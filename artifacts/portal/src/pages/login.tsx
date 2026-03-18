@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Mail, Lock, Eye, EyeOff, Shield, ChevronRight, CheckCircle2, Loader2 } from "lucide-react";
+import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -67,10 +68,12 @@ export default function LoginPage() {
 
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-16">
-            <div className="w-10 h-10 bg-gradient-to-br from-[#0ea5e9] to-[#0284c7] rounded-md flex items-center justify-center shadow-lg">
-              <Shield className="w-6 h-6 text-white" />
-            </div>
-            <h1 className="text-4xl font-bold tracking-[0.2em] text-white">ITINIUM</h1>
+            <img
+              src={itiniumLogo}
+              alt="Itinium Partnership"
+              className="h-12"
+              style={{ filter: "brightness(0) invert(1)" }}
+            />
           </div>
 
           <div className="space-y-6 max-w-xl">
@@ -112,10 +115,11 @@ export default function LoginPage() {
 
       <div className="flex-1 flex flex-col justify-center items-center p-6 sm:p-12 relative overflow-hidden">
         <div className="lg:hidden absolute top-8 left-8 flex items-center gap-2">
-          <div className="w-8 h-8 bg-[#0f2744] rounded flex items-center justify-center">
-            <Shield className="w-5 h-5 text-[#0ea5e9]" />
-          </div>
-          <span className="font-bold tracking-widest text-[#0f2744] text-xl">ITINIUM</span>
+          <img
+            src={itiniumLogo}
+            alt="Itinium Partnership"
+            className="h-8"
+          />
         </div>
 
         <div className="w-full max-w-[420px] bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 p-8 sm:p-10">

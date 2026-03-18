@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  Shield,
   LayoutDashboard,
   Briefcase,
   BarChart3,
@@ -15,6 +14,7 @@ import {
   Calendar,
   Plus,
 } from "lucide-react";
+import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Input } from "@/components/ui/input";
 
 interface User {
@@ -98,14 +98,14 @@ export function SidebarLayout({
       <aside className="fixed inset-y-0 left-0 w-[260px] bg-gradient-to-b from-[#0a1628] to-[#132744] text-slate-300 flex flex-col z-20">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-[#0ea5e9] to-[#0284c7] rounded flex items-center justify-center shadow-lg">
-              <Shield className="w-5 h-5 text-white" />
-            </div>
-            <h1 className="text-xl font-bold tracking-[0.15em] text-white">
-              ITINIUM
-            </h1>
+            <img
+              src={itiniumLogo}
+              alt="Itinium Partnership"
+              className="h-8"
+              style={{ filter: "brightness(0) invert(1)" }}
+            />
           </div>
-          <p className="text-xs text-slate-400 font-medium ml-11">Admin Portal</p>
+          <p className="text-xs text-slate-400 font-medium">Admin Portal</p>
         </div>
 
         <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">

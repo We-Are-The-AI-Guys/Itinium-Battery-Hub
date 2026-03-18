@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, Redirect } from "wouter";
-import { Shield, LogOut, Plus, Battery, TrendingUp } from "lucide-react";
+import { LogOut, Plus, Battery, TrendingUp } from "lucide-react";
+import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Button } from "@/components/ui/button";
 
 interface User {
@@ -36,10 +37,12 @@ export default function DashboardPage() {
       <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-[#0ea5e9] to-[#0284c7] rounded-md flex items-center justify-center">
-              <Shield className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-bold tracking-[0.15em] text-[#0f2744]">ITINIUM</span>
+            <img
+              src={itiniumLogo}
+              alt="Itinium Partnership"
+              className="h-8"
+            />
+            
             <span className="hidden sm:inline text-sm text-[#64748b] ml-2">Battery Collection Portal</span>
           </div>
           <div className="flex items-center gap-4">

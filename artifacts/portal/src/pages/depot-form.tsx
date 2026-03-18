@@ -11,7 +11,6 @@ import {
   Upload,
   Save,
   Send,
-  Shield,
   FileText,
   Clipboard,
   Scale,
@@ -23,6 +22,7 @@ import {
   ChevronLeft,
   LogOut,
 } from "lucide-react";
+import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -148,12 +148,11 @@ export default function DepotFormPage() {
           >
             <ChevronLeft className="w-5 h-5" />
           </Link>
-          <div className="w-8 h-8 bg-[#0f2744] rounded flex items-center justify-center">
-            <Shield className="w-5 h-5 text-[#0ea5e9]" />
-          </div>
-          <span className="font-bold tracking-widest text-[#0f2744] text-lg sm:text-xl">
-            ITINIUM
-          </span>
+          <img
+            src={itiniumLogo}
+            alt="Itinium Partnership"
+            className="h-8"
+          />
         </div>
         <div className="flex items-center gap-3">
           <div className="hidden sm:flex flex-col items-end">
