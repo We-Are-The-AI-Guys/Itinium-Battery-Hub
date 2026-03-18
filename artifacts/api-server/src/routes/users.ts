@@ -171,7 +171,7 @@ router.patch(
   requireRole("head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = parseInt(req.params.id);
+      const userId = parseInt(req.params.id as string);
       if (isNaN(userId)) {
         res.status(400).json({ message: "Invalid user ID" });
         return;
