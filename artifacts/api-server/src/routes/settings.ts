@@ -199,7 +199,7 @@ router.get(
             gt(sessionsTable.expiresAt, new Date())
           )
         )
-        .orderBy(sessionsTable.createdAt);
+        .orderBy(sessionsTable.lastUsedAt);
 
       const mapped = sessions.map((s) => ({
         id: s.id,

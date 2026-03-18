@@ -573,6 +573,11 @@ function SystemTab() {
           setInvoicePrefix(data.settings.invoicePrefix);
           setDataRetentionDays(String(data.settings.dataRetentionDays));
           setAutoFetchLme(data.settings.autoFetchLme);
+        } else {
+          setCompanyName("Itinium Ltd");
+          setInvoicePrefix("INV");
+          setDataRetentionDays("365");
+          setAutoFetchLme(false);
         }
         setLoading(false);
       })
