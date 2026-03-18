@@ -113,6 +113,7 @@ router.get("/auth/me", async (req, res) => {
         fullName: user.fullName,
         role: user.role,
         depot: user.depot,
+        createdAt: user.createdAt,
       },
     });
   } catch (error) {

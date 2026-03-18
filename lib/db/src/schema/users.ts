@@ -27,6 +27,7 @@ export const sessionsTable = pgTable("sessions", {
   token: text("token").notNull().unique(),
   userAgent: text("user_agent"),
   ipAddress: varchar("ip_address", { length: 45 }),
+  lastUsedAt: timestamp("last_used_at").defaultNow().notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

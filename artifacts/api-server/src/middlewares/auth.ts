@@ -51,6 +51,12 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
             role: user.role,
             depot: user.depot,
           };
+
+          db.update(sessionsTable)
+            .set({ lastUsedAt: new Date() })
+            .where(eq(sessionsTable.token, token))
+            .catch(() => {});
+
           next();
         });
     })

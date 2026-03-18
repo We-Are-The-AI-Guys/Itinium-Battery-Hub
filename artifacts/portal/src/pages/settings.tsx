@@ -28,6 +28,7 @@ interface UserProfile {
   fullName: string;
   role: string;
   depot: string | null;
+  createdAt?: string;
 }
 
 interface NotificationPrefs {
@@ -42,6 +43,7 @@ interface SessionData {
   id: number;
   browser: string;
   ipAddress: string;
+  lastUsedAt: string;
   createdAt: string;
   expiresAt: string;
   isCurrent: boolean;
@@ -437,7 +439,7 @@ function SecurityTab({ user }: { user: UserProfile }) {
           </h3>
         </div>
         <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="space-y-1">
               <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status</p>
               <div className="flex items-center gap-2">
@@ -452,6 +454,18 @@ function SecurityTab({ user }: { user: UserProfile }) {
             <div className="space-y-1">
               <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Account Email</p>
               <p className="text-sm font-medium text-slate-700">{user.email}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Account Created</p>
+              <p className="text-sm font-medium text-slate-700">
+                {user.createdAt
+                  ? new Date(user.createdAt).toLocaleDateString("en-GB", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })
+                  : "—"}
+              </p>
             </div>
           </div>
         </div>
@@ -501,13 +515,19 @@ function SecurityTab({ user }: { user: UserProfile }) {
                       )}
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      IP: {session.ipAddress} · Created:{" "}
-                      {new Date(session.createdAt).toLocaleDateString("en-GB", {
+                      IP: {session.ipAddress} · Last active:{" "}
+                      {new Date(session.lastUsedAt).toLocaleDateString("en-GB", {
                         day: "2-digit",
                         month: "short",
                         year: "numeric",
                         hour: "2-digit",
                         minute: "2-digit",
+                      })}
+                      {" "}· Created:{" "}
+                      {new Date(session.createdAt).toLocaleDateString("en-GB", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
                       })}
                     </p>
                   </div>
