@@ -1,96 +1,66 @@
-# Workspace
+# Itinium Battery Portal
 
-## Overview
+A bespoke web-based client portal for battery collection management, replacing manual Excel/email workflows.
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+## Architecture
 
-## Stack
+- **Frontend**: React + Vite + Tailwind CSS v4 (artifacts/portal)
+- **Backend**: Express v5 API server (artifacts/api-server)
+- **Database**: PostgreSQL with Drizzle ORM (lib/db)
+- **Monorepo**: pnpm workspace
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+## Design System
 
-## Structure
+- **Primary**: Navy #0f2744 (HSL 213 64% 16%)
+- **Accent**: Teal #0ea5e9 (HSL 199 89% 48%)
+- **Background**: Slate #f8fafc
+- **Font**: Inter
 
-```text
-artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
-│   ├── api-client-react/   # Generated React Query hooks
-│   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
-```
+## Authentication
 
-## TypeScript & Composite Projects
+Custom email/password auth with bcrypt password hashing and cookie-based sessions (NOT Replit Auth).
 
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
+- `POST /api/auth/login` — validates credentials, creates session, sets httpOnly cookie
+- `GET /api/auth/me` — returns current user from session token
+- `POST /api/auth/logout` — deletes session, clears cookie
+- Sessions expire after 7 days, expired sessions cleaned hourly
 
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
+## Database Schema
 
-## Root Scripts
+### users
+- id, email (unique), password_hash, full_name, role, depot, created_at
+- Roles: depot_user, team_leader, accounts, head_office_admin
 
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
+### sessions
+- id, user_id (FK → users), token (unique), expires_at, created_at
 
-## Packages
+## Demo Accounts (all password: password123)
 
-### `artifacts/api-server` (`@workspace/api-server`)
+| Email | Role | Name |
+|-------|------|------|
+| depot@itinium.co.uk | depot_user | Dave Mitchell |
+| team@itinium.co.uk | team_leader | Sarah Cooper |
+| accounts@itinium.co.uk | accounts | Jane Williams |
+| admin@itinium.co.uk | head_office_admin | Mark Johnson |
 
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
+## Key Files
 
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
+- `artifacts/portal/src/pages/login.tsx` — Login page with split-panel design
+- `artifacts/portal/src/pages/dashboard.tsx` — Dashboard (post-login)
+- `artifacts/portal/src/App.tsx` — Routing with AuthGuard/GuestGuard
+- `artifacts/api-server/src/routes/auth.ts` — Auth API routes
+- `lib/db/src/schema/users.ts` — Users + sessions schema
+- `scripts/seed.ts` — Database seeder
 
-### `lib/db` (`@workspace/db`)
+## Mockups
 
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
+UI mockups designed in mockup-sandbox canvas:
+- Login Page, Depot Submission Form, Admin Dashboard, LME Pricing & Accounts, User Management
 
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
+## Planned Features
 
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
-
-### `lib/api-spec` (`@workspace/api-spec`)
-
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
-
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
-
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+- AI-assisted photo data extraction for battery collection forms
+- LME lead pricing integration
+- Job management workflows
+- Financial reporting and invoicing
+- Role-based access control (depot → team leader → accounts → admin)
