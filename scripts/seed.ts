@@ -1,5 +1,6 @@
 import { db } from "@workspace/db";
 import { usersTable, jobsTable } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 async function seed() {
@@ -20,6 +21,13 @@ async function seed() {
   }
 
   console.log("Seeded 4 demo users (password: password123)");
+
+  const [depotUser] = await db.select().from(usersTable).where(eq(usersTable.email, "depot@itinium.co.uk"));
+  const [teamUser] = await db.select().from(usersTable).where(eq(usersTable.email, "team@itinium.co.uk"));
+  const submitterIds = [depotUser?.id, teamUser?.id].filter(Boolean);
+  function pickSubmitter(index: number) {
+    return submitterIds.length > 0 ? submitterIds[index % submitterIds.length] : undefined;
+  }
 
   const jobs = [
     { reference: "JOB-2026-00847", clientName: "Greenfield Recycling", depot: "Birmingham Central", submittedAt: new Date("2026-03-15"), tonnage: "2.400", status: "pending", palletNumber: "PLT-847", assetNumber: "AST-2026-847", batterySerial: "BSN-GR-001", cellType: "lead_acid", voltage: "12v", weight: "2400.00", condition: "good", invoiceStatus: "pending_invoice", lmeRateUsed: "1724.30", calculatedValue: "4138.32" },
@@ -42,10 +50,10 @@ async function seed() {
     { reference: "JOB-2026-00830", clientName: "Highland Batteries Co", depot: "Leeds Hub", submittedAt: new Date("2026-03-02"), tonnage: "2.900", status: "pending", palletNumber: "PLT-830", assetNumber: "AST-2026-830", batterySerial: "BSN-HB-018", cellType: "lead_acid", voltage: "48v", weight: "2900.00", condition: "fair", invoiceStatus: "pending_invoice", lmeRateUsed: "1698.20", calculatedValue: "4924.78" },
   ];
 
-  for (const j of jobs) {
+  for (let i = 0; i < jobs.length; i++) {
     await db
       .insert(jobsTable)
-      .values(j)
+      .values({ ...jobs[i], submittedById: pickSubmitter(i) })
       .onConflictDoNothing();
   }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "wouter";
+import { Link, Redirect } from "wouter";
 import { Shield, LogOut, Plus, Battery, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -28,15 +28,7 @@ export default function DashboardPage() {
   const isAdminRole = user && ["team_leader", "accounts", "head_office_admin"].includes(user.role);
 
   if (isAdminRole) {
-    window.location.href = import.meta.env.BASE_URL + "dashboard";
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
-        <div className="flex items-center gap-3 text-[#64748b]">
-          <div className="w-6 h-6 border-2 border-[#0ea5e9] border-t-transparent rounded-full animate-spin" />
-          <span>Loading...</span>
-        </div>
-      </div>
-    );
+    return <Redirect to="/dashboard" />;
   }
 
   return (

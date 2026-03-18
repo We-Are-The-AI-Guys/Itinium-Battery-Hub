@@ -7,6 +7,7 @@ import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
 import AdminDashboardPage from "@/pages/admin-dashboard";
 import DepotFormPage from "@/pages/depot-form";
+import PlaceholderPage from "@/pages/placeholder";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -131,6 +132,26 @@ function AppRouter() {
       <Route path="/dashboard">
         <AdminGuard>
           <AdminDashboardPage />
+        </AdminGuard>
+      </Route>
+      <Route path="/jobs">
+        <AdminGuard>
+          <PlaceholderPage title="Job Management" />
+        </AdminGuard>
+      </Route>
+      <Route path="/kpi">
+        <AdminGuard>
+          <PlaceholderPage title="KPI Reporting" />
+        </AdminGuard>
+      </Route>
+      <Route path="/lme-pricing">
+        <AdminGuard>
+          <PlaceholderPage title="LME Pricing" />
+        </AdminGuard>
+      </Route>
+      <Route path="/users">
+        <AdminGuard>
+          <PlaceholderPage title="User Management" />
         </AdminGuard>
       </Route>
       <Route path="/collection/new">
