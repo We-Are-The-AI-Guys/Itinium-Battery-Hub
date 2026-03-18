@@ -151,6 +151,11 @@ function AppRouter() {
           <PlaceholderPage title="KPI Reporting" />
         </AdminGuard>
       </Route>
+      <Route path="/help">
+        <AuthGuard>
+          <PlaceholderPage title="Help & Support" />
+        </AuthGuard>
+      </Route>
       <Route path="/lme-pricing">
         <RoleGuard allowedRoles={["accounts", "head_office_admin"]}>
           <LmePricingPage />
