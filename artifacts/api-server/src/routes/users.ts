@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import crypto from "crypto";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { eq, sql, and, ilike, or } from "drizzle-orm";
@@ -111,6 +112,11 @@ router.post(
 
       const { fullName, email, role, depot, password } = parsed.data;
 
+      if ((role === "depot_user" || role === "team_leader") && !depot) {
+        res.status(400).json({ message: "Depot is required for Depot User and Team Leader roles" });
+        return;
+      }
+
       const [existing] = await db
         .select({ id: usersTable.id })
         .from(usersTable)
@@ -121,7 +127,8 @@ router.post(
         return;
       }
 
-      const passwordHash = await bcrypt.hash(password || "Welcome123!", 10);
+      const tempPassword = password || crypto.randomBytes(12).toString("base64url");
+      const passwordHash = await bcrypt.hash(tempPassword, 10);
 
       const [user] = await db
         .insert(usersTable)

@@ -46,7 +46,8 @@ router.post(
     try {
       const parsed = updatePriceSchema.safeParse(req.body);
       if (!parsed.success) {
-        res.status(400).json({ message: "USD price and exchange rate are required" });
+        const messages = parsed.error.issues.map(i => i.message).join("; ");
+        res.status(400).json({ message: messages || "USD price and exchange rate are required" });
         return;
       }
 
