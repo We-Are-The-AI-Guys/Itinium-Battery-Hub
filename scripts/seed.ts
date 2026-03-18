@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { usersTable, jobsTable, lmePricesTable } from "@workspace/db/schema";
+import { usersTable, jobsTable, lmePricesTable, systemSettingsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
@@ -80,6 +80,19 @@ async function seed() {
   }
 
   console.log(`Seeded ${lmePrices.length} LME price entries`);
+
+  await db.insert(systemSettingsTable).values({
+    singletonKey: "default",
+    companyName: "Itinium Ltd",
+    invoicePrefix: "INV",
+    dataRetentionDays: 365,
+    autoFetchLme: false,
+  }).onConflictDoUpdate({
+    target: systemSettingsTable.singletonKey,
+    set: { companyName: "Itinium Ltd" },
+  });
+
+  console.log("Seeded system settings");
   process.exit(0);
 }
 

@@ -46,6 +46,8 @@ router.post("/auth/login", async (req, res) => {
       userId: user.id,
       token,
       expiresAt,
+      userAgent: (req.headers["user-agent"] || "").substring(0, 500),
+      ipAddress: (req.headers["x-forwarded-for"] as string || req.ip || "").split(",")[0].trim().substring(0, 45),
     });
 
     res.cookie("session_token", token, {

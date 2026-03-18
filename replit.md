@@ -20,21 +20,21 @@ A bespoke web-based client portal for battery collection management, replacing m
 
 Custom email/password auth with bcrypt password hashing and cookie-based sessions (NOT Replit Auth).
 
-- `POST /api/auth/login` — validates credentials, creates session, sets httpOnly cookie
+- `POST /api/auth/login` — validates credentials, creates session, sets httpOnly cookie; stores user-agent and IP
 - `GET /api/auth/me` — returns current user from session token
 - `POST /api/auth/logout` — deletes session, clears cookie
 - Sessions expire after 7 days, expired sessions cleaned hourly
-- `requireAuth` middleware extracts user from session cookie
+- `requireAuth` middleware extracts user from session cookie, enforces isActive
 - `requireRole(...)` middleware for role-based access control
 
 ## Database Schema
 
 ### users
-- id, email (unique), password_hash, full_name, role, depot, is_active (boolean), last_active_at, created_at
+- id, email (unique), password_hash, full_name, role, depot, is_active (boolean), last_active_at, notification_preferences (JSONB), created_at
 - Roles: depot_user, team_leader, accounts, head_office_admin
 
 ### sessions
-- id, user_id (FK → users), token (unique), expires_at, created_at
+- id, user_id (FK → users), token (unique), user_agent, ip_address, expires_at, created_at
 
 ### jobs
 - id, reference (unique), client_name, depot, submitted_at, tonnage (decimal), status (pending/approved/completed/flagged)
@@ -45,6 +45,9 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 
 ### lme_prices
 - id, price_date, usd_price (decimal), exchange_rate (decimal), gbp_price (decimal), source (manual/api), created_at
+
+### system_settings
+- id, company_name, invoice_prefix, data_retention_days, auto_fetch_lme (boolean), updated_at
 
 ## Demo Accounts (all password: password123)
 
@@ -77,9 +80,20 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 
 ### Users (requires auth + role: head_office_admin)
 - `GET /api/users?role=X&search=X&limit=10&offset=0` — list users with role filtering, search, and pagination
-- `POST /api/users` — create new user (bcrypt password hash, default password: Welcome123!)
+- `POST /api/users` — create new user (bcrypt password hash, random temp password)
 - `PATCH /api/users/:id` — update user (fullName, role, depot, isActive)
 - `GET /api/users/stats` — user count by role (total, depotUsers, teamLeaders, adminStaff)
+
+### Settings (requires auth)
+- `PATCH /api/settings/profile` — update own fullName and depot
+- `POST /api/settings/password` — change password (validates current password)
+- `GET /api/settings/notifications` — read notification preferences
+- `PATCH /api/settings/notifications` — update notification preferences
+- `GET /api/settings/sessions` — list active sessions (browser, masked IP, dates)
+- `DELETE /api/settings/sessions/:id` — revoke specific session
+- `DELETE /api/settings/sessions` — revoke all sessions except current
+- `GET /api/settings/system` — read system settings (head_office_admin only)
+- `PATCH /api/settings/system` — update system settings (head_office_admin only)
 
 ## Pages & Routes
 
@@ -90,6 +104,7 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 | `/dashboard` | `admin-dashboard.tsx` | Admin dashboard with sidebar, KPI cards, jobs table |
 | `/lme-pricing` | `lme-pricing.tsx` | LME Pricing & Accounts — manual price input, job value table, export cards |
 | `/users` | `user-management.tsx` | User Management — stats, user table with role filters, Add New User modal |
+| `/settings` | `settings.tsx` | Settings — Profile, Notifications, Security, System (admin-only) tabs |
 | `/jobs` | `placeholder.tsx` | Job Management (placeholder) |
 | `/kpi` | `placeholder.tsx` | KPI Reporting (placeholder) |
 | `/collection/new` | `depot-form.tsx` | Battery collection submission form |
@@ -98,12 +113,14 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 
 - `AuthGuard` — requires authenticated session
 - `AdminGuard` — requires auth + role in [team_leader, accounts, head_office_admin]
-- `/lme-pricing` uses AdminGuard (accessible by accounts and head_office_admin via API-level role check)
-- `/users` uses AdminGuard (accessible by head_office_admin only via API-level role check)
+- `RoleGuard` — requires auth + specific role(s)
+- `/lme-pricing` uses RoleGuard [accounts, head_office_admin]
+- `/users` uses RoleGuard [head_office_admin]
+- `/settings` uses AuthGuard (all authenticated users; System tab hidden for non-admin)
 
 ## Shared Components
 
-- `sidebar-layout.tsx` — Reusable sidebar layout with dark navy sidebar, nav items, user info, header bar. Used by admin dashboard, LME Pricing, User Management pages.
+- `sidebar-layout.tsx` — Reusable sidebar layout with dark navy sidebar, nav items, user info, header bar. Used by admin dashboard, LME Pricing, User Management, Settings pages.
 
 ## Key Files
 
@@ -111,19 +128,21 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 - `artifacts/portal/src/pages/admin-dashboard.tsx` — Admin dashboard with metrics + jobs table
 - `artifacts/portal/src/pages/lme-pricing.tsx` — LME Pricing & Accounts page
 - `artifacts/portal/src/pages/user-management.tsx` — User Management page
+- `artifacts/portal/src/pages/settings.tsx` — Settings page with 4 tabs
 - `artifacts/portal/src/pages/login.tsx` — Login page with split-panel design
 - `artifacts/portal/src/pages/dashboard.tsx` — Depot user dashboard
 - `artifacts/portal/src/pages/depot-form.tsx` — Depot submission form
-- `artifacts/portal/src/App.tsx` — Routing with AuthGuard/AdminGuard/GuestGuard
-- `artifacts/api-server/src/routes/auth.ts` — Auth API routes
+- `artifacts/portal/src/App.tsx` — Routing with AuthGuard/AdminGuard/RoleGuard/GuestGuard
+- `artifacts/api-server/src/routes/auth.ts` — Auth API routes (stores user-agent/IP on login)
 - `artifacts/api-server/src/routes/jobs.ts` — Jobs API routes with dashboard stats
 - `artifacts/api-server/src/routes/lme.ts` — LME pricing API routes
 - `artifacts/api-server/src/routes/users.ts` — User management API routes
+- `artifacts/api-server/src/routes/settings.ts` — Settings API routes (profile, password, notifications, sessions, system)
 - `artifacts/api-server/src/middlewares/auth.ts` — requireAuth + requireRole middleware
-- `lib/db/src/schema/users.ts` — Users + sessions schema (includes isActive, lastActiveAt)
+- `lib/db/src/schema/users.ts` — Users, sessions, and system_settings schemas
 - `lib/db/src/schema/jobs.ts` — Jobs schema with indexes
 - `lib/db/src/schema/lme-prices.ts` — LME prices schema
-- `scripts/seed.ts` — Database seeder (12 users + 18 demo jobs + 5 LME prices)
+- `scripts/seed.ts` — Database seeder (12 users + 18 demo jobs + 5 LME prices + system settings)
 
 ## Mockups
 

@@ -9,6 +9,7 @@ import AdminDashboardPage from "@/pages/admin-dashboard";
 import DepotFormPage from "@/pages/depot-form";
 import LmePricingPage from "@/pages/lme-pricing";
 import UserManagementPage from "@/pages/user-management";
+import SettingsPage from "@/pages/settings";
 import PlaceholderPage from "@/pages/placeholder";
 import NotFound from "@/pages/not-found";
 
@@ -159,6 +160,11 @@ function AppRouter() {
         <RoleGuard allowedRoles={["head_office_admin"]}>
           <UserManagementPage />
         </RoleGuard>
+      </Route>
+      <Route path="/settings">
+        <AuthGuard>
+          <SettingsPage />
+        </AuthGuard>
       </Route>
       <Route path="/collection/new">
         <AuthGuard>

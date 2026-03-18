@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp, varchar, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, varchar, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -11,6 +11,13 @@ export const usersTable = pgTable("users", {
   depot: varchar("depot", { length: 255 }),
   isActive: boolean("is_active").notNull().default(true),
   lastActiveAt: timestamp("last_active_at"),
+  notificationPreferences: jsonb("notification_preferences").default({
+    newJobSubmitted: true,
+    jobApprovedCompleted: true,
+    invoiceGenerated: true,
+    lmePriceAlerts: false,
+    weeklySummary: true,
+  }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -18,8 +25,20 @@ export const sessionsTable = pgTable("sessions", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => usersTable.id).notNull(),
   token: text("token").notNull().unique(),
+  userAgent: text("user_agent"),
+  ipAddress: varchar("ip_address", { length: 45 }),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const systemSettingsTable = pgTable("system_settings", {
+  id: serial("id").primaryKey(),
+  singletonKey: varchar("singleton_key", { length: 10 }).notNull().default("default").unique(),
+  companyName: varchar("company_name", { length: 255 }).notNull().default("Itinium Ltd"),
+  invoicePrefix: varchar("invoice_prefix", { length: 20 }).notNull().default("INV"),
+  dataRetentionDays: integer("data_retention_days").notNull().default(365),
+  autoFetchLme: boolean("auto_fetch_lme").notNull().default(false),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, passwordHash: true });
