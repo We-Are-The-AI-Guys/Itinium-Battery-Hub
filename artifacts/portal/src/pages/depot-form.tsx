@@ -56,6 +56,7 @@ interface BatteryRow {
   manufactureCustom: string;
   cellType: string;
   voltage: string;
+  customVoltage: string;
   looseCellsQty: string;
   estimatedWeightKg: string;
   weightManual: boolean;
@@ -79,6 +80,7 @@ function createEmptyBattery(): BatteryRow {
     manufactureCustom: "",
     cellType: "",
     voltage: "",
+    customVoltage: "",
     looseCellsQty: "",
     estimatedWeightKg: "",
     weightManual: false,
@@ -98,8 +100,11 @@ const VOLTAGE_OPTIONS = [
   { value: "12V", label: "12V" },
   { value: "24V", label: "24V" },
   { value: "36V", label: "36V" },
+  { value: "40V", label: "40V" },
   { value: "48V", label: "48V" },
   { value: "80V", label: "80V" },
+  { value: "96V", label: "96V" },
+  { value: "Other", label: "Other" },
 ];
 
 const DEFAULT_MANUFACTURERS = [
@@ -180,7 +185,10 @@ export default function DepotFormPage() {
     } else if (battery.cellType === "Other") {
       weight = await fetchWeightFromApi("Other", null);
     } else if (battery.cellType && battery.voltage) {
-      weight = await fetchWeightFromApi(battery.cellType, battery.voltage);
+      const effectiveVoltage = battery.voltage === "Other" ? battery.customVoltage : battery.voltage;
+      if (effectiveVoltage) {
+        weight = await fetchWeightFromApi(battery.cellType, effectiveVoltage);
+      }
     }
     if (weightLookupVersion.current[battery.id] !== version) return;
     setBatteries((prev) =>
@@ -221,7 +229,7 @@ export default function DepotFormPage() {
   function updateBattery(id: string, field: keyof BatteryRow, value: string) {
     setBatteries((prev) => {
       const updated = prev.map((b) => (b.id === id ? { ...b, [field]: value } : b));
-      if (field === "cellType" || field === "voltage" || field === "looseCellsQty") {
+      if (field === "cellType" || field === "voltage" || field === "looseCellsQty" || field === "customVoltage") {
         const battery = updated.find((b) => b.id === id);
         if (battery && !battery.weightManual) {
           computeAndSetAutoWeight(battery);
@@ -284,7 +292,7 @@ export default function DepotFormPage() {
             batterySerial: b.batterySerial || null,
             manufacture: b.manufacture === "Other" ? (b.manufactureCustom || "Other") : (b.manufacture || null),
             cellType: b.cellType || null,
-            voltage: b.voltage || null,
+            voltage: (b.voltage === "Other" ? b.customVoltage : b.voltage) || null,
             looseCellsQty: b.looseCellsQty || null,
             estimatedWeightKg: b.estimatedWeightKg || null,
             notes: b.notes || null,
@@ -676,29 +684,50 @@ export default function DepotFormPage() {
                   </div>
 
                   {battery.cellType !== "Blocs" && battery.cellType !== "Other" && (
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-slate-600">
-                        If Complete Battery &mdash; Voltage
-                      </label>
-                      <Select
-                        value={battery.voltage}
-                        onValueChange={(val) => updateBattery(battery.id, "voltage", val)}
-                      >
-                        <SelectTrigger className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus:ring-[#0ea5e9]">
-                          <div className="flex items-center gap-2">
-                            <Zap className="h-3.5 w-3.5 text-slate-400" />
-                            <SelectValue placeholder="Select voltage..." />
-                          </div>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {VOLTAGE_OPTIONS.map((v) => (
-                            <SelectItem key={v.value} value={v.value}>
-                              {v.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-medium text-slate-600">
+                          If Complete Battery &mdash; Voltage
+                        </label>
+                        <Select
+                          value={battery.voltage}
+                          onValueChange={(val) => {
+                            updateBattery(battery.id, "voltage", val);
+                            if (val !== "Other") {
+                              updateBattery(battery.id, "customVoltage", "");
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus:ring-[#0ea5e9]">
+                            <div className="flex items-center gap-2">
+                              <Zap className="h-3.5 w-3.5 text-slate-400" />
+                              <SelectValue placeholder="Select voltage..." />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {VOLTAGE_OPTIONS.map((v) => (
+                              <SelectItem key={v.value} value={v.value}>
+                                {v.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {battery.voltage === "Other" && (
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-medium text-slate-600">
+                            Custom Voltage
+                          </label>
+                          <Input
+                            placeholder="e.g., 72V"
+                            className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
+                            value={battery.customVoltage}
+                            onChange={(e) => updateBattery(battery.id, "customVoltage", e.target.value)}
+                            data-testid={`input-custom-voltage-${index}`}
+                          />
+                        </div>
+                      )}
+                    </>
                   )}
 
                   {battery.cellType === "Blocs" && (
