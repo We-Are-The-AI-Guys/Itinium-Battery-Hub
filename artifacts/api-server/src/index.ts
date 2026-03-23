@@ -1,11 +1,14 @@
 import app from "./app";
 import { db } from "@workspace/db";
 import { usersTable, systemSettingsTable } from "@workspace/db/schema";
-import { count } from "drizzle-orm";
+import { count, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 async function bootstrap() {
   try {
+    await db.execute(sql`CREATE SEQUENCE IF NOT EXISTS pallet_number_seq START WITH 1 INCREMENT BY 1`);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_job_batteries_pallet_number ON job_batteries (pallet_number) WHERE pallet_number IS NOT NULL`);
+
     const [{ value: userCount }] = await db.select({ value: count() }).from(usersTable);
     if (userCount === 0) {
       console.log("No users found — creating default admin user...");
