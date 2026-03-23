@@ -95,12 +95,24 @@ router.get(
         return;
       }
 
-      const batteries = await db
+      const batteriesRaw = await db
         .select()
         .from(jobBatteriesTable)
         .where(eq(jobBatteriesTable.jobId, jobId));
 
-      res.json({ job, batteries });
+      if (!isAdmin) {
+        const { cblLmeValue, cblLmePercent, cblLmePrice, transportCost,
+          customerInvoiceValue, customerInvoiceNo, cblWasteAdviceNoteNo,
+          cblDate, totalInvoiceValue, grossProfit, itiniumInvoiceNo,
+          ...safeJob } = job;
+
+        const safeBatteries = batteriesRaw.map(({ receiptConfirmed, pbContentKg, valueGbp, adminNotes, ...rest }) => rest);
+
+        res.json({ job: safeJob, batteries: safeBatteries });
+        return;
+      }
+
+      res.json({ job, batteries: batteriesRaw });
     } catch (error) {
       console.error("Job detail error:", error);
       res.status(500).json({ message: "Internal server error" });
