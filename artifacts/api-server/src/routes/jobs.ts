@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { jobsTable, jobBatteriesTable } from "@workspace/db/schema";
-import { eq, sql, and, count, ilike, or } from "drizzle-orm";
+import { eq, sql, and, count, ilike, or, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -12,7 +12,7 @@ router.get(
   requireRole("team_leader", "accounts", "head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
-      const { status, invoiceStatus, search, limit = "10", offset = "0" } = req.query;
+      const { status, invoiceStatus, search, manufacturer, limit = "10", offset = "0" } = req.query;
       const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10) || 10));
       const offsetNum = Math.max(0, parseInt(offset as string, 10) || 0);
 
@@ -30,6 +30,13 @@ router.get(
             ilike(jobsTable.clientName, `%${search}%`)
           )!
         );
+      }
+      if (manufacturer) {
+        const mfrJobIds = db
+          .select({ jobId: jobBatteriesTable.jobId })
+          .from(jobBatteriesTable)
+          .where(ilike(jobBatteriesTable.manufacture, manufacturer as string));
+        conditions.push(inArray(jobsTable.id, mfrJobIds));
       }
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

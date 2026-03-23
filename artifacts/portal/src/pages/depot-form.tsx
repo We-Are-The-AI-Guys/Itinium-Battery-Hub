@@ -19,6 +19,8 @@ import {
   CalendarDays,
   Factory,
   Layers,
+  Check,
+  ChevronsUpDown,
 } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Button } from "@/components/ui/button";
@@ -31,6 +33,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
 
 interface BatteryRow {
@@ -38,6 +53,7 @@ interface BatteryRow {
   assetNumber: string;
   batterySerial: string;
   manufacture: string;
+  manufactureCustom: string;
   cellType: string;
   voltage: string;
   looseCellsQty: string;
@@ -60,6 +76,7 @@ function createEmptyBattery(): BatteryRow {
     assetNumber: "",
     batterySerial: "",
     manufacture: "",
+    manufactureCustom: "",
     cellType: "",
     voltage: "",
     looseCellsQty: "",
@@ -85,6 +102,21 @@ const VOLTAGE_OPTIONS = [
   { value: "80V", label: "80V" },
 ];
 
+const DEFAULT_MANUFACTURERS = [
+  "EnerSys Hawker",
+  "Espex",
+  "Eternity",
+  "Exide / GNB",
+  "Hawker",
+  "Velaris / Ecobat / EDrive",
+  "Hoppecke",
+  "Juice",
+  "Midac",
+  "TAB",
+  "Triathlon / Sunlight",
+  "Other",
+];
+
 export default function DepotFormPage() {
   const [user, setUser] = useState<User | null>(null);
   const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
@@ -98,6 +130,8 @@ export default function DepotFormPage() {
   const [submitting, setSubmitting] = useState(false);
   const [tonnageOverride, setTonnageOverride] = useState("");
   const [tonnageManual, setTonnageManual] = useState(false);
+  const [manufacturers, setManufacturers] = useState<string[]>(DEFAULT_MANUFACTURERS);
+  const [mfrPopoverOpen, setMfrPopoverOpen] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
 
   useEffect(() => {
@@ -105,6 +139,12 @@ export default function DepotFormPage() {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.user) setUser(data.user);
+      })
+      .catch(() => {});
+    fetch("/api/manufacturers", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.manufacturers?.length) setManufacturers(data.manufacturers);
       })
       .catch(() => {});
   }, []);
@@ -213,6 +253,18 @@ export default function DepotFormPage() {
       return;
     }
 
+    const missingCustomMfr = batteries.some(
+      (b) => b.manufacture === "Other" && !b.manufactureCustom.trim()
+    );
+    if (missingCustomMfr) {
+      toast({
+        title: "Missing manufacturer name",
+        description: "Please enter the manufacturer name for batteries marked as 'Other'.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSubmitting(true);
     try {
       const res = await fetch("/api/jobs", {
@@ -230,7 +282,7 @@ export default function DepotFormPage() {
           batteries: batteries.map((b) => ({
             assetNumber: b.assetNumber || null,
             batterySerial: b.batterySerial || null,
-            manufacture: b.manufacture || null,
+            manufacture: b.manufacture === "Other" ? (b.manufactureCustom || "Other") : (b.manufacture || null),
             cellType: b.cellType || null,
             voltage: b.voltage || null,
             looseCellsQty: b.looseCellsQty || null,
@@ -524,17 +576,79 @@ export default function DepotFormPage() {
                     <label className="text-xs font-medium text-slate-600">
                       Manufacture
                     </label>
-                    <div className="relative group">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Factory className="h-3.5 w-3.5 text-slate-400 group-focus-within:text-[#0ea5e9] transition-colors" />
-                      </div>
+                    <Popover
+                      open={mfrPopoverOpen[battery.id] || false}
+                      onOpenChange={(open) =>
+                        setMfrPopoverOpen((prev) => ({ ...prev, [battery.id]: open }))
+                      }
+                    >
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="flex items-center justify-between w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-md text-sm text-[#1e293b] hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:ring-offset-0"
+                          data-testid={`select-manufacture-${index}`}
+                        >
+                          <span className="flex items-center gap-2 truncate">
+                            <Factory className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                            {battery.manufacture ? (
+                              <span>{battery.manufacture}</span>
+                            ) : (
+                              <span className="text-slate-400">Select manufacturer...</span>
+                            )}
+                          </span>
+                          <ChevronsUpDown className="h-3.5 w-3.5 text-slate-400 flex-shrink-0 ml-2" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Search manufacturer..." />
+                          <CommandList>
+                            <CommandEmpty>No manufacturer found.</CommandEmpty>
+                            <CommandGroup>
+                              {manufacturers.map((m) => (
+                                <CommandItem
+                                  key={m}
+                                  value={m}
+                                  onSelect={() => {
+                                    updateBattery(battery.id, "manufacture", m);
+                                    if (m !== "Other") {
+                                      setBatteries((prev) =>
+                                        prev.map((b) =>
+                                          b.id === battery.id ? { ...b, manufactureCustom: "" } : b
+                                        )
+                                      );
+                                    }
+                                    setMfrPopoverOpen((prev) => ({ ...prev, [battery.id]: false }));
+                                  }}
+                                >
+                                  <Check
+                                    className={`mr-2 h-4 w-4 ${
+                                      battery.manufacture === m ? "opacity-100" : "opacity-0"
+                                    }`}
+                                  />
+                                  {m}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                    {battery.manufacture === "Other" && (
                       <Input
-                        placeholder="e.g., Enersys, Hawker"
-                        className="pl-9 h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
-                        value={battery.manufacture}
-                        onChange={(e) => updateBattery(battery.id, "manufacture", e.target.value)}
+                        placeholder="Enter manufacturer name..."
+                        className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9] mt-1.5"
+                        value={battery.manufactureCustom}
+                        onChange={(e) =>
+                          setBatteries((prev) =>
+                            prev.map((b) =>
+                              b.id === battery.id ? { ...b, manufactureCustom: e.target.value } : b
+                            )
+                          )
+                        }
+                        data-testid={`input-manufacture-custom-${index}`}
                       />
-                    </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">

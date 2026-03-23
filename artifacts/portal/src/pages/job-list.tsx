@@ -7,10 +7,18 @@ import {
   Eye,
   FileText,
   Filter,
+  Factory,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SidebarLayout } from "@/components/sidebar-layout";
 
 interface Job {
@@ -68,12 +76,26 @@ export default function JobListPage() {
   const [activeFilter, setActiveFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [manufacturerFilter, setManufacturerFilter] = useState("");
+  const [manufacturers, setManufacturers] = useState<string[]>([]);
   const PAGE_SIZE = 10;
+
+  useEffect(() => {
+    fetch("/api/manufacturers", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.manufacturers) {
+          setManufacturers(data.manufacturers.filter((m: string) => m !== "Other"));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams();
     if (activeFilter !== "All") params.set("status", activeFilter.toLowerCase());
     if (searchQuery.trim()) params.set("search", searchQuery.trim());
+    if (manufacturerFilter) params.set("manufacturer", manufacturerFilter);
     params.set("limit", String(PAGE_SIZE));
     params.set("offset", String((currentPage - 1) * PAGE_SIZE));
 
@@ -86,7 +108,7 @@ export default function JobListPage() {
         }
       })
       .catch(() => {});
-  }, [activeFilter, currentPage, searchQuery]);
+  }, [activeFilter, currentPage, searchQuery, manufacturerFilter]);
 
   function handleFilterChange(filter: string) {
     setActiveFilter(filter);
@@ -124,23 +146,50 @@ export default function JobListPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 mt-4">
-            <Filter className="w-4 h-4 text-slate-400" />
-            <div className="flex bg-slate-100 p-1 rounded-lg">
-              {["All", "Pending", "Approved", "Completed", "Flagged"].map((filter) => (
-                <button
-                  key={filter}
-                  onClick={() => handleFilterChange(filter)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                    activeFilter === filter
-                      ? "bg-white text-[#0f2744] shadow-sm"
-                      : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
-                  }`}
-                  data-testid={`filter-${filter.toLowerCase()}`}
+          <div className="flex flex-wrap items-center gap-3 mt-4">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-slate-400" />
+              <div className="flex bg-slate-100 p-1 rounded-lg">
+                {["All", "Pending", "Approved", "Completed", "Flagged"].map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => handleFilterChange(filter)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      activeFilter === filter
+                        ? "bg-white text-[#0f2744] shadow-sm"
+                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                    }`}
+                    data-testid={`filter-${filter.toLowerCase()}`}
+                  >
+                    {filter}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Factory className="w-4 h-4 text-slate-400" />
+              <Select
+                value={manufacturerFilter || "_all"}
+                onValueChange={(val) => {
+                  setManufacturerFilter(val === "_all" ? "" : val);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger
+                  className="h-8 w-[180px] bg-slate-50 border-slate-200 text-xs focus:ring-[#0ea5e9]"
+                  data-testid="filter-manufacturer"
                 >
-                  {filter}
-                </button>
-              ))}
+                  <SelectValue placeholder="All manufacturers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_all">All manufacturers</SelectItem>
+                  {manufacturers.map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {m}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>

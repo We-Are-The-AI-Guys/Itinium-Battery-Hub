@@ -6,6 +6,7 @@ import lmeRouter from "./lme";
 import usersRouter from "./users";
 import settingsRouter from "./settings";
 import weightReferenceRouter from "./weight-reference";
+import manufacturersRouter from "./manufacturers";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(lmeRouter);
 router.use(usersRouter);
 router.use(settingsRouter);
 router.use(weightReferenceRouter);
+router.use(manufacturersRouter);
 
 export default router;
