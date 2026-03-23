@@ -174,6 +174,7 @@ async function seed() {
 
   await db.delete(jobBatteriesTable);
   await db.delete(jobsTable);
+  await db.execute(sql`CREATE SEQUENCE IF NOT EXISTS pallet_number_seq START WITH 1 INCREMENT BY 1`);
   await db.execute(sql`ALTER SEQUENCE pallet_number_seq RESTART WITH 1`);
 
   for (let i = 0; i < jobsData.length; i++) {
