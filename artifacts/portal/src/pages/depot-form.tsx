@@ -54,13 +54,6 @@ interface User {
   depot: string | null;
 }
 
-interface WeightRef {
-  id: number;
-  cellType: string;
-  voltage: string | null;
-  weightKg: string;
-}
-
 function createEmptyBattery(): BatteryRow {
   return {
     id: crypto.randomUUID(),
@@ -103,7 +96,6 @@ export default function DepotFormPage() {
   const [jobNotes, setJobNotes] = useState("");
   const [batteries, setBatteries] = useState<BatteryRow[]>([createEmptyBattery()]);
   const [submitting, setSubmitting] = useState(false);
-  const [weightRefs, setWeightRefs] = useState<WeightRef[]>([]);
   const [tonnageOverride, setTonnageOverride] = useState("");
   const [tonnageManual, setTonnageManual] = useState(false);
   const { toast } = useToast();
@@ -115,35 +107,39 @@ export default function DepotFormPage() {
         if (data?.user) setUser(data.user);
       })
       .catch(() => {});
-    fetch("/api/weight-reference", { credentials: "include" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.references) setWeightRefs(data.references);
-      })
-      .catch(() => {});
   }, []);
 
-  function lookupWeight(cellType: string, voltage: string | null): string {
+  async function fetchWeightFromApi(cellType: string, voltage: string | null): Promise<string> {
     if (!cellType) return "";
-    if (cellType === "Blocs" || cellType === "Other") {
-      const ref = weightRefs.find((r) => r.cellType === cellType && !r.voltage);
-      return ref ? ref.weightKg : "";
-    }
-    if (!voltage) return "";
-    const ref = weightRefs.find((r) => r.cellType === cellType && r.voltage === voltage);
-    return ref ? ref.weightKg : "";
-  }
-
-  function computeAutoWeight(battery: BatteryRow): string {
-    if (battery.cellType === "Blocs") {
-      const perBloc = lookupWeight("Blocs", null);
-      const qty = parseInt(battery.looseCellsQty, 10);
-      if (perBloc && !isNaN(qty) && qty > 0) {
-        return (parseFloat(perBloc) * qty).toFixed(3);
-      }
+    const params = new URLSearchParams({ cellType });
+    if (voltage) params.set("voltage", voltage);
+    try {
+      const res = await fetch(`/api/weight-reference/lookup?${params}`, { credentials: "include" });
+      if (!res.ok) return "";
+      const data = await res.json();
+      return data.reference?.weightKg || "";
+    } catch {
       return "";
     }
-    return lookupWeight(battery.cellType, battery.voltage || null);
+  }
+
+  async function computeAndSetAutoWeight(battery: BatteryRow) {
+    if (battery.weightManual) return;
+    let weight = "";
+    if (battery.cellType === "Blocs") {
+      const perBloc = await fetchWeightFromApi("Blocs", null);
+      const qty = parseInt(battery.looseCellsQty, 10);
+      if (perBloc && !isNaN(qty) && qty > 0) {
+        weight = (parseFloat(perBloc) * qty).toFixed(3);
+      }
+    } else if (battery.cellType === "Other") {
+      weight = await fetchWeightFromApi("Other", null);
+    } else if (battery.cellType && battery.voltage) {
+      weight = await fetchWeightFromApi(battery.cellType, battery.voltage);
+    }
+    setBatteries((prev) =>
+      prev.map((b) => (b.id === battery.id && !b.weightManual ? { ...b, estimatedWeightKg: weight } : b))
+    );
   }
 
   async function handleLogout() {
@@ -177,16 +173,16 @@ export default function DepotFormPage() {
   }
 
   function updateBattery(id: string, field: keyof BatteryRow, value: string) {
-    setBatteries((prev) =>
-      prev.map((b) => {
-        if (b.id !== id) return b;
-        const updated = { ...b, [field]: value };
-        if ((field === "cellType" || field === "voltage" || field === "looseCellsQty") && !updated.weightManual) {
-          updated.estimatedWeightKg = computeAutoWeight(updated);
+    setBatteries((prev) => {
+      const updated = prev.map((b) => (b.id === id ? { ...b, [field]: value } : b));
+      if (field === "cellType" || field === "voltage" || field === "looseCellsQty") {
+        const battery = updated.find((b) => b.id === id);
+        if (battery && !battery.weightManual) {
+          computeAndSetAutoWeight(battery);
         }
-        return updated;
-      })
-    );
+      }
+      return updated;
+    });
   }
 
   function addBatteryRow() {
@@ -633,14 +629,14 @@ export default function DepotFormPage() {
                         type="button"
                         className="text-[10px] text-[#0ea5e9] hover:underline"
                         onClick={() => {
-                          const autoWeight = computeAutoWeight(battery);
                           setBatteries((prev) =>
                             prev.map((b) =>
                               b.id === battery.id
-                                ? { ...b, estimatedWeightKg: autoWeight, weightManual: false }
+                                ? { ...b, weightManual: false, estimatedWeightKg: "" }
                                 : b
                             )
                           );
+                          computeAndSetAutoWeight({ ...battery, weightManual: false });
                         }}
                       >
                         Reset to default

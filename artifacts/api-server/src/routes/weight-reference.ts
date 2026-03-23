@@ -76,8 +76,8 @@ router.post(
         .returning();
 
       res.status(201).json({ reference: ref });
-    } catch (error: any) {
-      if (error?.code === "23505") {
+    } catch (error: unknown) {
+      if (error instanceof Error && "code" in error && (error as Record<string, unknown>).code === "23505") {
         res.status(409).json({ message: "A weight reference for this cell type and voltage already exists" });
         return;
       }
