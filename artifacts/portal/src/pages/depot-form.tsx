@@ -66,9 +66,9 @@ function createEmptyBattery(): BatteryRow {
 }
 
 const CELL_TYPES = [
-  { value: "P2B", label: "P2B" },
-  { value: "P2S", label: "P2S" },
-  { value: "P2V", label: "P2V" },
+  { value: "PZB", label: "PZB" },
+  { value: "PZS", label: "PZS" },
+  { value: "PZV", label: "PZV" },
   { value: "Blocs", label: "Blocs" },
   { value: "Other", label: "Other" },
 ];

@@ -44,7 +44,7 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 - Indexes: status, submitted_at, composite (status, submitted_at)
 
 ### job_batteries
-- id, job_id (FK → jobs, cascade delete), pallet_number, asset_number, battery_serial, manufacture, cell_type (P2B/P2S/P2V/Blocs/Other), voltage (free text), loose_cells_qty (integer), notes
+- id, job_id (FK → jobs, cascade delete), pallet_number, asset_number, battery_serial, manufacture, cell_type (PZB/PZS/PZV/Blocs/Other), voltage (free text), loose_cells_qty (integer), notes
 - Admin fields: receipt_confirmed (boolean), pb_content_kg (decimal), value_gbp (decimal), admin_notes (text)
 - pallet_number is auto-generated server-side as PLT-XXXXX using PostgreSQL sequence `pallet_number_seq`
 - created_at
