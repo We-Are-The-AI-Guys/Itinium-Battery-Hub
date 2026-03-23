@@ -406,7 +406,15 @@ router.get(
           total: sql<string>`COALESCE(SUM(${jobsTable.grossProfit}), 0)`,
         })
         .from(jobsTable)
-        .where(sql`${jobsTable.grossProfit} IS NOT NULL`);
+        .where(
+          and(
+            sql`${jobsTable.grossProfit} IS NOT NULL`,
+            or(
+              eq(jobsTable.status, "completed"),
+              sql`${jobsTable.invoiceStatus} IN ('invoiced', 'paid')`,
+            ),
+          )
+        );
 
       const [weekJobsResult] = await db
         .select({ count: count() })
