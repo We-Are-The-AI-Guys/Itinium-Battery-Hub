@@ -9,7 +9,11 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
+  TrendingDown,
   ArrowUpRight,
+  ArrowDownRight,
+  Percent,
+  PoundSterling,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +25,9 @@ interface DashboardStats {
   monthlyTonnage: number;
   totalInvoiceValue: number;
   pendingThisWeek: number;
+  monthOnMonthChange: number;
+  avgCblLmePercent: number;
+  totalGrossProfit: number;
 }
 
 interface Job {
@@ -31,6 +38,9 @@ interface Job {
   submittedAt: string;
   tonnage: string;
   status: string;
+  calculatedValue: string | null;
+  invoiceStatus: string | null;
+  grossProfit: string | null;
 }
 
 interface Pagination {
@@ -47,6 +57,18 @@ const statusStyles: Record<string, string> = {
   flagged: "bg-red-100 text-red-800 border-red-200",
 };
 
+const invoiceStatusStyles: Record<string, string> = {
+  pending_invoice: "bg-slate-100 text-slate-700 border-slate-200",
+  invoiced: "bg-blue-100 text-blue-800 border-blue-200",
+  paid: "bg-emerald-100 text-emerald-800 border-emerald-200",
+};
+
+const invoiceStatusLabels: Record<string, string> = {
+  pending_invoice: "Pending",
+  invoiced: "Invoiced",
+  paid: "Paid",
+};
+
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-GB", {
     day: "numeric",
@@ -60,6 +82,15 @@ function formatCurrency(value: number) {
     style: "currency",
     currency: "GBP",
     maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatCurrencyDecimal(value: number) {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "GBP",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value);
 }
 
@@ -107,13 +138,16 @@ export default function AdminDashboardPage() {
     ? Math.round((stats.monthlyTonnage / tonnageTarget) * 100)
     : 0;
 
+  const momChange = stats?.monthOnMonthChange ?? 0;
+  const momPositive = momChange >= 0;
+
   return (
     <SidebarLayout
       title="Dashboard"
       subtitle="Overview of all operations"
       showSearch
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-amber-500 p-5 hover:shadow-md transition-shadow">
           <div className="flex justify-between items-start mb-4">
             <div>
@@ -164,28 +198,6 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-green-500 p-5 hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">
-                Total Invoice Value
-              </p>
-              <h3 className="text-3xl font-bold text-[#0f2744]">
-                {stats ? formatCurrency(stats.totalInvoiceValue) : "..."}
-              </h3>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center">
-              <Receipt className="w-5 h-5 text-green-500" />
-            </div>
-          </div>
-          <div className="flex items-center text-sm">
-            <ArrowUpRight className="w-4 h-4 text-green-600 mr-1" />
-            <span className="text-green-600 font-medium">
-              +8.2% vs last month
-            </span>
-          </div>
-        </div>
-
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-red-500 p-5 hover:shadow-md transition-shadow relative overflow-hidden">
           <div className="flex justify-between items-start mb-4">
             <div>
@@ -207,6 +219,87 @@ export default function AdminDashboardPage() {
                 ? `${Math.max(1, Math.floor(stats.flaggedExceptions / 2))} critical`
                 : "..."}
             </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-green-500 p-5 hover:shadow-md transition-shadow">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <p className="text-sm font-medium text-slate-500 mb-1">
+                Total Invoice Value
+              </p>
+              <h3 className="text-3xl font-bold text-[#0f2744]">
+                {stats ? formatCurrency(stats.totalInvoiceValue) : "..."}
+              </h3>
+            </div>
+            <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center">
+              <Receipt className="w-5 h-5 text-green-500" />
+            </div>
+          </div>
+          <div className="flex items-center text-sm">
+            {momPositive ? (
+              <ArrowUpRight className="w-4 h-4 text-green-600 mr-1" />
+            ) : (
+              <ArrowDownRight className="w-4 h-4 text-red-500 mr-1" />
+            )}
+            <span className={`font-medium ${momPositive ? "text-green-600" : "text-red-500"}`}>
+              {momPositive ? "+" : ""}{momChange}% vs last month
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-violet-500 p-5 hover:shadow-md transition-shadow">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <p className="text-sm font-medium text-slate-500 mb-1">
+                Avg CBL LME %
+              </p>
+              <h3 className="text-3xl font-bold text-[#0f2744]">
+                {stats ? `${stats.avgCblLmePercent.toFixed(1)}%` : "..."}
+              </h3>
+            </div>
+            <div className="w-10 h-10 rounded-lg bg-violet-50 flex items-center justify-center">
+              <Percent className="w-5 h-5 text-violet-500" />
+            </div>
+          </div>
+          <div className="flex items-center text-sm">
+            <span className="text-violet-600 font-medium">
+              Across all priced jobs
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-emerald-500 p-5 hover:shadow-md transition-shadow">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <p className="text-sm font-medium text-slate-500 mb-1">
+                Total Gross Profit
+              </p>
+              <h3 className="text-3xl font-bold text-[#0f2744]">
+                {stats ? formatCurrency(stats.totalGrossProfit) : "..."}
+              </h3>
+            </div>
+            <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
+              <PoundSterling className="w-5 h-5 text-emerald-500" />
+            </div>
+          </div>
+          <div className="flex items-center text-sm">
+            {stats && stats.totalInvoiceValue > 0 ? (
+              <>
+                {(stats.totalGrossProfit / stats.totalInvoiceValue) * 100 >= 0 ? (
+                  <TrendingUp className="w-4 h-4 text-emerald-600 mr-1" />
+                ) : (
+                  <TrendingDown className="w-4 h-4 text-red-500 mr-1" />
+                )}
+                <span className="text-emerald-600 font-medium">
+                  {((stats.totalGrossProfit / stats.totalInvoiceValue) * 100).toFixed(1)}% margin
+                </span>
+              </>
+            ) : (
+              <span className="text-slate-400 font-medium">No data yet</span>
+            )}
           </div>
         </div>
       </div>
@@ -243,7 +336,10 @@ export default function AdminDashboardPage() {
                 <th className="px-6 py-4 font-semibold">Depot</th>
                 <th className="px-6 py-4 font-semibold">Date Submitted</th>
                 <th className="px-6 py-4 font-semibold">Tonnage</th>
+                <th className="px-6 py-4 font-semibold">Value</th>
+                <th className="px-6 py-4 font-semibold">Gross Profit</th>
                 <th className="px-6 py-4 font-semibold">Status</th>
+                <th className="px-6 py-4 font-semibold">Invoice</th>
                 <th className="px-6 py-4 font-semibold text-right">Actions</th>
               </tr>
             </thead>
@@ -266,6 +362,20 @@ export default function AdminDashboardPage() {
                   <td className="px-6 py-4 font-medium text-slate-700">
                     {parseFloat(job.tonnage).toFixed(1)}t
                   </td>
+                  <td className="px-6 py-4 font-medium text-slate-700">
+                    {job.calculatedValue
+                      ? formatCurrencyDecimal(parseFloat(job.calculatedValue))
+                      : "—"}
+                  </td>
+                  <td className="px-6 py-4 font-medium">
+                    {job.grossProfit ? (
+                      <span className={parseFloat(job.grossProfit) >= 0 ? "text-emerald-700" : "text-red-600"}>
+                        {formatCurrencyDecimal(parseFloat(job.grossProfit))}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </td>
                   <td className="px-6 py-4">
                     <Badge
                       variant="outline"
@@ -275,6 +385,20 @@ export default function AdminDashboardPage() {
                     >
                       {job.status}
                     </Badge>
+                  </td>
+                  <td className="px-6 py-4">
+                    {job.invoiceStatus ? (
+                      <Badge
+                        variant="outline"
+                        className={`font-medium text-xs ${
+                          invoiceStatusStyles[job.invoiceStatus] || "bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        {invoiceStatusLabels[job.invoiceStatus] || job.invoiceStatus}
+                      </Badge>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <Button
@@ -292,7 +416,7 @@ export default function AdminDashboardPage() {
               {jobs.length === 0 && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={10}
                     className="px-6 py-12 text-center text-slate-500"
                   >
                     No jobs found

@@ -344,6 +344,7 @@ router.get(
     try {
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
       const [pendingResult] = await db
         .select({ count: count() })
@@ -360,17 +361,52 @@ router.get(
           total: sql<string>`COALESCE(SUM(${jobsTable.tonnage}), 0)`,
         })
         .from(jobsTable)
+        .where(sql`${jobsTable.submittedAt} >= ${startOfMonth}`);
+
+      const [invoiceThisMonth] = await db
+        .select({
+          total: sql<string>`COALESCE(SUM(${jobsTable.calculatedValue}), 0)`,
+        })
+        .from(jobsTable)
+        .where(sql`${jobsTable.submittedAt} >= ${startOfMonth}`);
+
+      const [invoiceLastMonth] = await db
+        .select({
+          total: sql<string>`COALESCE(SUM(${jobsTable.calculatedValue}), 0)`,
+        })
+        .from(jobsTable)
         .where(
           and(
-            sql`${jobsTable.submittedAt} >= ${startOfMonth}`,
+            sql`${jobsTable.submittedAt} >= ${startOfLastMonth}`,
+            sql`${jobsTable.submittedAt} < ${startOfMonth}`,
           )
         );
 
-      const [invoiceResult] = await db
+      const [invoiceAllTime] = await db
         .select({
           total: sql<string>`COALESCE(SUM(${jobsTable.calculatedValue}), 0)`,
         })
         .from(jobsTable);
+
+      const thisMonthVal = parseFloat(invoiceThisMonth?.total || "0");
+      const lastMonthVal = parseFloat(invoiceLastMonth?.total || "0");
+      const monthOnMonthChange = lastMonthVal > 0
+        ? ((thisMonthVal - lastMonthVal) / lastMonthVal) * 100
+        : thisMonthVal > 0 ? 100 : 0;
+
+      const [avgLmeResult] = await db
+        .select({
+          avg: sql<string>`COALESCE(AVG(${jobsTable.cblLmePercent}), 0)`,
+        })
+        .from(jobsTable)
+        .where(sql`${jobsTable.cblLmePercent} IS NOT NULL`);
+
+      const [grossProfitResult] = await db
+        .select({
+          total: sql<string>`COALESCE(SUM(${jobsTable.grossProfit}), 0)`,
+        })
+        .from(jobsTable)
+        .where(sql`${jobsTable.grossProfit} IS NOT NULL`);
 
       const [weekJobsResult] = await db
         .select({ count: count() })
@@ -386,8 +422,11 @@ router.get(
         pendingJobs: pendingResult?.count || 0,
         flaggedExceptions: flaggedResult?.count || 0,
         monthlyTonnage: parseFloat(tonnageResult?.total || "0"),
-        totalInvoiceValue: parseFloat(invoiceResult?.total || "0"),
+        totalInvoiceValue: parseFloat(invoiceAllTime?.total || "0"),
         pendingThisWeek: weekJobsResult?.count || 0,
+        monthOnMonthChange: Math.round(monthOnMonthChange * 10) / 10,
+        avgCblLmePercent: Math.round(parseFloat(avgLmeResult?.avg || "0") * 100) / 100,
+        totalGrossProfit: parseFloat(grossProfitResult?.total || "0"),
       });
     } catch (error) {
       console.error("Dashboard stats error:", error);
