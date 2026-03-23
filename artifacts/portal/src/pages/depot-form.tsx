@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import {
   Package,
@@ -123,8 +123,13 @@ export default function DepotFormPage() {
     }
   }
 
+  const weightLookupVersion = useRef<Record<string, number>>({});
+
   async function computeAndSetAutoWeight(battery: BatteryRow) {
     if (battery.weightManual) return;
+    const version = (weightLookupVersion.current[battery.id] || 0) + 1;
+    weightLookupVersion.current[battery.id] = version;
+
     let weight = "";
     if (battery.cellType === "Blocs") {
       const perBloc = await fetchWeightFromApi("Blocs", null);
@@ -137,6 +142,7 @@ export default function DepotFormPage() {
     } else if (battery.cellType && battery.voltage) {
       weight = await fetchWeightFromApi(battery.cellType, battery.voltage);
     }
+    if (weightLookupVersion.current[battery.id] !== version) return;
     setBatteries((prev) =>
       prev.map((b) => (b.id === battery.id && !b.weightManual ? { ...b, estimatedWeightKg: weight } : b))
     );

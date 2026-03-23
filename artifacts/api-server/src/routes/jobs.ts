@@ -134,10 +134,16 @@ router.post(
       let autoTonnage = 0;
       for (const b of batteryInputs) {
         if (b.estimatedWeightKg) {
-          autoTonnage += parseFloat(String(b.estimatedWeightKg));
+          const parsed = parseFloat(String(b.estimatedWeightKg));
+          if (!isNaN(parsed) && isFinite(parsed)) {
+            autoTonnage += parsed;
+          }
         }
       }
-      const finalTonnage = tonnage ? String(tonnage) : (autoTonnage / 1000).toFixed(3);
+      const parsedTonnage = tonnage ? parseFloat(String(tonnage)) : NaN;
+      const finalTonnage = (!isNaN(parsedTonnage) && isFinite(parsedTonnage))
+        ? String(parsedTonnage)
+        : (autoTonnage / 1000).toFixed(3);
 
       const result = await db.transaction(async (tx) => {
         const jobCount = await tx.select({ count: count() }).from(jobsTable);
@@ -176,7 +182,7 @@ router.post(
           cellType: b.cellType || null,
           voltage: b.voltage || null,
           looseCellsQty: b.looseCellsQty ? parseInt(String(b.looseCellsQty), 10) : null,
-          estimatedWeightKg: b.estimatedWeightKg ? String(b.estimatedWeightKg) : null,
+          estimatedWeightKg: b.estimatedWeightKg && isFinite(parseFloat(String(b.estimatedWeightKg))) ? String(parseFloat(String(b.estimatedWeightKg))) : null,
           notes: b.notes || null,
         }));
 
