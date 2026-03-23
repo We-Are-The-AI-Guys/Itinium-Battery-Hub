@@ -15,6 +15,7 @@ import {
   Percent,
   PoundSterling,
   Package,
+  CalendarClock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,8 @@ interface DashboardStats {
   avgCblLmePercent: number;
   totalGrossProfit: number;
   completedInvoiceValue: number;
+  avgDaysToPay: number;
+  overdueInvoices: number;
 }
 
 interface Job {
@@ -233,7 +236,7 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-sky-500 p-5 hover:shadow-md transition-shadow">
           <div className="flex justify-between items-start mb-4">
             <div>
@@ -330,6 +333,36 @@ export default function AdminDashboardPage() {
               </>
             ) : (
               <span className="text-slate-400 font-medium">No data yet</span>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-sky-500 p-5 hover:shadow-md transition-shadow">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <p className="text-sm font-medium text-slate-500 mb-1">
+                Avg Days to Pay
+              </p>
+              <h3 className="text-3xl font-bold text-[#0f2744]">
+                {stats ? (stats.avgDaysToPay > 0 ? `${stats.avgDaysToPay}` : "—") : "..."}
+              </h3>
+            </div>
+            <div className="w-10 h-10 rounded-lg bg-sky-50 flex items-center justify-center">
+              <CalendarClock className="w-5 h-5 text-sky-500" />
+            </div>
+          </div>
+          <div className="flex items-center text-sm">
+            {stats && stats.overdueInvoices > 0 ? (
+              <>
+                <AlertTriangle className="w-4 h-4 text-red-500 mr-1" />
+                <span className="text-red-600 font-medium">
+                  {stats.overdueInvoices} overdue
+                </span>
+              </>
+            ) : (
+              <span className="text-sky-600 font-medium">
+                All invoices on track
+              </span>
             )}
           </div>
         </div>

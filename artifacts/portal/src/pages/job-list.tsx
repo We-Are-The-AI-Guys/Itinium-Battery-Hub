@@ -8,6 +8,7 @@ import {
   FileText,
   Filter,
   Factory,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,8 @@ interface Job {
   status: string;
   invoiceStatus: string;
   totalInvoiceValue: string | null;
+  dueDate: string | null;
+  datePaid: string | null;
 }
 
 interface Pagination {
@@ -58,6 +61,11 @@ function formatDate(dateStr: string | null) {
   });
 }
 
+function isOverdue(job: Job): boolean {
+  if (!job.dueDate || job.datePaid) return false;
+  return new Date(job.dueDate) < new Date(new Date().toISOString().split("T")[0]);
+}
+
 function formatCurrency(value: string | null) {
   if (!value) return "—";
   const num = parseFloat(value);
@@ -74,6 +82,7 @@ export default function JobListPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [activeFilter, setActiveFilter] = useState("All");
+  const [paymentFilter, setPaymentFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [manufacturerFilter, setManufacturerFilter] = useState("");
@@ -94,6 +103,7 @@ export default function JobListPage() {
   useEffect(() => {
     const params = new URLSearchParams();
     if (activeFilter !== "All") params.set("status", activeFilter.toLowerCase());
+    if (paymentFilter !== "all") params.set("paymentStatus", paymentFilter);
     if (searchQuery.trim()) params.set("search", searchQuery.trim());
     if (manufacturerFilter) params.set("manufacturer", manufacturerFilter);
     params.set("limit", String(PAGE_SIZE));
@@ -108,7 +118,7 @@ export default function JobListPage() {
         }
       })
       .catch(() => {});
-  }, [activeFilter, currentPage, searchQuery, manufacturerFilter]);
+  }, [activeFilter, paymentFilter, currentPage, searchQuery, manufacturerFilter]);
 
   function handleFilterChange(filter: string) {
     setActiveFilter(filter);
@@ -191,6 +201,30 @@ export default function JobListPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-slate-500">Payment:</span>
+              <div className="flex bg-slate-100 p-1 rounded-lg">
+                {[
+                  { value: "all", label: "All" },
+                  { value: "overdue", label: "Overdue" },
+                  { value: "upcoming", label: "Upcoming" },
+                  { value: "paid", label: "Paid" },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => { setPaymentFilter(opt.value); setCurrentPage(1); }}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      paymentFilter === opt.value
+                        ? opt.value === "overdue" ? "bg-red-500 text-white shadow-sm" : "bg-white text-[#0f2744] shadow-sm"
+                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                    }`}
+                    data-testid={`payment-filter-${opt.value}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -213,13 +247,20 @@ export default function JobListPage() {
                 <tr
                   key={job.id}
                   className={`hover:bg-sky-50/40 transition-colors cursor-pointer ${
-                    index % 2 === 0 ? "bg-white" : "bg-slate-50/30"
+                    isOverdue(job) ? "bg-red-50/40 border-l-2 border-l-red-400" : index % 2 === 0 ? "bg-white" : "bg-slate-50/30"
                   }`}
                   onClick={() => setLocation(`/jobs/${job.id}`)}
                   data-testid={`job-row-${job.id}`}
                 >
                   <td className="px-6 py-4 font-medium text-[#0ea5e9]">
-                    {job.reference}
+                    <span className="flex items-center gap-1.5">
+                      {job.reference}
+                      {isOverdue(job) && (
+                        <span title="Overdue">
+                          <AlertCircle className="w-3.5 h-3.5 text-red-500" />
+                        </span>
+                      )}
+                    </span>
                   </td>
                   <td className="px-6 py-4 text-slate-600">
                     {formatDate(job.collectionDate || job.submittedAt)}

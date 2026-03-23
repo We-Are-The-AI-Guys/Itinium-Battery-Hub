@@ -45,6 +45,10 @@ interface JobData {
   totalInvoiceValue: string | null;
   grossProfit: string | null;
   itiniumInvoiceNo: string | null;
+  invoiceReceivedDate: string | null;
+  dueDate: string | null;
+  datePaid: string | null;
+  daysToPay: number | null;
 }
 
 interface BatteryData {
@@ -104,6 +108,9 @@ export default function JobDetailPage() {
     itiniumInvoiceNo: "",
     lmeRateUsed: "",
     invoiceStatus: "",
+    invoiceReceivedDate: "",
+    dueDate: "",
+    datePaid: "",
   });
 
   const loadJob = useCallback(() => {
@@ -128,6 +135,9 @@ export default function JobDetailPage() {
             itiniumInvoiceNo: data.job.itiniumInvoiceNo || "",
             lmeRateUsed: data.job.lmeRateUsed || "",
             invoiceStatus: data.job.invoiceStatus || "pending_invoice",
+            invoiceReceivedDate: data.job.invoiceReceivedDate || "",
+            dueDate: data.job.dueDate || "",
+            datePaid: data.job.datePaid || "",
           });
         }
         setLoading(false);
@@ -167,6 +177,13 @@ export default function JobDetailPage() {
       if (res.ok) {
         const data = await res.json();
         setJob(data.job);
+        setFinancials((prev) => ({
+          ...prev,
+          invoiceStatus: data.job.invoiceStatus || prev.invoiceStatus,
+          datePaid: data.job.datePaid || "",
+          invoiceReceivedDate: data.job.invoiceReceivedDate || "",
+          dueDate: data.job.dueDate || "",
+        }));
         toast({ title: "Saved", description: "Financial details updated successfully." });
       } else {
         const err = await res.json().catch(() => ({}));
@@ -468,6 +485,48 @@ export default function JobDetailPage() {
                   onChange={(v) => setFinancials((p) => ({ ...p, itiniumInvoiceNo: v }))}
                   type="text"
                 />
+              </div>
+
+              <div className="border-t border-slate-100 pt-4 mt-4">
+                <h5 className="text-sm font-semibold text-[#0f2744] mb-3 flex items-center gap-2">
+                  <Receipt className="w-3.5 h-3.5 text-[#0ea5e9]" />
+                  Invoice Payment Tracking
+                </h5>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <FinancialField
+                    label="Invoice Received Date"
+                    value={financials.invoiceReceivedDate}
+                    onChange={(v) => setFinancials((p) => ({ ...p, invoiceReceivedDate: v }))}
+                    type="date"
+                  />
+                  <FinancialField
+                    label="Due Date"
+                    value={financials.dueDate}
+                    onChange={(v) => setFinancials((p) => ({ ...p, dueDate: v }))}
+                    type="date"
+                  />
+                  <FinancialField
+                    label="Date Paid"
+                    value={financials.datePaid}
+                    onChange={(v) => setFinancials((p) => ({ ...p, datePaid: v }))}
+                    type="date"
+                  />
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
+                      <span className="text-[#0ea5e9] text-[10px]">(auto)</span>
+                      Days to Pay
+                    </label>
+                    <div className="h-9 flex items-center px-3 text-sm font-medium rounded-md border border-slate-200 bg-sky-50/50">
+                      {job.daysToPay !== null && job.daysToPay !== undefined ? (
+                        <span className={job.daysToPay > 30 ? "text-red-600" : job.daysToPay > 14 ? "text-amber-600" : "text-green-600"}>
+                          {job.daysToPay} days
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="mt-4">

@@ -12,7 +12,7 @@ router.get(
   requireRole("team_leader", "accounts", "head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
-      const { status, invoiceStatus, search, manufacturer, limit = "10", offset = "0" } = req.query;
+      const { status, invoiceStatus, paymentStatus, search, manufacturer, limit = "10", offset = "0" } = req.query;
       const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10) || 10));
       const offsetNum = Math.max(0, parseInt(offset as string, 10) || 0);
 
@@ -22,6 +22,13 @@ router.get(
       }
       if (invoiceStatus) {
         conditions.push(eq(jobsTable.invoiceStatus, invoiceStatus as string));
+      }
+      if (paymentStatus === "overdue") {
+        conditions.push(sql`${jobsTable.dueDate} IS NOT NULL AND ${jobsTable.dueDate} < CURRENT_DATE AND (${jobsTable.datePaid} IS NULL)`);
+      } else if (paymentStatus === "upcoming") {
+        conditions.push(sql`${jobsTable.dueDate} IS NOT NULL AND ${jobsTable.dueDate} >= CURRENT_DATE AND (${jobsTable.datePaid} IS NULL)`);
+      } else if (paymentStatus === "paid") {
+        conditions.push(sql`${jobsTable.datePaid} IS NOT NULL`);
       }
       if (search) {
         conditions.push(
@@ -230,6 +237,7 @@ router.patch(
         customerInvoiceValue, customerInvoiceNo, cblWasteAdviceNoteNo,
         cblDate, totalInvoiceValue, grossProfit, itiniumInvoiceNo,
         tonnage, lmeRateUsed, calculatedValue, invoiceStatus,
+        invoiceReceivedDate, dueDate, datePaid,
       } = req.body;
 
       const toDecimal = (v: unknown): string | null =>
@@ -237,7 +245,7 @@ router.patch(
       const toStr = (v: unknown): string | null =>
         v !== undefined && v !== null && v !== "" ? String(v) : null;
 
-      const updates: Record<string, string | null> = {};
+      const updates: Partial<Record<string, string | number | null>> = {};
       if (cblLmeValue !== undefined) updates.cblLmeValue = toDecimal(cblLmeValue);
       if (cblLmePercent !== undefined) updates.cblLmePercent = toDecimal(cblLmePercent);
       if (cblLmePrice !== undefined) updates.cblLmePrice = toDecimal(cblLmePrice);
@@ -252,7 +260,60 @@ router.patch(
       if (tonnage !== undefined) updates.tonnage = toDecimal(tonnage);
       if (lmeRateUsed !== undefined) updates.lmeRateUsed = toDecimal(lmeRateUsed);
       if (calculatedValue !== undefined) updates.calculatedValue = toDecimal(calculatedValue);
-      if (invoiceStatus !== undefined) updates.invoiceStatus = toStr(invoiceStatus);
+      const isValidDate = (v: unknown): boolean => {
+        if (!v || typeof v !== "string") return false;
+        const match = /^\d{4}-\d{2}-\d{2}$/.test(v);
+        if (!match) return false;
+        const d = new Date(v);
+        return !isNaN(d.getTime());
+      };
+
+      if (invoiceReceivedDate !== undefined) {
+        if (invoiceReceivedDate && !isValidDate(invoiceReceivedDate)) {
+          res.status(400).json({ message: "Invalid invoiceReceivedDate format (YYYY-MM-DD)" });
+          return;
+        }
+        updates.invoiceReceivedDate = toStr(invoiceReceivedDate);
+      }
+      if (dueDate !== undefined) {
+        if (dueDate && !isValidDate(dueDate)) {
+          res.status(400).json({ message: "Invalid dueDate format (YYYY-MM-DD)" });
+          return;
+        }
+        updates.dueDate = toStr(dueDate);
+      }
+      if (datePaid !== undefined) {
+        if (datePaid && !isValidDate(datePaid)) {
+          res.status(400).json({ message: "Invalid datePaid format (YYYY-MM-DD)" });
+          return;
+        }
+        updates.datePaid = toStr(datePaid);
+      }
+
+      if (datePaid && toStr(datePaid)) {
+        const [existingJob] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+        if (existingJob) {
+          const effectiveInvoiceReceivedDate = (invoiceReceivedDate !== undefined ? toStr(invoiceReceivedDate) : existingJob.invoiceReceivedDate);
+          const referenceDate = effectiveInvoiceReceivedDate || existingJob.collectionDate;
+          if (referenceDate) {
+            const paidDate = new Date(datePaid);
+            const refDate = new Date(referenceDate);
+            const diffMs = paidDate.getTime() - refDate.getTime();
+            const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+            updates.daysToPay = diffDays;
+          }
+        }
+        updates.invoiceStatus = "paid";
+      } else if (datePaid !== undefined && !toStr(datePaid)) {
+        updates.daysToPay = null;
+        if (invoiceStatus === undefined) {
+          updates.invoiceStatus = "invoiced";
+        }
+      }
+
+      if (invoiceStatus !== undefined && !(datePaid && toStr(datePaid))) {
+        updates.invoiceStatus = toStr(invoiceStatus);
+      }
 
       if (Object.keys(updates).length === 0) {
         res.status(400).json({ message: "No fields to update" });
@@ -466,6 +527,18 @@ router.get(
           )
         );
 
+      const [avgDaysToPayResult] = await db
+        .select({
+          avg: sql<string>`COALESCE(AVG(${jobsTable.daysToPay}), 0)`,
+        })
+        .from(jobsTable)
+        .where(sql`${jobsTable.daysToPay} IS NOT NULL`);
+
+      const [overdueResult] = await db
+        .select({ count: count() })
+        .from(jobsTable)
+        .where(sql`${jobsTable.dueDate} IS NOT NULL AND ${jobsTable.dueDate} < CURRENT_DATE AND ${jobsTable.datePaid} IS NULL`);
+
       res.json({
         pendingJobs: pendingResult?.count || 0,
         flaggedExceptions: flaggedResult?.count || 0,
@@ -476,6 +549,8 @@ router.get(
         avgCblLmePercent: Math.round(parseFloat(avgLmeResult?.avg || "0") * 100) / 100,
         totalGrossProfit: parseFloat(grossProfitResult?.total || "0"),
         completedInvoiceValue: parseFloat(completedInvoiceResult?.total || "0"),
+        avgDaysToPay: Math.round(parseFloat(avgDaysToPayResult?.avg || "0") * 10) / 10,
+        overdueInvoices: overdueResult?.count || 0,
       });
     } catch (error) {
       console.error("Dashboard stats error:", error);

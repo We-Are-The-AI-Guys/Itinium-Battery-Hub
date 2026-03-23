@@ -30,6 +30,10 @@ export const jobsTable = pgTable("jobs", {
   totalInvoiceValue: decimal("total_invoice_value", { precision: 12, scale: 2 }),
   grossProfit: decimal("gross_profit", { precision: 12, scale: 2 }),
   itiniumInvoiceNo: varchar("itinium_invoice_no", { length: 100 }),
+  invoiceReceivedDate: date("invoice_received_date"),
+  dueDate: date("due_date"),
+  datePaid: date("date_paid"),
+  daysToPay: integer("days_to_pay"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_jobs_status").on(table.status),
