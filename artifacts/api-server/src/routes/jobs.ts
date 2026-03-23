@@ -183,7 +183,7 @@ router.post(
           cellType: b.cellType || null,
           voltage: b.voltage || null,
           looseCellsQty: b.looseCellsQty ? parseInt(String(b.looseCellsQty), 10) : null,
-          estimatedWeightKg: b.estimatedWeightKg && isFinite(parseFloat(String(b.estimatedWeightKg))) ? String(parseFloat(String(b.estimatedWeightKg))) : null,
+          estimatedWeightKg: (() => { const v = parseFloat(String(b.estimatedWeightKg)); return b.estimatedWeightKg && isFinite(v) && v >= 0 ? String(v) : null; })(),
           notes: b.notes || null,
         }));
 
