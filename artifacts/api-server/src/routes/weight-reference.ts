@@ -66,13 +66,18 @@ router.post(
         res.status(400).json({ message: "cellType and weightKg are required" });
         return;
       }
+      const parsedWeight = parseFloat(String(weightKg));
+      if (isNaN(parsedWeight) || !isFinite(parsedWeight) || parsedWeight < 0) {
+        res.status(400).json({ message: "weightKg must be a non-negative number" });
+        return;
+      }
 
       const [ref] = await db
         .insert(batteryWeightReferenceTable)
         .values({
           cellType,
           voltage: voltage || null,
-          weightKg: String(weightKg),
+          weightKg: String(parsedWeight),
         })
         .returning();
 
@@ -100,15 +105,24 @@ router.patch(
         return;
       }
 
-      const { weightKg } = req.body;
+      const { weightKg, cellType, voltage } = req.body;
       if (weightKg === undefined || weightKg === null) {
         res.status(400).json({ message: "weightKg is required" });
         return;
       }
+      const parsedWeight = parseFloat(String(weightKg));
+      if (isNaN(parsedWeight) || !isFinite(parsedWeight) || parsedWeight < 0) {
+        res.status(400).json({ message: "weightKg must be a non-negative number" });
+        return;
+      }
+
+      const updateFields: Record<string, unknown> = { weightKg: String(parsedWeight) };
+      if (cellType !== undefined) updateFields.cellType = cellType;
+      if (voltage !== undefined) updateFields.voltage = voltage || null;
 
       const [updated] = await db
         .update(batteryWeightReferenceTable)
-        .set({ weightKg: String(weightKg) })
+        .set(updateFields)
         .where(eq(batteryWeightReferenceTable.id, id))
         .returning();
 

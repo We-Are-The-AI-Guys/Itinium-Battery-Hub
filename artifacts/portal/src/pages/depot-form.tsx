@@ -560,7 +560,7 @@ export default function DepotFormPage() {
                     </Select>
                   </div>
 
-                  {battery.cellType !== "Blocs" && (
+                  {battery.cellType !== "Blocs" && battery.cellType !== "Other" && (
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-slate-600">
                         If Complete Battery &mdash; Voltage
