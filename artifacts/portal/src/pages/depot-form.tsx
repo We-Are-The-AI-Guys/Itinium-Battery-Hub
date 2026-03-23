@@ -42,6 +42,7 @@ interface BatteryRow {
   voltage: string;
   looseCellsQty: string;
   estimatedWeightKg: string;
+  weightManual: boolean;
   notes: string;
 }
 
@@ -70,6 +71,7 @@ function createEmptyBattery(): BatteryRow {
     voltage: "",
     looseCellsQty: "",
     estimatedWeightKg: "",
+    weightManual: false,
     notes: "",
   };
 }
@@ -102,6 +104,8 @@ export default function DepotFormPage() {
   const [batteries, setBatteries] = useState<BatteryRow[]>([createEmptyBattery()]);
   const [submitting, setSubmitting] = useState(false);
   const [weightRefs, setWeightRefs] = useState<WeightRef[]>([]);
+  const [tonnageOverride, setTonnageOverride] = useState("");
+  const [tonnageManual, setTonnageManual] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -177,7 +181,7 @@ export default function DepotFormPage() {
       prev.map((b) => {
         if (b.id !== id) return b;
         const updated = { ...b, [field]: value };
-        if (field === "cellType" || field === "voltage" || field === "looseCellsQty") {
+        if ((field === "cellType" || field === "voltage" || field === "looseCellsQty") && !updated.weightManual) {
           updated.estimatedWeightKg = computeAutoWeight(updated);
         }
         return updated;
@@ -244,6 +248,8 @@ export default function DepotFormPage() {
         setCollectionPoint("");
         setJobNotes("");
         setUploadedPhotos([]);
+        setTonnageManual(false);
+        setTonnageOverride("");
       } else {
         const err = await res.json().catch(() => ({}));
         toast({
@@ -274,7 +280,8 @@ export default function DepotFormPage() {
     const w = parseFloat(b.estimatedWeightKg);
     return sum + (isNaN(w) ? 0 : w);
   }, 0);
-  const currentLoad = totalWeightKg / 1000;
+  const autoTonnage = totalWeightKg / 1000;
+  const currentLoad = tonnageManual && tonnageOverride ? parseFloat(tonnageOverride) || 0 : autoTonnage;
   const maxCapacity = 10.0;
   const progressPercent = Math.min(100, Math.round((currentLoad / maxCapacity) * 100));
 
@@ -593,16 +600,53 @@ export default function DepotFormPage() {
                     </div>
                   )}
 
-                  {battery.estimatedWeightKg && (
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-slate-600">
-                        Est. Weight (kg)
-                      </label>
-                      <div className="h-10 px-3 bg-emerald-50 border border-emerald-200 rounded-md flex items-center text-sm font-medium text-emerald-700">
-                        {parseFloat(battery.estimatedWeightKg).toLocaleString("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 1 })} kg
-                      </div>
-                    </div>
-                  )}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600">
+                      Est. Weight (kg)
+                    </label>
+                    <Input
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      placeholder="Auto or enter manually"
+                      className={`h-10 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9] ${
+                        battery.estimatedWeightKg && !battery.weightManual
+                          ? "bg-emerald-50 border-emerald-200"
+                          : "bg-slate-50"
+                      }`}
+                      value={battery.estimatedWeightKg}
+                      onChange={(e) => {
+                        setBatteries((prev) =>
+                          prev.map((b) =>
+                            b.id === battery.id
+                              ? { ...b, estimatedWeightKg: e.target.value, weightManual: true }
+                              : b
+                          )
+                        );
+                      }}
+                    />
+                    {battery.estimatedWeightKg && !battery.weightManual && (
+                      <p className="text-[10px] text-emerald-600">Auto-populated from reference</p>
+                    )}
+                    {battery.weightManual && battery.cellType && (
+                      <button
+                        type="button"
+                        className="text-[10px] text-[#0ea5e9] hover:underline"
+                        onClick={() => {
+                          const autoWeight = computeAutoWeight(battery);
+                          setBatteries((prev) =>
+                            prev.map((b) =>
+                              b.id === battery.id
+                                ? { ...b, estimatedWeightKg: autoWeight, weightManual: false }
+                                : b
+                            )
+                          );
+                        }}
+                      >
+                        Reset to default
+                      </button>
+                    )}
+                  </div>
 
                   <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
                     <label className="text-xs font-medium text-slate-600">
@@ -631,6 +675,60 @@ export default function DepotFormPage() {
               Add Another Battery Row
             </button>
           </div>
+        </section>
+
+        <section
+          className="bg-white rounded-xl p-5 border border-slate-200 shadow-[0_2px_10px_rgb(0,0,0,0.02)]"
+          data-testid="section-tonnage-override"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-[#0ea5e9]" />
+              <h3 className="font-bold text-[#0f2744] text-lg">Total Tonnage</h3>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <span className="text-xs text-slate-500">Manual override</span>
+              <input
+                type="checkbox"
+                checked={tonnageManual}
+                onChange={(e) => {
+                  setTonnageManual(e.target.checked);
+                  if (e.target.checked) {
+                    setTonnageOverride(autoTonnage.toFixed(3));
+                  }
+                }}
+                className="h-4 w-4 rounded border-slate-300 text-[#0ea5e9] focus:ring-[#0ea5e9]"
+              />
+            </label>
+          </div>
+          {tonnageManual ? (
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                step="0.001"
+                min="0"
+                value={tonnageOverride}
+                onChange={(e) => setTonnageOverride(e.target.value)}
+                className="h-11 bg-slate-50 border-slate-200 text-[#1e293b] focus-visible:ring-[#0ea5e9] max-w-[200px]"
+              />
+              <span className="text-sm text-slate-500">tonnes</span>
+              <button
+                type="button"
+                className="text-xs text-[#0ea5e9] hover:underline"
+                onClick={() => {
+                  setTonnageManual(false);
+                  setTonnageOverride("");
+                }}
+              >
+                Use auto-calculated
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <span className="text-2xl font-bold text-[#0f2744]">{autoTonnage.toFixed(3)}t</span>
+              <span className="text-sm text-emerald-600">Auto-calculated from battery weights</span>
+            </div>
+          )}
         </section>
 
         <section
