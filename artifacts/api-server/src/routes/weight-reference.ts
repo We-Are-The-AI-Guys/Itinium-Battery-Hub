@@ -9,6 +9,7 @@ const router: IRouter = Router();
 router.get(
   "/weight-reference",
   requireAuth,
+  requireRole("head_office_admin"),
   async (_req: AuthenticatedRequest, res) => {
     try {
       const refs = await db
