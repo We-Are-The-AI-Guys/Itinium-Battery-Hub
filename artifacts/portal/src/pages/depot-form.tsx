@@ -79,6 +79,7 @@ const CELL_TYPES = [
 export default function DepotFormPage() {
   const [user, setUser] = useState<User | null>(null);
   const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
+  const [customerName, setCustomerName] = useState("");
   const [collectionPoint, setCollectionPoint] = useState("");
   const [collectionDate, setCollectionDate] = useState(
     new Date().toISOString().split("T")[0]
@@ -162,7 +163,7 @@ export default function DepotFormPage() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          clientName: user?.fullName || "Unknown",
+          clientName: customerName || user?.fullName || "Unknown",
           depot: user?.depot || "Unknown",
           collectionPoint: collectionPoint || null,
           collectionDate: collectionDate || null,
@@ -188,6 +189,7 @@ export default function DepotFormPage() {
           description: `Job ${data.job.reference} submitted with ${batteries.length} battery item(s).`,
         });
         setBatteries([createEmptyBattery()]);
+        setCustomerName("");
         setCollectionPoint("");
         setJobNotes("");
         setUploadedPhotos([]);
@@ -326,7 +328,20 @@ export default function DepotFormPage() {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-[#1e293b] flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-slate-400" />
+                Customer Name
+              </label>
+              <Input
+                placeholder="e.g., Acme Logistics Ltd"
+                className="h-11 bg-slate-50 border-slate-200 text-[#1e293b] focus-visible:ring-[#0ea5e9] focus-visible:border-[#0ea5e9]"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                data-testid="input-customer-name"
+              />
+            </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-[#1e293b] flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-slate-400" />

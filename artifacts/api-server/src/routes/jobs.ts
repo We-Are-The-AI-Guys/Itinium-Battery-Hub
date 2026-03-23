@@ -72,7 +72,7 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res) => {
     try {
-      const jobId = parseInt(req.params.id, 10);
+      const jobId = parseInt(String(req.params.id), 10);
       if (isNaN(jobId)) {
         res.status(400).json({ message: "Invalid job ID" });
         return;
