@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { SidebarLayout } from "@/components/sidebar-layout";
@@ -145,19 +144,15 @@ export default function JobDetailPage() {
     const lmeRate = parseFloat(financials.cblLmeValue) || 0;
     const lmePercent = parseFloat(financials.cblLmePercent) || 0;
     const computed = tonnage * lmeRate * (lmePercent / 100);
-    if (lmeRate > 0 && lmePercent > 0 && tonnage > 0) {
-      setFinancials((prev) => ({ ...prev, cblLmePrice: computed.toFixed(2) }));
-    }
+    setFinancials((prev) => ({ ...prev, cblLmePrice: computed.toFixed(2) }));
   }, [financials.tonnage, financials.cblLmeValue, financials.cblLmePercent]);
 
   useEffect(() => {
     const totalInvoice = parseFloat(financials.totalInvoiceValue) || 0;
     const transport = parseFloat(financials.transportCost) || 0;
     const cblLme = parseFloat(financials.cblLmePrice) || 0;
-    if (totalInvoice > 0) {
-      const gp = totalInvoice - transport - cblLme;
-      setFinancials((prev) => ({ ...prev, grossProfit: gp.toFixed(2) }));
-    }
+    const gp = totalInvoice - transport - cblLme;
+    setFinancials((prev) => ({ ...prev, grossProfit: gp.toFixed(2) }));
   }, [financials.totalInvoiceValue, financials.transportCost, financials.cblLmePrice]);
 
   async function saveFinancials() {

@@ -300,7 +300,7 @@ router.patch(
         v !== undefined && v !== null && v !== "" ? String(v) : null;
 
       const updates: Record<string, string | boolean | null> = {};
-      if (receiptConfirmed !== undefined) updates.receiptConfirmed = Boolean(receiptConfirmed);
+      if (receiptConfirmed !== undefined) updates.receiptConfirmed = receiptConfirmed === true || receiptConfirmed === "true";
       if (pbContentKg !== undefined) updates.pbContentKg = toDecimal(pbContentKg);
       if (valueGbp !== undefined) updates.valueGbp = toDecimal(valueGbp);
       if (adminNotes !== undefined) updates.adminNotes = adminNotes !== null && adminNotes !== undefined && adminNotes !== "" ? String(adminNotes) : null;
