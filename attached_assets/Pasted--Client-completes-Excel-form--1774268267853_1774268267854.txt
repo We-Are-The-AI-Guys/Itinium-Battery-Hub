@@ -1,0 +1,99 @@
+┌──────────────────────────────┐
+ │  Client completes Excel form │
+ └───────────────┬──────────────┘
+                 │
+                 ▼
+ ┌──────────────────────────────────────────┐
+ │ Client emails spreadsheet to Collections │
+ └───────────────┬──────────────────────────┘
+                 │
+                 ▼
+ ┌──────────────────────────────────────────┐
+ │ Collections check data for accuracy      │
+ └───────────────┬──────────────────────────┘
+                 │
+                 ▼
+ ┌──────────────────────────────────────────┐
+ │ Job number created manually              │
+ │ Details manually re entered into logs    │
+ └───────────────┬──────────────────────────┘
+                 │
+                 ▼
+ ┌──────────────────────────────────────────┐
+ │ Collection date agreed with client       │
+ │ Confirmation sent: job no., driver, Vehicle  │
+ └───────────────┬──────────────────────────┘
+                 │
+                 ▼
+ ┌──────────────────────────────┐
+ │     Collection carried out    │
+ └───────────────┬──────────────┘
+                 │
+                 ▼
+ ┌──────────────────────────────────────────┐
+ │ Receipt confirmed                         │
+ │ Alterations made if required              │
+ └───────────────┬──────────────────────────┘
+                 │
+                 ▼
+ ┌──────────────────────────────────────────┐
+ │ Client sent:                              │
+ │  • Collection sheet                        │
+ │  • Excel file for their accounts to invoice│
+ └───────────────┬──────────────────────────┘
+                 │
+                 ▼
+ ┌──────────────────────────────────────────┐
+ │ Paperwork filed under job reference       │
+ │ (usually 3 documents with same job no.)   │
+ └───────────────┬──────────────────────────┘
+                 │
+                 ▼
+ ┌──────────────────────────────┐
+ │          Job closed          │
+ └──────────────────────────────┘
+________________________________________
+2. Process Improvement Version (Optimised Workflow)
+1. Client Submission
+•	Client completes smart Excel form or online submission form with validation rules.
+•	Automatic email routing to Collections.
+________________________________________
+2. Automated Job Creation
+•	System auto generates a job number upon receipt.
+•	Data from the form auto populates internal logs, eliminating manual re entry.
+•	Collections team only reviews exceptions flagged by the system.
+________________________________________
+3. Streamlined Scheduling
+•	Collections team proposes available dates via template email or automated scheduler.
+•	Client confirmation automatically updates the job record.
+•	Driver and vehicle assignment selected from a drop down resource list.
+________________________________________
+4. Collection Execution
+•	Driver receives job details via mobile app or automated job sheet.
+•	Driver uploads collection confirmation (photo, signature, weights if applicable).
+________________________________________
+5. Receipt & Adjustments
+•	Receipt automatically logged when driver submits confirmation.
+•	Any discrepancies flagged for manual review.
+________________________________________
+6. Automated Client Documentation
+•	System generates: 
+o	Collection sheet
+o	Accounts Excel file
+•	Documents sent automatically to the client with job reference.
+________________________________________
+7. Digital Filing
+•	All documents stored in a single digital folder under the job number.
+•	No manual sorting; system enforces naming conventions.
+________________________________________
+8. Job Closure
+•	Job auto closes once all required documents are present.
+•	Exceptions flagged for manual intervention.
+________________________________________
+Optional Enhancements
+If you want, I can also produce:
+•	A swimlane diagram (Client / Collections / Driver / Accounts)
+•	A colour coded version for SOPs
+•	A PDF ready process map
+•	A “current state vs future state” comparison chart
+•	A risk & control matrix for audit readiness
