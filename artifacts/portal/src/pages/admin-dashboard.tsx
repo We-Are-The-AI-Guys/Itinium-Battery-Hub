@@ -28,6 +28,7 @@ interface DashboardStats {
   monthOnMonthChange: number;
   avgCblLmePercent: number;
   totalGrossProfit: number;
+  completedInvoiceValue: number;
 }
 
 interface Job {
@@ -286,15 +287,15 @@ export default function AdminDashboardPage() {
             </div>
           </div>
           <div className="flex items-center text-sm">
-            {stats && stats.totalInvoiceValue > 0 ? (
+            {stats && stats.completedInvoiceValue > 0 ? (
               <>
-                {(stats.totalGrossProfit / stats.totalInvoiceValue) * 100 >= 0 ? (
+                {(stats.totalGrossProfit / stats.completedInvoiceValue) * 100 >= 0 ? (
                   <TrendingUp className="w-4 h-4 text-emerald-600 mr-1" />
                 ) : (
                   <TrendingDown className="w-4 h-4 text-red-500 mr-1" />
                 )}
                 <span className="text-emerald-600 font-medium">
-                  {((stats.totalGrossProfit / stats.totalInvoiceValue) * 100).toFixed(1)}% margin
+                  {((stats.totalGrossProfit / stats.completedInvoiceValue) * 100).toFixed(1)}% margin
                 </span>
               </>
             ) : (

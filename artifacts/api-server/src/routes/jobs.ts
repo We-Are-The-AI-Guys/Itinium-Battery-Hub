@@ -401,6 +401,18 @@ router.get(
         .from(jobsTable)
         .where(sql`${jobsTable.cblLmePercent} IS NOT NULL`);
 
+      const [completedInvoiceResult] = await db
+        .select({
+          total: sql<string>`COALESCE(SUM(${jobsTable.calculatedValue}), 0)`,
+        })
+        .from(jobsTable)
+        .where(
+          or(
+            eq(jobsTable.status, "completed"),
+            sql`${jobsTable.invoiceStatus} IN ('invoiced', 'paid')`,
+          )
+        );
+
       const [grossProfitResult] = await db
         .select({
           total: sql<string>`COALESCE(SUM(${jobsTable.grossProfit}), 0)`,
@@ -435,6 +447,7 @@ router.get(
         monthOnMonthChange: Math.round(monthOnMonthChange * 10) / 10,
         avgCblLmePercent: Math.round(parseFloat(avgLmeResult?.avg || "0") * 100) / 100,
         totalGrossProfit: parseFloat(grossProfitResult?.total || "0"),
+        completedInvoiceValue: parseFloat(completedInvoiceResult?.total || "0"),
       });
     } catch (error) {
       console.error("Dashboard stats error:", error);
