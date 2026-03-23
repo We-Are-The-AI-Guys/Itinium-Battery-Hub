@@ -498,36 +498,40 @@ export default function DepotFormPage() {
                     </Select>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-600">
-                      If Complete Battery &mdash; Voltage
-                    </label>
-                    <div className="relative group">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Zap className="h-3.5 w-3.5 text-slate-400 group-focus-within:text-[#0ea5e9] transition-colors" />
+                  {battery.cellType !== "Blocs" && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-600">
+                        If Complete Battery &mdash; Voltage
+                      </label>
+                      <div className="relative group">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <Zap className="h-3.5 w-3.5 text-slate-400 group-focus-within:text-[#0ea5e9] transition-colors" />
+                        </div>
+                        <Input
+                          placeholder="e.g., 24V, 48V, 80V"
+                          className="pl-9 h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
+                          value={battery.voltage}
+                          onChange={(e) => updateBattery(battery.id, "voltage", e.target.value)}
+                        />
                       </div>
+                    </div>
+                  )}
+
+                  {battery.cellType === "Blocs" && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-600">
+                        If Loose Cells &mdash; Qty
+                      </label>
                       <Input
-                        placeholder="e.g., 24V, 48V, 80V"
-                        className="pl-9 h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
-                        value={battery.voltage}
-                        onChange={(e) => updateBattery(battery.id, "voltage", e.target.value)}
+                        type="number"
+                        min="0"
+                        placeholder="e.g., 12"
+                        className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
+                        value={battery.looseCellsQty}
+                        onChange={(e) => updateBattery(battery.id, "looseCellsQty", e.target.value)}
                       />
                     </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-600">
-                      If Loose Cells &mdash; Qty
-                    </label>
-                    <Input
-                      type="number"
-                      min="0"
-                      placeholder="e.g., 12"
-                      className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
-                      value={battery.looseCellsQty}
-                      onChange={(e) => updateBattery(battery.id, "looseCellsQty", e.target.value)}
-                    />
-                  </div>
+                  )}
 
                   <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
                     <label className="text-xs font-medium text-slate-600">

@@ -88,6 +88,13 @@ router.get(
         return;
       }
 
+      const user = req.user!;
+      const isAdmin = ["team_leader", "accounts", "head_office_admin"].includes(user.role);
+      if (!isAdmin && job.submittedById !== user.id) {
+        res.status(403).json({ message: "Access denied" });
+        return;
+      }
+
       const batteries = await db
         .select()
         .from(jobBatteriesTable)
@@ -100,6 +107,17 @@ router.get(
     }
   }
 );
+
+interface BatteryInput {
+  palletNumber?: string | null;
+  assetNumber?: string | null;
+  batterySerial?: string | null;
+  manufacture?: string | null;
+  cellType?: string | null;
+  voltage?: string | null;
+  looseCellsQty?: string | number | null;
+  notes?: string | null;
+}
 
 router.post(
   "/jobs",
@@ -118,43 +136,47 @@ router.post(
         return;
       }
 
-      const jobCount = await db.select({ count: count() }).from(jobsTable);
-      const nextNum = (jobCount[0]?.count || 0) + 1;
-      const reference = `JOB-${new Date().getFullYear()}-${String(nextNum).padStart(5, "0")}`;
+      const result = await db.transaction(async (tx) => {
+        const jobCount = await tx.select({ count: count() }).from(jobsTable);
+        const nextNum = (jobCount[0]?.count || 0) + 1;
+        const reference = `JOB-${new Date().getFullYear()}-${String(nextNum).padStart(5, "0")}`;
 
-      const [job] = await db
-        .insert(jobsTable)
-        .values({
-          reference,
-          clientName,
-          depot,
-          collectionPoint: collectionPoint || null,
-          collectionDate: collectionDate || null,
-          tonnage: String(tonnage),
-          status: "pending",
-          notes: notes || null,
-          submittedById: req.user!.id,
-        })
-        .returning();
+        const [job] = await tx
+          .insert(jobsTable)
+          .values({
+            reference,
+            clientName,
+            depot,
+            collectionPoint: collectionPoint || null,
+            collectionDate: collectionDate || null,
+            tonnage: String(tonnage),
+            status: "pending",
+            notes: notes || null,
+            submittedById: req.user!.id,
+          })
+          .returning();
 
-      const batteryRows = batteries.map((b: any) => ({
-        jobId: job.id,
-        palletNumber: b.palletNumber || null,
-        assetNumber: b.assetNumber || null,
-        batterySerial: b.batterySerial || null,
-        manufacture: b.manufacture || null,
-        cellType: b.cellType || null,
-        voltage: b.voltage || null,
-        looseCellsQty: b.looseCellsQty ? parseInt(b.looseCellsQty, 10) : null,
-        notes: b.notes || null,
-      }));
+        const batteryRows = (batteries as BatteryInput[]).map((b) => ({
+          jobId: job.id,
+          palletNumber: b.palletNumber || null,
+          assetNumber: b.assetNumber || null,
+          batterySerial: b.batterySerial || null,
+          manufacture: b.manufacture || null,
+          cellType: b.cellType || null,
+          voltage: b.voltage || null,
+          looseCellsQty: b.looseCellsQty ? parseInt(String(b.looseCellsQty), 10) : null,
+          notes: b.notes || null,
+        }));
 
-      const insertedBatteries = await db
-        .insert(jobBatteriesTable)
-        .values(batteryRows)
-        .returning();
+        const insertedBatteries = await tx
+          .insert(jobBatteriesTable)
+          .values(batteryRows)
+          .returning();
 
-      res.status(201).json({ job, batteries: insertedBatteries });
+        return { job, batteries: insertedBatteries };
+      });
+
+      res.status(201).json(result);
     } catch (error) {
       console.error("Job creation error:", error);
       res.status(500).json({ message: "Internal server error" });
