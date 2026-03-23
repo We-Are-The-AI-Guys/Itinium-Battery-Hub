@@ -10,6 +10,8 @@ import DepotFormPage from "@/pages/depot-form";
 import LmePricingPage from "@/pages/lme-pricing";
 import UserManagementPage from "@/pages/user-management";
 import SettingsPage from "@/pages/settings";
+import JobListPage from "@/pages/job-list";
+import JobDetailPage from "@/pages/job-detail";
 import PlaceholderPage from "@/pages/placeholder";
 import NotFound from "@/pages/not-found";
 
@@ -143,7 +145,12 @@ function AppRouter() {
       </Route>
       <Route path="/jobs">
         <AdminGuard>
-          <PlaceholderPage title="Job Management" />
+          <JobListPage />
+        </AdminGuard>
+      </Route>
+      <Route path="/jobs/:id">
+        <AdminGuard>
+          <JobDetailPage />
         </AdminGuard>
       </Route>
       <Route path="/kpi">

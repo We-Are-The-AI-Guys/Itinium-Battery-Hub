@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp, varchar, decimal, date, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, varchar, decimal, date, index, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -19,6 +19,17 @@ export const jobsTable = pgTable("jobs", {
   lmeRateUsed: decimal("lme_rate_used", { precision: 12, scale: 2 }),
   calculatedValue: decimal("calculated_value", { precision: 12, scale: 2 }),
   submittedById: integer("submitted_by_id").references(() => usersTable.id),
+  cblLmeValue: decimal("cbl_lme_value", { precision: 12, scale: 2 }),
+  cblLmePercent: decimal("cbl_lme_percent", { precision: 5, scale: 2 }),
+  cblLmePrice: decimal("cbl_lme_price", { precision: 12, scale: 2 }),
+  transportCost: decimal("transport_cost", { precision: 12, scale: 2 }),
+  customerInvoiceValue: decimal("customer_invoice_value", { precision: 12, scale: 2 }),
+  customerInvoiceNo: varchar("customer_invoice_no", { length: 100 }),
+  cblWasteAdviceNoteNo: varchar("cbl_waste_advice_note_no", { length: 100 }),
+  cblDate: date("cbl_date"),
+  totalInvoiceValue: decimal("total_invoice_value", { precision: 12, scale: 2 }),
+  grossProfit: decimal("gross_profit", { precision: 12, scale: 2 }),
+  itiniumInvoiceNo: varchar("itinium_invoice_no", { length: 100 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_jobs_status").on(table.status),
@@ -37,6 +48,10 @@ export const jobBatteriesTable = pgTable("job_batteries", {
   voltage: varchar("voltage", { length: 50 }),
   looseCellsQty: integer("loose_cells_qty"),
   notes: text("notes"),
+  receiptConfirmed: boolean("receipt_confirmed").default(false),
+  pbContentKg: decimal("pb_content_kg", { precision: 10, scale: 3 }),
+  valueGbp: decimal("value_gbp", { precision: 12, scale: 2 }),
+  adminNotes: text("admin_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_job_batteries_job_id").on(table.jobId),

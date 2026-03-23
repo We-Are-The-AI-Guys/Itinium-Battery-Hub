@@ -39,11 +39,14 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 ### jobs
 - id, reference (unique), client_name, depot, collection_point, collection_date, submitted_at, tonnage (decimal), status (pending/approved/completed/flagged)
 - Financial: invoice_status (pending_invoice/invoiced/paid), lme_rate_used, calculated_value
+- Admin/Master Job Log: cbl_lme_value, cbl_lme_percent, cbl_lme_price, transport_cost, customer_invoice_value, customer_invoice_no, cbl_waste_advice_note_no, cbl_date, total_invoice_value, gross_profit, itinium_invoice_no
 - notes, submitted_by_id (FK → users), created_at
 - Indexes: status, submitted_at, composite (status, submitted_at)
 
 ### job_batteries
-- id, job_id (FK → jobs, cascade delete), pallet_number, asset_number, battery_serial, manufacture, cell_type (P2B/P2S/P2V/Blocs/Other), voltage (free text), loose_cells_qty (integer), notes, created_at
+- id, job_id (FK → jobs, cascade delete), pallet_number, asset_number, battery_serial, manufacture, cell_type (P2B/P2S/P2V/Blocs/Other), voltage (free text), loose_cells_qty (integer), notes
+- Admin fields: receipt_confirmed (boolean), pb_content_kg (decimal), value_gbp (decimal), admin_notes (text)
+- created_at
 - Index: job_id
 - Each job can have multiple battery line items (matches the spreadsheet grid)
 
@@ -73,8 +76,11 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 
 ### Jobs
 - `GET /api/jobs?status=X&invoiceStatus=X&search=X&limit=10&offset=0` — list jobs (requires role: team_leader/accounts/head_office_admin)
-- `GET /api/jobs/:id` — job detail with battery line items (requires auth)
+- `GET /api/jobs/:id` — job detail with battery line items (requires auth, owner or admin)
 - `POST /api/jobs` — create job with battery items array (requires auth)
+- `PATCH /api/jobs/:id/admin` — update admin/financial fields on a job (admin only)
+- `PATCH /api/jobs/:id/status` — update job status (admin only)
+- `PATCH /api/jobs/:id/batteries/:batteryId/admin` — update per-battery admin fields (admin only)
 
 ### Dashboard (requires auth + role: team_leader/accounts/head_office_admin)
 - `GET /api/dashboard/stats` — summary metrics (pendingJobs, monthlyTonnage, totalInvoiceValue, flaggedExceptions)
@@ -111,7 +117,8 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 | `/lme-pricing` | `lme-pricing.tsx` | LME Pricing & Accounts — manual price input, job value table, export cards |
 | `/users` | `user-management.tsx` | User Management — stats, user table with role filters, Add New User modal |
 | `/settings` | `settings.tsx` | Settings — Profile, Notifications, Security, System (admin-only) tabs |
-| `/jobs` | `placeholder.tsx` | Job Management (placeholder) |
+| `/jobs` | `job-list.tsx` | Job list with search, filters, pagination — click to review |
+| `/jobs/:id` | `job-detail.tsx` | Job detail: read-only depot data + admin financial/completion form |
 | `/kpi` | `placeholder.tsx` | KPI Reporting (placeholder) |
 | `/collection/new` | `depot-form.tsx` | Redundant Battery Collection Note form (multi-row battery items, matches spreadsheet) |
 
@@ -138,6 +145,8 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 - `artifacts/portal/src/pages/login.tsx` — Login page with split-panel design
 - `artifacts/portal/src/pages/dashboard.tsx` — Depot user dashboard
 - `artifacts/portal/src/pages/depot-form.tsx` — Depot submission form
+- `artifacts/portal/src/pages/job-list.tsx` — Admin job list with search/filter/pagination
+- `artifacts/portal/src/pages/job-detail.tsx` — Job detail with admin financial completion form
 - `artifacts/portal/src/App.tsx` — Routing with AuthGuard/AdminGuard/RoleGuard/GuestGuard
 - `artifacts/api-server/src/routes/auth.ts` — Auth API routes (stores user-agent/IP on login)
 - `artifacts/api-server/src/routes/jobs.ts` — Jobs API routes with dashboard stats

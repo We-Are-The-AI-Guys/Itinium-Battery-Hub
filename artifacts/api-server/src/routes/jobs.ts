@@ -184,6 +184,149 @@ router.post(
   }
 );
 
+router.patch(
+  "/jobs/:id/admin",
+  requireAuth,
+  requireRole("team_leader", "accounts", "head_office_admin"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const jobId = parseInt(String(req.params.id), 10);
+      if (isNaN(jobId)) {
+        res.status(400).json({ message: "Invalid job ID" });
+        return;
+      }
+
+      const {
+        cblLmeValue, cblLmePercent, cblLmePrice, transportCost,
+        customerInvoiceValue, customerInvoiceNo, cblWasteAdviceNoteNo,
+        cblDate, totalInvoiceValue, grossProfit, itiniumInvoiceNo,
+        tonnage, lmeRateUsed, calculatedValue, invoiceStatus,
+      } = req.body;
+
+      const updates: Record<string, string | null> = {};
+      if (cblLmeValue !== undefined) updates.cblLmeValue = cblLmeValue ? String(cblLmeValue) : null;
+      if (cblLmePercent !== undefined) updates.cblLmePercent = cblLmePercent ? String(cblLmePercent) : null;
+      if (cblLmePrice !== undefined) updates.cblLmePrice = cblLmePrice ? String(cblLmePrice) : null;
+      if (transportCost !== undefined) updates.transportCost = transportCost ? String(transportCost) : null;
+      if (customerInvoiceValue !== undefined) updates.customerInvoiceValue = customerInvoiceValue ? String(customerInvoiceValue) : null;
+      if (customerInvoiceNo !== undefined) updates.customerInvoiceNo = customerInvoiceNo || null;
+      if (cblWasteAdviceNoteNo !== undefined) updates.cblWasteAdviceNoteNo = cblWasteAdviceNoteNo || null;
+      if (cblDate !== undefined) updates.cblDate = cblDate || null;
+      if (totalInvoiceValue !== undefined) updates.totalInvoiceValue = totalInvoiceValue ? String(totalInvoiceValue) : null;
+      if (grossProfit !== undefined) updates.grossProfit = grossProfit ? String(grossProfit) : null;
+      if (itiniumInvoiceNo !== undefined) updates.itiniumInvoiceNo = itiniumInvoiceNo || null;
+      if (tonnage !== undefined) updates.tonnage = tonnage ? String(tonnage) : null;
+      if (lmeRateUsed !== undefined) updates.lmeRateUsed = lmeRateUsed ? String(lmeRateUsed) : null;
+      if (calculatedValue !== undefined) updates.calculatedValue = calculatedValue ? String(calculatedValue) : null;
+      if (invoiceStatus !== undefined) updates.invoiceStatus = invoiceStatus || null;
+
+      if (Object.keys(updates).length === 0) {
+        res.status(400).json({ message: "No fields to update" });
+        return;
+      }
+
+      const [updated] = await db
+        .update(jobsTable)
+        .set(updates)
+        .where(eq(jobsTable.id, jobId))
+        .returning();
+
+      if (!updated) {
+        res.status(404).json({ message: "Job not found" });
+        return;
+      }
+
+      res.json({ job: updated });
+    } catch (error) {
+      console.error("Job admin update error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+router.patch(
+  "/jobs/:id/status",
+  requireAuth,
+  requireRole("team_leader", "accounts", "head_office_admin"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const jobId = parseInt(String(req.params.id), 10);
+      if (isNaN(jobId)) {
+        res.status(400).json({ message: "Invalid job ID" });
+        return;
+      }
+
+      const { status } = req.body;
+      const validStatuses = ["pending", "approved", "completed", "flagged"];
+      if (!status || !validStatuses.includes(status)) {
+        res.status(400).json({ message: "Invalid status. Must be one of: " + validStatuses.join(", ") });
+        return;
+      }
+
+      const [updated] = await db
+        .update(jobsTable)
+        .set({ status })
+        .where(eq(jobsTable.id, jobId))
+        .returning();
+
+      if (!updated) {
+        res.status(404).json({ message: "Job not found" });
+        return;
+      }
+
+      res.json({ job: updated });
+    } catch (error) {
+      console.error("Job status update error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+router.patch(
+  "/jobs/:id/batteries/:batteryId/admin",
+  requireAuth,
+  requireRole("team_leader", "accounts", "head_office_admin"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const jobId = parseInt(String(req.params.id), 10);
+      const batteryId = parseInt(String(req.params.batteryId), 10);
+      if (isNaN(jobId) || isNaN(batteryId)) {
+        res.status(400).json({ message: "Invalid ID" });
+        return;
+      }
+
+      const { receiptConfirmed, pbContentKg, valueGbp, adminNotes } = req.body;
+
+      const updates: Record<string, string | boolean | null> = {};
+      if (receiptConfirmed !== undefined) updates.receiptConfirmed = Boolean(receiptConfirmed);
+      if (pbContentKg !== undefined) updates.pbContentKg = pbContentKg ? String(pbContentKg) : null;
+      if (valueGbp !== undefined) updates.valueGbp = valueGbp ? String(valueGbp) : null;
+      if (adminNotes !== undefined) updates.adminNotes = adminNotes || null;
+
+      if (Object.keys(updates).length === 0) {
+        res.status(400).json({ message: "No fields to update" });
+        return;
+      }
+
+      const [updated] = await db
+        .update(jobBatteriesTable)
+        .set(updates)
+        .where(and(eq(jobBatteriesTable.id, batteryId), eq(jobBatteriesTable.jobId, jobId)))
+        .returning();
+
+      if (!updated) {
+        res.status(404).json({ message: "Battery not found" });
+        return;
+      }
+
+      res.json({ battery: updated });
+    } catch (error) {
+      console.error("Battery admin update error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
 router.get(
   "/dashboard/stats",
   requireAuth,

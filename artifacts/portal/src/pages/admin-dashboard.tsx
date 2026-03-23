@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import {
   Clock,
   Scale,
@@ -63,6 +64,7 @@ function formatCurrency(value: number) {
 }
 
 export default function AdminDashboardPage() {
+  const [, setLocation] = useLocation();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -279,6 +281,7 @@ export default function AdminDashboardPage() {
                       variant="outline"
                       size="sm"
                       className="h-8 text-[#0ea5e9] border-[#0ea5e9]/30 hover:bg-[#0ea5e9] hover:text-white transition-colors"
+                      onClick={() => setLocation(`/jobs/${job.id}`)}
                     >
                       <Eye className="w-3.5 h-3.5 mr-1.5" />
                       Review

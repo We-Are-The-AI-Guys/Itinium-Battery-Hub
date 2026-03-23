@@ -54,12 +54,12 @@ async function seed() {
       ],
     },
     {
-      reference: "JOB-2026-00845", clientName: "EcoCollect Ltd", depot: "Leeds Hub", collectionPoint: "Cross Green Lane Warehouse", collectionDate: "2026-03-14", submittedAt: new Date("2026-03-14"), tonnage: "3.100", status: "completed", invoiceStatus: "paid", lmeRateUsed: "1724.30", calculatedValue: "5345.33",
+      reference: "JOB-2026-00845", clientName: "EcoCollect Ltd", depot: "Leeds Hub", collectionPoint: "Cross Green Lane Warehouse", collectionDate: "2026-03-14", submittedAt: new Date("2026-03-14"), tonnage: "3.100", status: "completed", invoiceStatus: "paid", lmeRateUsed: "1724.30", calculatedValue: "5345.33", cblLmeValue: "1724.30", cblLmePercent: "72.50", cblLmePrice: "3876.77", transportCost: "450.00", customerInvoiceValue: "5345.33", customerInvoiceNo: "INV-2026-0845", cblWasteAdviceNoteNo: "WAN-845", cblDate: "2026-03-16", totalInvoiceValue: "5345.33", grossProfit: "1018.56", itiniumInvoiceNo: "ITIN-845",
       batteries: [
-        { palletNumber: "PLT-845-A", assetNumber: "AST-2026-845", batterySerial: "BSN-EC-003", manufacture: "Exide", cellType: "P2B", voltage: "48V", notes: null },
-        { palletNumber: "PLT-845-B", assetNumber: "AST-2026-850", batterySerial: "BSN-EC-004", manufacture: "Exide", cellType: "P2B", voltage: "24V", notes: null },
-        { palletNumber: "PLT-845-C", assetNumber: "AST-2026-851", batterySerial: "BSN-EC-005", manufacture: "Enersys", cellType: "P2S", voltage: "36V", notes: null },
-        { palletNumber: "PLT-845-D", assetNumber: null, batterySerial: null, manufacture: "Mixed", cellType: "Blocs", looseCellsQty: 24, notes: "Old blocs from various fleet vehicles" },
+        { palletNumber: "PLT-845-A", assetNumber: "AST-2026-845", batterySerial: "BSN-EC-003", manufacture: "Exide", cellType: "P2B", voltage: "48V", notes: null, receiptConfirmed: true, pbContentKg: "820.000", valueGbp: "1450.00" },
+        { palletNumber: "PLT-845-B", assetNumber: "AST-2026-850", batterySerial: "BSN-EC-004", manufacture: "Exide", cellType: "P2B", voltage: "24V", notes: null, receiptConfirmed: true, pbContentKg: "410.000", valueGbp: "725.00" },
+        { palletNumber: "PLT-845-C", assetNumber: "AST-2026-851", batterySerial: "BSN-EC-005", manufacture: "Enersys", cellType: "P2S", voltage: "36V", notes: null, receiptConfirmed: true, pbContentKg: "615.000", valueGbp: "1087.50" },
+        { palletNumber: "PLT-845-D", assetNumber: null, batterySerial: null, manufacture: "Mixed", cellType: "Blocs", looseCellsQty: 24, notes: "Old blocs from various fleet vehicles", receiptConfirmed: true, pbContentKg: "1255.000", valueGbp: "2082.83" },
       ],
     },
     {
@@ -77,7 +77,7 @@ async function seed() {
       ],
     },
     {
-      reference: "JOB-2026-00842", clientName: "Thames Batteries", depot: "Reading Central", collectionPoint: "Theale Business Park", collectionDate: "2026-03-12", submittedAt: new Date("2026-03-12"), tonnage: "1.500", status: "completed", invoiceStatus: "paid", lmeRateUsed: "1698.20", calculatedValue: "2547.30",
+      reference: "JOB-2026-00842", clientName: "Thames Batteries", depot: "Reading Central", collectionPoint: "Theale Business Park", collectionDate: "2026-03-12", submittedAt: new Date("2026-03-12"), tonnage: "1.500", status: "completed", invoiceStatus: "paid", lmeRateUsed: "1698.20", calculatedValue: "2547.30", cblLmeValue: "1698.20", cblLmePercent: "72.50", cblLmePrice: "1846.79", transportCost: "280.00", customerInvoiceValue: "2547.30", customerInvoiceNo: "INV-2026-0842", cblWasteAdviceNoteNo: "WAN-842", cblDate: "2026-03-14", totalInvoiceValue: "2547.30", grossProfit: "420.51", itiniumInvoiceNo: "ITIN-842",
       batteries: [
         { palletNumber: "PLT-842-A", assetNumber: "AST-2026-842", batterySerial: "BSN-TB-006", manufacture: "Hawker", cellType: "P2B", voltage: "12V", notes: null },
         { palletNumber: "PLT-842-B", assetNumber: "AST-2026-853", batterySerial: "BSN-TB-007", manufacture: "Hawker", cellType: "P2B", voltage: "24V", notes: null },
@@ -106,7 +106,7 @@ async function seed() {
       ],
     },
     {
-      reference: "JOB-2026-00838", clientName: "Yorkshire Metals Ltd", depot: "Leeds Hub", collectionPoint: "Hunslet Road Works", collectionDate: "2026-03-10", submittedAt: new Date("2026-03-10"), tonnage: "1.900", status: "completed", invoiceStatus: "paid", lmeRateUsed: "1698.20", calculatedValue: "3226.58",
+      reference: "JOB-2026-00838", clientName: "Yorkshire Metals Ltd", depot: "Leeds Hub", collectionPoint: "Hunslet Road Works", collectionDate: "2026-03-10", submittedAt: new Date("2026-03-10"), tonnage: "1.900", status: "completed", invoiceStatus: "paid", lmeRateUsed: "1698.20", calculatedValue: "3226.58", cblLmeValue: "1698.20", cblLmePercent: "72.50", cblLmePrice: "2339.95", transportCost: "310.00", customerInvoiceValue: "3226.58", customerInvoiceNo: "INV-2026-0838", cblWasteAdviceNoteNo: "WAN-838", cblDate: "2026-03-12", totalInvoiceValue: "3226.58", grossProfit: "576.63", itiniumInvoiceNo: "ITIN-838",
       batteries: [
         { palletNumber: "PLT-838-A", assetNumber: "AST-2026-838", batterySerial: "BSN-YM-010", manufacture: "GNB", cellType: "P2V", voltage: "48V", notes: null },
         { palletNumber: "PLT-838-B", assetNumber: null, batterySerial: null, manufacture: "Mixed", cellType: "Blocs", looseCellsQty: 8, notes: null },
@@ -120,7 +120,7 @@ async function seed() {
       ],
     },
     {
-      reference: "JOB-2026-00836", clientName: "Cornwall Waste Services", depot: "Bristol South", collectionPoint: "Pool Industrial Estate", collectionDate: "2026-03-08", submittedAt: new Date("2026-03-08"), tonnage: "0.800", status: "completed", invoiceStatus: "paid", lmeRateUsed: "1698.20", calculatedValue: "1358.56",
+      reference: "JOB-2026-00836", clientName: "Cornwall Waste Services", depot: "Bristol South", collectionPoint: "Pool Industrial Estate", collectionDate: "2026-03-08", submittedAt: new Date("2026-03-08"), tonnage: "0.800", status: "completed", invoiceStatus: "paid", lmeRateUsed: "1698.20", calculatedValue: "1358.56", cblLmeValue: "1698.20", cblLmePercent: "72.50", cblLmePrice: "984.95", transportCost: "180.00", customerInvoiceValue: "1358.56", customerInvoiceNo: "INV-2026-0836", cblWasteAdviceNoteNo: "WAN-836", cblDate: "2026-03-10", totalInvoiceValue: "1358.56", grossProfit: "193.61", itiniumInvoiceNo: "ITIN-836",
       batteries: [
         { palletNumber: "PLT-836-A", assetNumber: "AST-2026-836", batterySerial: "BSN-CW-012", manufacture: "Hawker", cellType: "P2S", voltage: "12V", notes: null },
       ],
@@ -149,7 +149,7 @@ async function seed() {
       ],
     },
     {
-      reference: "JOB-2026-00832", clientName: "South Coast Metals", depot: "Reading Central", collectionPoint: "Poole Trading Estate", collectionDate: "2026-03-04", submittedAt: new Date("2026-03-04"), tonnage: "3.800", status: "completed", invoiceStatus: "paid", lmeRateUsed: "1698.20", calculatedValue: "6453.16",
+      reference: "JOB-2026-00832", clientName: "South Coast Metals", depot: "Reading Central", collectionPoint: "Poole Trading Estate", collectionDate: "2026-03-04", submittedAt: new Date("2026-03-04"), tonnage: "3.800", status: "completed", invoiceStatus: "paid", lmeRateUsed: "1698.20", calculatedValue: "6453.16", cblLmeValue: "1698.20", cblLmePercent: "72.50", cblLmePrice: "4685.00", transportCost: "520.00", customerInvoiceValue: "6453.16", customerInvoiceNo: "INV-2026-0832", cblWasteAdviceNoteNo: "WAN-832", cblDate: "2026-03-06", totalInvoiceValue: "6453.16", grossProfit: "1248.16", itiniumInvoiceNo: "ITIN-832",
       batteries: [
         { palletNumber: "PLT-832-A", assetNumber: "AST-2026-832", batterySerial: "BSN-SC-016", manufacture: "Hawker", cellType: "P2B", voltage: "24V", notes: null },
         { palletNumber: "PLT-832-B", assetNumber: "AST-2026-862", batterySerial: "BSN-SC-017", manufacture: "GNB", cellType: "P2S", voltage: "48V", notes: null },
