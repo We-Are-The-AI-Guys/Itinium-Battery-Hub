@@ -67,6 +67,7 @@ const TABS = [
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "security", label: "Security", icon: ShieldCheck },
   { id: "weights", label: "Battery Weights", icon: Weight },
+  { id: "collection-points", label: "Collection Points", icon: Building2 },
   { id: "system", label: "System", icon: Settings },
 ] as const;
 
@@ -1084,6 +1085,260 @@ function WeightsTab() {
   );
 }
 
+interface CollectionPointEntry {
+  id: number;
+  name: string;
+  address: string;
+}
+
+function CollectionPointsTab() {
+  const { toast } = useToast();
+  const [points, setPoints] = useState<CollectionPointEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newAddress, setNewAddress] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const fetchPoints = useCallback(async () => {
+    try {
+      const res = await fetch("/api/collection-points", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setPoints(data.collectionPoints);
+      }
+    } catch {}
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchPoints(); }, [fetchPoints]);
+
+  async function handleAdd() {
+    if (!newName.trim() || !newAddress.trim()) {
+      toast({ title: "Error", description: "Name and address are required", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/collection-points", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name: newName, address: newAddress }),
+      });
+      if (res.ok) {
+        toast({ title: "Added", description: "Collection point added successfully." });
+        setShowAdd(false);
+        setNewName("");
+        setNewAddress("");
+        fetchPoints();
+      } else {
+        const data = await res.json();
+        toast({ title: "Error", description: data.message || "Failed to add", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to add collection point", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleUpdate(id: number) {
+    if (!editName.trim() || !editAddress.trim()) {
+      toast({ title: "Error", description: "Name and address are required", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/collection-points/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ name: editName, address: editAddress }),
+      });
+      if (res.ok) {
+        toast({ title: "Updated", description: "Collection point updated successfully." });
+        setEditingId(null);
+        fetchPoints();
+      } else {
+        const data = await res.json();
+        toast({ title: "Error", description: data.message || "Failed to update", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to update collection point", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id: number) {
+    try {
+      const res = await fetch(`/api/collection-points/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (res.ok) {
+        toast({ title: "Deleted", description: "Collection point removed." });
+        fetchPoints();
+      } else {
+        toast({ title: "Error", description: "Failed to delete", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to delete collection point", variant: "destructive" });
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center text-slate-500">
+        Loading collection points...
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-[#0f2744] flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-[#0ea5e9]" />
+              Collection Point Presets
+            </h3>
+            <p className="text-sm text-slate-500 mt-1">Pre-defined collection addresses shown in the depot form dropdown</p>
+          </div>
+          <Button
+            size="sm"
+            className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
+            onClick={() => setShowAdd(!showAdd)}
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Add Point
+          </Button>
+        </div>
+
+        {showAdd && (
+          <div className="px-6 py-4 bg-sky-50 border-b border-sky-100">
+            <div className="space-y-3">
+              <div className="flex items-end gap-3 flex-wrap">
+                <div className="space-y-1 flex-1 min-w-[200px]">
+                  <label className="text-xs font-medium text-slate-600">Name</label>
+                  <Input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="e.g., Linde Basingstoke"
+                    className="h-9 border-slate-200 text-sm"
+                  />
+                </div>
+                <div className="space-y-1 flex-[2] min-w-[300px]">
+                  <label className="text-xs font-medium text-slate-600">Address</label>
+                  <Input
+                    value={newAddress}
+                    onChange={(e) => setNewAddress(e.target.value)}
+                    placeholder="Full postal address"
+                    className="h-9 border-slate-200 text-sm"
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white h-9"
+                  onClick={handleAdd}
+                  disabled={saving}
+                >
+                  {saving ? "Adding..." : "Add"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 border-slate-200"
+                  onClick={() => setShowAdd(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="divide-y divide-slate-100">
+          {points.map((point) => (
+            <div key={point.id} className="px-6 py-4 flex items-start justify-between gap-4">
+              {editingId === point.id ? (
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-end gap-3 flex-wrap">
+                    <div className="space-y-1 flex-1 min-w-[180px]">
+                      <label className="text-xs font-medium text-slate-600">Name</label>
+                      <Input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="h-9 border-slate-200 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1 flex-[2] min-w-[250px]">
+                      <label className="text-xs font-medium text-slate-600">Address</label>
+                      <Input
+                        value={editAddress}
+                        onChange={(e) => setEditAddress(e.target.value)}
+                        className="h-9 border-slate-200 text-sm"
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      className="h-9 px-3 text-xs bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
+                      onClick={() => handleUpdate(point.id)}
+                      disabled={saving}
+                    >
+                      <Save className="w-3.5 h-3.5 mr-1" />
+                      {saving ? "Saving..." : "Save"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-9 px-3 text-xs border-slate-200"
+                      onClick={() => setEditingId(null)}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-[#0f2744]">{point.name}</p>
+                    <p className="text-sm text-slate-500 mt-0.5 truncate">{point.address}</p>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => { setEditingId(point.id); setEditName(point.name); setEditAddress(point.address); }}
+                      className="p-1.5 text-slate-400 hover:text-[#0ea5e9] rounded transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(point.id)}
+                      className="p-1.5 text-slate-400 hover:text-red-500 rounded transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+          {points.length === 0 && (
+            <div className="px-6 py-12 text-center text-slate-500">
+              No collection points configured. Add presets to populate the depot form dropdown.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SystemTab() {
   const { toast } = useToast();
   const [settings, setSettings] = useState<SystemSettings | null>(null);
@@ -1282,7 +1537,7 @@ export default function SettingsPage() {
   useEffect(() => { fetchUser(); }, [fetchUser]);
 
   const isAdmin = user?.role === "head_office_admin";
-  const visibleTabs = isAdmin ? TABS : TABS.filter((t) => t.id !== "system" && t.id !== "weights");
+  const visibleTabs = isAdmin ? TABS : TABS.filter((t) => t.id !== "system" && t.id !== "weights" && t.id !== "collection-points");
 
   return (
     <SidebarLayout
@@ -1322,6 +1577,7 @@ export default function SettingsPage() {
               {activeTab === "notifications" && <NotificationsTab />}
               {activeTab === "security" && <SecurityTab user={user} />}
               {activeTab === "weights" && isAdmin && <WeightsTab />}
+              {activeTab === "collection-points" && isAdmin && <CollectionPointsTab />}
               {activeTab === "system" && isAdmin && <SystemTab />}
             </>
           )}

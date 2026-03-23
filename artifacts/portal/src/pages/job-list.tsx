@@ -9,6 +9,7 @@ import {
   Filter,
   Factory,
   AlertCircle,
+  MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,6 +78,12 @@ function formatCurrency(value: string | null) {
   }).format(num);
 }
 
+interface CollectionPointOption {
+  id: number;
+  name: string;
+  address: string;
+}
+
 export default function JobListPage() {
   const [, setLocation] = useLocation();
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -87,15 +94,26 @@ export default function JobListPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [manufacturerFilter, setManufacturerFilter] = useState("");
   const [manufacturers, setManufacturers] = useState<string[]>([]);
+  const [collectionPointFilter, setCollectionPointFilter] = useState("");
+  const [collectionPointOptions, setCollectionPointOptions] = useState<CollectionPointOption[]>([]);
   const PAGE_SIZE = 10;
 
   useEffect(() => {
+    // Fetch manufacturers
     fetch("/api/manufacturers", { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.manufacturers) {
           setManufacturers(data.manufacturers.filter((m: string) => m !== "Other"));
         }
+      })
+      .catch(() => {});
+
+    // Fetch collection points
+    fetch("/api/collection-points", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.collectionPoints) setCollectionPointOptions(data.collectionPoints);
       })
       .catch(() => {});
   }, []);
@@ -106,6 +124,7 @@ export default function JobListPage() {
     if (paymentFilter !== "all") params.set("paymentStatus", paymentFilter);
     if (searchQuery.trim()) params.set("search", searchQuery.trim());
     if (manufacturerFilter) params.set("manufacturer", manufacturerFilter);
+    if (collectionPointFilter) params.set("collectionPoint", collectionPointFilter);
     params.set("limit", String(PAGE_SIZE));
     params.set("offset", String((currentPage - 1) * PAGE_SIZE));
 
@@ -118,7 +137,7 @@ export default function JobListPage() {
         }
       })
       .catch(() => {});
-  }, [activeFilter, paymentFilter, currentPage, searchQuery, manufacturerFilter]);
+  }, [activeFilter, paymentFilter, currentPage, searchQuery, manufacturerFilter, collectionPointFilter]);
 
   function handleFilterChange(filter: string) {
     setActiveFilter(filter);
@@ -156,7 +175,7 @@ export default function JobListPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 mt-4">
+          <div className="flex flex-wrap items-center gap-4 mt-4">
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-slate-400" />
               <div className="flex bg-slate-100 p-1 rounded-lg">
@@ -225,6 +244,31 @@ export default function JobListPage() {
                 ))}
               </div>
             </div>
+
+            {collectionPointOptions.length > 0 && (
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-slate-400" />
+                <Select
+                  value={collectionPointFilter}
+                  onValueChange={(value) => {
+                    setCollectionPointFilter(value === "all" ? "" : value);
+                    setCurrentPage(1);
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-[220px] text-xs border-slate-200 bg-white" data-testid="filter-collection-point">
+                    <SelectValue placeholder="All Collection Points" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Collection Points</SelectItem>
+                    {collectionPointOptions.map((cp) => (
+                      <SelectItem key={cp.id} value={cp.name}>
+                        {cp.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         </div>
 

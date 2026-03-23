@@ -133,6 +133,12 @@ const DEFAULT_MANUFACTURERS = [
   "Other",
 ];
 
+interface CollectionPointPreset {
+  id: number;
+  name: string;
+  address: string;
+}
+
 export default function DepotFormPage() {
   const [user, setUser] = useState<User | null>(null);
   const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
@@ -149,6 +155,10 @@ export default function DepotFormPage() {
   const [manufacturers, setManufacturers] = useState<string[]>(DEFAULT_MANUFACTURERS);
   const [mfrPopoverOpen, setMfrPopoverOpen] = useState<Record<string, boolean>>({});
   const [cellModels, setCellModels] = useState<CellModelOption[]>([]);
+  const [collectionPointPresets, setCollectionPointPresets] = useState<CollectionPointPreset[]>([]);
+  const [showCPDropdown, setShowCPDropdown] = useState(false);
+  const cpInputRef = useRef<HTMLInputElement>(null);
+  const cpDropdownRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -164,6 +174,13 @@ export default function DepotFormPage() {
         if (data?.manufacturers?.length) setManufacturers(data.manufacturers);
       })
       .catch(() => {});
+
+    fetch("/api/collection-points", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.collectionPoints) setCollectionPointPresets(data.collectionPoints);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -173,7 +190,26 @@ export default function DepotFormPage() {
         if (data?.models) setCellModels(data.models);
       })
       .catch(() => {});
+
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        cpDropdownRef.current &&
+        !cpDropdownRef.current.contains(e.target as Node) &&
+        cpInputRef.current &&
+        !cpInputRef.current.contains(e.target as Node)
+      ) {
+        setShowCPDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const filteredCPPresets = collectionPointPresets.filter(
+    (cp) =>
+      cp.name.toLowerCase().includes(collectionPoint.toLowerCase()) ||
+      cp.address.toLowerCase().includes(collectionPoint.toLowerCase())
+  );
 
   async function fetchWeightFromApi(cellType: string, voltage: string | null, cellModel?: string): Promise<string> {
     if (!cellType && !cellModel) return "";
@@ -505,18 +541,47 @@ export default function DepotFormPage() {
                 data-testid="input-customer-name"
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 relative">
               <label className="text-sm font-medium text-[#1e293b] flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-slate-400" />
                 Collection Point
               </label>
               <Input
-                placeholder="e.g., Unit 4, Aston Industrial Estate"
+                ref={cpInputRef}
+                placeholder="Search or type address..."
                 className="h-11 bg-slate-50 border-slate-200 text-[#1e293b] focus-visible:ring-[#0ea5e9] focus-visible:border-[#0ea5e9]"
                 value={collectionPoint}
-                onChange={(e) => setCollectionPoint(e.target.value)}
+                onChange={(e) => {
+                  setCollectionPoint(e.target.value);
+                  setShowCPDropdown(true);
+                }}
+                onFocus={() => setShowCPDropdown(true)}
                 data-testid="input-collection-point"
+                autoComplete="off"
               />
+              {showCPDropdown && filteredCPPresets.length > 0 && (
+                <div
+                  ref={cpDropdownRef}
+                  className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                  data-testid="collection-point-dropdown"
+                >
+                  {filteredCPPresets.map((cp) => (
+                    <button
+                      key={cp.id}
+                      type="button"
+                      className="w-full text-left px-3 py-2.5 hover:bg-sky-50 transition-colors border-b border-slate-50 last:border-b-0"
+                      onClick={() => {
+                        setCollectionPoint(`${cp.name} — ${cp.address}`);
+                        setShowCPDropdown(false);
+                      }}
+                      data-testid={`cp-option-${cp.id}`}
+                    >
+                      <p className="text-sm font-medium text-[#0f2744]">{cp.name}</p>
+                      <p className="text-xs text-slate-500 mt-0.5 truncate">{cp.address}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-[#1e293b] flex items-center gap-1.5">

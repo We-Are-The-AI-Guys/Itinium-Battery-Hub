@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { usersTable, jobsTable, jobBatteriesTable, lmePricesTable, systemSettingsTable, batteryWeightReferenceTable, stillageMovementsTable, cellModelsTable } from "@workspace/db/schema";
+import { usersTable, jobsTable, jobBatteriesTable, lmePricesTable, systemSettingsTable, batteryWeightReferenceTable, stillageMovementsTable, cellModelsTable, collectionPointsTable } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { CELL_MODEL_DATA } from "@workspace/db/data/cell-models";
@@ -326,6 +326,38 @@ async function seed() {
     await db.insert(cellModelsTable).values(batch).onConflictDoNothing();
   }
   console.log(`Seeded ${CELL_MODEL_DATA.length} cell model entries`);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS collection_points (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL UNIQUE,
+      address VARCHAR(500) NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL
+    )
+  `);
+
+  await db.delete(collectionPointsTable);
+  const collectionPoints = [
+    { name: "Linde Basingstoke", address: "Linde Material Handling, Mulberry Business Park, Fishers Lane, Cheltenham, Basingstoke RG24 8GF" },
+    { name: "Linde Fareham", address: "Linde Material Handling, Unit 7, Segensworth Business Centre, Fareham PO15 5RR" },
+    { name: "Linde Immingham", address: "Linde Material Handling, Manby Road, Immingham, North East Lincolnshire DN40 3DZ" },
+    { name: "Linde Lincoln", address: "Linde Material Handling, Doddington Road, Lincoln LN6 7HA" },
+    { name: "Linde Lutterworth", address: "Linde Material Handling, Magna Park, Coventry Road, Lutterworth LE17 4XN" },
+    { name: "Linde Normanton", address: "Linde Material Handling, Unit 2, Wakefield Europort, Normanton WF6 1ZB" },
+    { name: "Linde Swindon", address: "Linde Material Handling, Bridgemead Close, Westmead Industrial Estate, Swindon SN5 7YG" },
+    { name: "Still Aston", address: "Still Materials Handling, Unit 4, Aston Industrial Estate, Birmingham B6 7EY" },
+    { name: "Still Bristol", address: "Still Materials Handling, Western Approach Distribution Park, Severn Beach, Bristol BS35 4GG" },
+    { name: "Still Dartford", address: "Still Materials Handling, Crossways Business Park, Dartford DA2 6QE" },
+    { name: "Still Glasgow", address: "Still Materials Handling, Cambuslang Investment Park, Glasgow G32 8NB" },
+    { name: "Still Manchester", address: "Still Materials Handling, Trafford Park, Manchester M17 1WA" },
+    { name: "Still Northampton", address: "Still Materials Handling, Moulton Park Industrial Estate, Northampton NN3 6AQ" },
+    { name: "Still Warrington", address: "Still Materials Handling, Woolston Grange Avenue, Warrington WA1 4PQ" },
+  ];
+
+  for (const cp of collectionPoints) {
+    await db.insert(collectionPointsTable).values(cp).onConflictDoNothing();
+  }
+  console.log(`Seeded ${collectionPoints.length} collection point presets`);
 
   process.exit(0);
 }

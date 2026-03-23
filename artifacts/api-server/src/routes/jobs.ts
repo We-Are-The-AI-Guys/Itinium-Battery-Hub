@@ -12,7 +12,7 @@ router.get(
   requireRole("team_leader", "accounts", "head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
-      const { status, invoiceStatus, paymentStatus, search, manufacturer, limit = "10", offset = "0" } = req.query;
+      const { status, invoiceStatus, paymentStatus, search, manufacturer, collectionPoint, limit = "10", offset = "0" } = req.query;
       const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10) || 10));
       const offsetNum = Math.max(0, parseInt(offset as string, 10) || 0);
 
@@ -29,6 +29,9 @@ router.get(
         conditions.push(sql`${jobsTable.dueDate} IS NOT NULL AND ${jobsTable.dueDate} >= CURRENT_DATE AND (${jobsTable.datePaid} IS NULL)`);
       } else if (paymentStatus === "paid") {
         conditions.push(sql`${jobsTable.datePaid} IS NOT NULL`);
+      }
+      if (collectionPoint) {
+        conditions.push(ilike(jobsTable.collectionPoint, `%${collectionPoint}%`));
       }
       if (search) {
         conditions.push(
