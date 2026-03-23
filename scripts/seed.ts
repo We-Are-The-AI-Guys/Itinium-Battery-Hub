@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { usersTable, jobsTable, jobBatteriesTable, lmePricesTable, systemSettingsTable, batteryWeightReferenceTable } from "@workspace/db/schema";
+import { usersTable, jobsTable, jobBatteriesTable, lmePricesTable, systemSettingsTable, batteryWeightReferenceTable, stillageMovementsTable } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
@@ -273,6 +273,30 @@ async function seed() {
     await db.insert(batteryWeightReferenceTable).values(wr).onConflictDoNothing();
   }
   console.log(`Seeded ${weightRefs.length} battery weight references`);
+
+  await db.delete(stillageMovementsTable);
+  const [depotUserForStillage] = await db.select().from(usersTable).where(eq(usersTable.email, "depot@itinium.co.uk"));
+  const stillageData = [
+    { depot: "Birmingham Central", movementDate: "2026-03-01", collected: 10, droppedOff: 0, notes: "Initial delivery of stillages", createdById: depotUserForStillage?.id },
+    { depot: "Birmingham Central", movementDate: "2026-03-08", collected: 0, droppedOff: 4, notes: "Returned to CBL", createdById: depotUserForStillage?.id },
+    { depot: "Birmingham Central", movementDate: "2026-03-15", collected: 3, droppedOff: 0, notes: null, createdById: depotUserForStillage?.id },
+    { depot: "Manchester North", movementDate: "2026-03-02", collected: 8, droppedOff: 0, notes: "New stillages received", createdById: depotUserForStillage?.id },
+    { depot: "Manchester North", movementDate: "2026-03-10", collected: 0, droppedOff: 3, notes: "Sent back with driver", createdById: depotUserForStillage?.id },
+    { depot: "Leeds Hub", movementDate: "2026-03-03", collected: 6, droppedOff: 0, notes: null, createdById: depotUserForStillage?.id },
+    { depot: "Leeds Hub", movementDate: "2026-03-12", collected: 2, droppedOff: 1, notes: "Swap on collection run", createdById: depotUserForStillage?.id },
+    { depot: "Bristol South", movementDate: "2026-03-05", collected: 5, droppedOff: 0, notes: "Delivered by transport", createdById: depotUserForStillage?.id },
+    { depot: "Bristol South", movementDate: "2026-03-14", collected: 0, droppedOff: 2, notes: null, createdById: depotUserForStillage?.id },
+    { depot: "Reading Central", movementDate: "2026-03-04", collected: 4, droppedOff: 0, notes: null, createdById: depotUserForStillage?.id },
+    { depot: "Reading Central", movementDate: "2026-03-11", collected: 0, droppedOff: 1, notes: "Damaged stillage returned", createdById: depotUserForStillage?.id },
+    { depot: "London Depot", movementDate: "2026-03-06", collected: 7, droppedOff: 0, notes: "Large delivery", createdById: depotUserForStillage?.id },
+    { depot: "London Depot", movementDate: "2026-03-13", collected: 0, droppedOff: 3, notes: null, createdById: depotUserForStillage?.id },
+    { depot: "Sheffield East", movementDate: "2026-03-07", collected: 3, droppedOff: 0, notes: null, createdById: depotUserForStillage?.id },
+  ];
+
+  for (const sm of stillageData) {
+    await db.insert(stillageMovementsTable).values(sm).onConflictDoNothing();
+  }
+  console.log(`Seeded ${stillageData.length} stillage movements`);
 
   process.exit(0);
 }

@@ -62,6 +62,12 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 ### lme_prices
 - id, price_date, usd_price (decimal), exchange_rate (decimal), gbp_price (decimal), source (manual/api), created_at
 
+### stillage_movements
+- id, depot (varchar), movement_date (date), collected (integer), dropped_off (integer), notes, created_by_id (FK → users), created_at
+- Tracks stillage container movements (metal cages for transporting batteries) per depot
+- Current count = SUM(collected) - SUM(dropped_off) per depot
+- Indexes: depot, movement_date
+
 ### system_settings
 - id, company_name, invoice_prefix, data_retention_days, auto_fetch_lme (boolean), updated_at
 
@@ -123,6 +129,11 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 - `PATCH /api/weight-reference/:id` — update weight (weightKg)
 - `DELETE /api/weight-reference/:id` — delete weight reference
 
+### Stillages (requires auth; depot users scoped to own depot; null-depot non-admins get 403)
+- `GET /api/stillages?depot=X` — list movements + summary (admin sees all, depot users see own depot only)
+- `GET /api/stillages/summary` — current counts per depot (admin sees all, depot users see own)
+- `POST /api/stillages` — log movement (depot users forced to own depot, admin can pick any)
+
 ## Pages & Routes
 
 | Route | Page | Description |
@@ -136,6 +147,7 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 | `/jobs` | `job-list.tsx` | Job list with search, filters, pagination — click to review |
 | `/jobs/:id` | `job-detail.tsx` | Job detail: read-only depot data + admin financial/completion form |
 | `/kpi` | `placeholder.tsx` | KPI Reporting (placeholder) |
+| `/stillages` | `stillages.tsx` | Stillage container tracking — depot summary, movement history, log form |
 | `/collection/new` | `depot-form.tsx` | Redundant Battery Collection Note form (multi-row battery items, matches spreadsheet) |
 
 ## Route Guards
@@ -174,7 +186,10 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 - `lib/db/src/schema/users.ts` — Users, sessions, and system_settings schemas
 - `lib/db/src/schema/jobs.ts` — Jobs + job_batteries schemas with relations
 - `lib/db/src/schema/lme-prices.ts` — LME prices schema
-- `scripts/seed.ts` — Database seeder (12 users + 18 demo jobs + 5 LME prices + system settings)
+- `artifacts/portal/src/pages/stillages.tsx` — Stillage tracking page
+- `artifacts/api-server/src/routes/stillages.ts` — Stillage API routes
+- `lib/db/src/schema/stillages.ts` — Stillage movements schema
+- `scripts/seed.ts` — Database seeder (12 users + 18 demo jobs + 5 LME prices + system settings + 14 stillage movements)
 
 ## Mockups
 

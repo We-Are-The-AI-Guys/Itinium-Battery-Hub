@@ -12,6 +12,7 @@ import UserManagementPage from "@/pages/user-management";
 import SettingsPage from "@/pages/settings";
 import JobListPage from "@/pages/job-list";
 import JobDetailPage from "@/pages/job-detail";
+import StillagesPage from "@/pages/stillages";
 import PlaceholderPage from "@/pages/placeholder";
 import NotFound from "@/pages/not-found";
 
@@ -152,6 +153,11 @@ function AppRouter() {
         <AdminGuard>
           <JobDetailPage />
         </AdminGuard>
+      </Route>
+      <Route path="/stillages">
+        <AuthGuard>
+          <StillagesPage />
+        </AuthGuard>
       </Route>
       <Route path="/kpi">
         <AdminGuard>

@@ -14,6 +14,7 @@ import {
   ArrowDownRight,
   Percent,
   PoundSterling,
+  Package,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -102,12 +103,20 @@ export default function AdminDashboardPage() {
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [activeFilter, setActiveFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalStillages, setTotalStillages] = useState<number | null>(null);
 
   useEffect(() => {
     fetch("/api/dashboard/stats", { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data) setStats(data);
+      })
+      .catch(() => {});
+
+    fetch("/api/stillages/summary", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setTotalStillages(data.totalInCirculation);
       })
       .catch(() => {});
   }, []);
@@ -224,7 +233,28 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-sky-500 p-5 hover:shadow-md transition-shadow">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <p className="text-sm font-medium text-slate-500 mb-1">
+                Stillages In Circulation
+              </p>
+              <h3 className="text-3xl font-bold text-[#0f2744]">
+                {totalStillages !== null ? totalStillages : "..."}
+              </h3>
+            </div>
+            <div className="w-10 h-10 rounded-lg bg-sky-50 flex items-center justify-center">
+              <Package className="w-5 h-5 text-sky-500" />
+            </div>
+          </div>
+          <div className="flex items-center text-sm">
+            <span className="text-sky-600 font-medium">
+              Across all depots
+            </span>
+          </div>
+        </div>
+
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-green-500 p-5 hover:shadow-md transition-shadow">
           <div className="flex justify-between items-start mb-4">
             <div>

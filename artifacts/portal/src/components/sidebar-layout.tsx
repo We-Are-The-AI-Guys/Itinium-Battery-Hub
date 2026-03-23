@@ -13,6 +13,7 @@ import {
   Bell,
   Calendar,
   Plus,
+  Package,
 } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,7 @@ interface User {
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Briefcase, label: "Job Management", path: "/jobs" },
+  { icon: Package, label: "Stillages", path: "/stillages" },
   { icon: BarChart3, label: "KPI Reporting", path: "/kpi" },
   { icon: LineChart, label: "LME Pricing", path: "/lme-pricing" },
   { icon: Users, label: "User Access", path: "/users" },
