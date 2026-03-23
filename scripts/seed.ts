@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { usersTable, jobsTable, jobBatteriesTable, lmePricesTable, systemSettingsTable } from "@workspace/db/schema";
+import { usersTable, jobsTable, jobBatteriesTable, lmePricesTable, systemSettingsTable, batteryWeightReferenceTable } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
@@ -229,6 +229,45 @@ async function seed() {
   });
 
   console.log("Seeded system settings");
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS battery_weight_reference (
+      id SERIAL PRIMARY KEY,
+      cell_type VARCHAR(50) NOT NULL,
+      voltage VARCHAR(50),
+      weight_kg DECIMAL(10,3) NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL
+    )
+  `);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_bwr_cell_voltage_notnull ON battery_weight_reference (cell_type, voltage) WHERE voltage IS NOT NULL`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_bwr_cell_voltage_null ON battery_weight_reference (cell_type) WHERE voltage IS NULL`);
+  await db.execute(sql`ALTER TABLE job_batteries ADD COLUMN IF NOT EXISTS estimated_weight_kg DECIMAL(10,3)`);
+
+  await db.delete(batteryWeightReferenceTable);
+  const weightRefs = [
+    { cellType: "PZB", voltage: "12V", weightKg: "180.000" },
+    { cellType: "PZB", voltage: "24V", weightKg: "360.000" },
+    { cellType: "PZB", voltage: "36V", weightKg: "540.000" },
+    { cellType: "PZB", voltage: "48V", weightKg: "720.000" },
+    { cellType: "PZB", voltage: "80V", weightKg: "1200.000" },
+    { cellType: "PZS", voltage: "12V", weightKg: "200.000" },
+    { cellType: "PZS", voltage: "24V", weightKg: "400.000" },
+    { cellType: "PZS", voltage: "36V", weightKg: "600.000" },
+    { cellType: "PZS", voltage: "48V", weightKg: "800.000" },
+    { cellType: "PZS", voltage: "80V", weightKg: "1330.000" },
+    { cellType: "PZV", voltage: "12V", weightKg: "170.000" },
+    { cellType: "PZV", voltage: "24V", weightKg: "340.000" },
+    { cellType: "PZV", voltage: "36V", weightKg: "510.000" },
+    { cellType: "PZV", voltage: "48V", weightKg: "680.000" },
+    { cellType: "PZV", voltage: "80V", weightKg: "1130.000" },
+    { cellType: "Blocs", voltage: null, weightKg: "25.000" },
+    { cellType: "Other", voltage: null, weightKg: "0.000" },
+  ];
+  for (const wr of weightRefs) {
+    await db.insert(batteryWeightReferenceTable).values(wr).onConflictDoNothing();
+  }
+  console.log(`Seeded ${weightRefs.length} battery weight references`);
+
   process.exit(0);
 }
 

@@ -41,6 +41,7 @@ interface BatteryRow {
   cellType: string;
   voltage: string;
   looseCellsQty: string;
+  estimatedWeightKg: string;
   notes: string;
 }
 
@@ -52,6 +53,13 @@ interface User {
   depot: string | null;
 }
 
+interface WeightRef {
+  id: number;
+  cellType: string;
+  voltage: string | null;
+  weightKg: string;
+}
+
 function createEmptyBattery(): BatteryRow {
   return {
     id: crypto.randomUUID(),
@@ -61,6 +69,7 @@ function createEmptyBattery(): BatteryRow {
     cellType: "",
     voltage: "",
     looseCellsQty: "",
+    estimatedWeightKg: "",
     notes: "",
   };
 }
@@ -71,6 +80,14 @@ const CELL_TYPES = [
   { value: "PZV", label: "PZV" },
   { value: "Blocs", label: "Blocs" },
   { value: "Other", label: "Other" },
+];
+
+const VOLTAGE_OPTIONS = [
+  { value: "12V", label: "12V" },
+  { value: "24V", label: "24V" },
+  { value: "36V", label: "36V" },
+  { value: "48V", label: "48V" },
+  { value: "80V", label: "80V" },
 ];
 
 export default function DepotFormPage() {
@@ -84,6 +101,7 @@ export default function DepotFormPage() {
   const [jobNotes, setJobNotes] = useState("");
   const [batteries, setBatteries] = useState<BatteryRow[]>([createEmptyBattery()]);
   const [submitting, setSubmitting] = useState(false);
+  const [weightRefs, setWeightRefs] = useState<WeightRef[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -93,7 +111,36 @@ export default function DepotFormPage() {
         if (data?.user) setUser(data.user);
       })
       .catch(() => {});
+    fetch("/api/weight-reference", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.references) setWeightRefs(data.references);
+      })
+      .catch(() => {});
   }, []);
+
+  function lookupWeight(cellType: string, voltage: string | null): string {
+    if (!cellType) return "";
+    if (cellType === "Blocs" || cellType === "Other") {
+      const ref = weightRefs.find((r) => r.cellType === cellType && !r.voltage);
+      return ref ? ref.weightKg : "";
+    }
+    if (!voltage) return "";
+    const ref = weightRefs.find((r) => r.cellType === cellType && r.voltage === voltage);
+    return ref ? ref.weightKg : "";
+  }
+
+  function computeAutoWeight(battery: BatteryRow): string {
+    if (battery.cellType === "Blocs") {
+      const perBloc = lookupWeight("Blocs", null);
+      const qty = parseInt(battery.looseCellsQty, 10);
+      if (perBloc && !isNaN(qty) && qty > 0) {
+        return (parseFloat(perBloc) * qty).toFixed(3);
+      }
+      return "";
+    }
+    return lookupWeight(battery.cellType, battery.voltage || null);
+  }
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
@@ -127,7 +174,14 @@ export default function DepotFormPage() {
 
   function updateBattery(id: string, field: keyof BatteryRow, value: string) {
     setBatteries((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, [field]: value } : b))
+      prev.map((b) => {
+        if (b.id !== id) return b;
+        const updated = { ...b, [field]: value };
+        if (field === "cellType" || field === "voltage" || field === "looseCellsQty") {
+          updated.estimatedWeightKg = computeAutoWeight(updated);
+        }
+        return updated;
+      })
     );
   }
 
@@ -164,7 +218,7 @@ export default function DepotFormPage() {
           depot: user?.depot || "Unknown",
           collectionPoint: collectionPoint || null,
           collectionDate: collectionDate || null,
-          tonnage: "0.000",
+          tonnage: currentLoad > 0 ? currentLoad.toFixed(3) : "0.000",
           notes: jobNotes || null,
           batteries: batteries.map((b) => ({
             assetNumber: b.assetNumber || null,
@@ -173,6 +227,7 @@ export default function DepotFormPage() {
             cellType: b.cellType || null,
             voltage: b.voltage || null,
             looseCellsQty: b.looseCellsQty || null,
+            estimatedWeightKg: b.estimatedWeightKg || null,
             notes: b.notes || null,
           })),
         }),
@@ -215,9 +270,13 @@ export default function DepotFormPage() {
     });
   }
 
-  const currentLoad = 7.2;
+  const totalWeightKg = batteries.reduce((sum, b) => {
+    const w = parseFloat(b.estimatedWeightKg);
+    return sum + (isNaN(w) ? 0 : w);
+  }, 0);
+  const currentLoad = totalWeightKg / 1000;
   const maxCapacity = 10.0;
-  const progressPercent = Math.round((currentLoad / maxCapacity) * 100);
+  const progressPercent = Math.min(100, Math.round((currentLoad / maxCapacity) * 100));
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-24 pt-16 flex flex-col items-center">
@@ -270,7 +329,7 @@ export default function DepotFormPage() {
                 Current Load
               </p>
               <h3 className="text-lg sm:text-xl font-bold text-[#0f2744]">
-                {currentLoad}t{" "}
+                {currentLoad.toFixed(3)}t{" "}
                 <span className="text-slate-500 text-sm sm:text-base font-normal">
                   / {maxCapacity}t
                 </span>
@@ -497,17 +556,24 @@ export default function DepotFormPage() {
                       <label className="text-xs font-medium text-slate-600">
                         If Complete Battery &mdash; Voltage
                       </label>
-                      <div className="relative group">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Zap className="h-3.5 w-3.5 text-slate-400 group-focus-within:text-[#0ea5e9] transition-colors" />
-                        </div>
-                        <Input
-                          placeholder="e.g., 24V, 48V, 80V"
-                          className="pl-9 h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
-                          value={battery.voltage}
-                          onChange={(e) => updateBattery(battery.id, "voltage", e.target.value)}
-                        />
-                      </div>
+                      <Select
+                        value={battery.voltage}
+                        onValueChange={(val) => updateBattery(battery.id, "voltage", val)}
+                      >
+                        <SelectTrigger className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus:ring-[#0ea5e9]">
+                          <div className="flex items-center gap-2">
+                            <Zap className="h-3.5 w-3.5 text-slate-400" />
+                            <SelectValue placeholder="Select voltage..." />
+                          </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {VOLTAGE_OPTIONS.map((v) => (
+                            <SelectItem key={v.value} value={v.value}>
+                              {v.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
 
@@ -524,6 +590,17 @@ export default function DepotFormPage() {
                         value={battery.looseCellsQty}
                         onChange={(e) => updateBattery(battery.id, "looseCellsQty", e.target.value)}
                       />
+                    </div>
+                  )}
+
+                  {battery.estimatedWeightKg && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-600">
+                        Est. Weight (kg)
+                      </label>
+                      <div className="h-10 px-3 bg-emerald-50 border border-emerald-200 rounded-md flex items-center text-sm font-medium text-emerald-700">
+                        {parseFloat(battery.estimatedWeightKg).toLocaleString("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 1 })} kg
+                      </div>
                     </div>
                   )}
 

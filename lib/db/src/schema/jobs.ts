@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp, varchar, decimal, date, index, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, varchar, decimal, date, index, boolean, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -51,6 +51,7 @@ export const jobBatteriesTable = pgTable("job_batteries", {
   receiptConfirmed: boolean("receipt_confirmed").default(false),
   pbContentKg: decimal("pb_content_kg", { precision: 10, scale: 3 }),
   valueGbp: decimal("value_gbp", { precision: 12, scale: 2 }),
+  estimatedWeightKg: decimal("estimated_weight_kg", { precision: 10, scale: 3 }),
   adminNotes: text("admin_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
@@ -75,3 +76,13 @@ export type Job = typeof jobsTable.$inferSelect;
 export const insertJobBatterySchema = createInsertSchema(jobBatteriesTable).omit({ id: true, createdAt: true });
 export type InsertJobBattery = z.infer<typeof insertJobBatterySchema>;
 export type JobBattery = typeof jobBatteriesTable.$inferSelect;
+
+export const batteryWeightReferenceTable = pgTable("battery_weight_reference", {
+  id: serial("id").primaryKey(),
+  cellType: varchar("cell_type", { length: 50 }).notNull(),
+  voltage: varchar("voltage", { length: 50 }),
+  weightKg: decimal("weight_kg", { precision: 10, scale: 3 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type BatteryWeightReference = typeof batteryWeightReferenceTable.$inferSelect;

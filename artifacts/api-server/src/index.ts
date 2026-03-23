@@ -18,6 +18,23 @@ async function bootstrap() {
   }
 
   try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS battery_weight_reference (
+        id SERIAL PRIMARY KEY,
+        cell_type VARCHAR(50) NOT NULL,
+        voltage VARCHAR(50),
+        weight_kg DECIMAL(10,3) NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      )
+    `);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_bwr_cell_voltage_notnull ON battery_weight_reference (cell_type, voltage) WHERE voltage IS NOT NULL`);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_bwr_cell_voltage_null ON battery_weight_reference (cell_type) WHERE voltage IS NULL`);
+    await db.execute(sql`ALTER TABLE job_batteries ADD COLUMN IF NOT EXISTS estimated_weight_kg DECIMAL(10,3)`);
+  } catch (err) {
+    console.error("Bootstrap: failed to create weight reference table:", err);
+  }
+
+  try {
     const [{ value: userCount }] = await db.select({ value: count() }).from(usersTable);
     if (userCount === 0) {
       console.log("No users found — creating default admin user...");

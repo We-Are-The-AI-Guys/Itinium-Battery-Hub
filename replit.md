@@ -44,12 +44,20 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 - Indexes: status, submitted_at, composite (status, submitted_at)
 
 ### job_batteries
-- id, job_id (FK → jobs, cascade delete), pallet_number, asset_number, battery_serial, manufacture, cell_type (PZB/PZS/PZV/Blocs/Other), voltage (free text), loose_cells_qty (integer), notes
+- id, job_id (FK → jobs, cascade delete), pallet_number, asset_number, battery_serial, manufacture, cell_type (PZB/PZS/PZV/Blocs/Other), voltage (dropdown: 12V/24V/36V/48V/80V), loose_cells_qty (integer), estimated_weight_kg (decimal), notes
 - Admin fields: receipt_confirmed (boolean), pb_content_kg (decimal), value_gbp (decimal), admin_notes (text)
 - pallet_number is auto-generated server-side as PLT-XXXXX using PostgreSQL sequence `pallet_number_seq`
+- estimated_weight_kg auto-populated from battery_weight_reference table on depot form
 - created_at
 - Index: job_id
 - Each job can have multiple battery line items (matches the spreadsheet grid)
+
+### battery_weight_reference
+- id, cell_type (varchar), voltage (varchar, nullable), weight_kg (decimal), created_at
+- Unique constraint: partial indexes for (cell_type, voltage) WHERE voltage IS NOT NULL and (cell_type) WHERE voltage IS NULL
+- Used to auto-populate estimated_weight_kg on depot form when cell type + voltage selected
+- Blocs type: per-unit weight × loose cells qty; Other: 0 kg by default
+- Managed via Settings > Battery Weights tab (admin only)
 
 ### lme_prices
 - id, price_date, usd_price (decimal), exchange_rate (decimal), gbp_price (decimal), source (manual/api), created_at
@@ -108,6 +116,13 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 - `GET /api/settings/system` — read system settings (head_office_admin only)
 - `PATCH /api/settings/system` — update system settings (head_office_admin only)
 
+### Weight Reference (requires auth; write routes require head_office_admin)
+- `GET /api/weight-reference` — list all weight references
+- `GET /api/weight-reference/lookup?cellType=X&voltage=X` — lookup single weight
+- `POST /api/weight-reference` — create weight reference entry
+- `PATCH /api/weight-reference/:id` — update weight (weightKg)
+- `DELETE /api/weight-reference/:id` — delete weight reference
+
 ## Pages & Routes
 
 | Route | Page | Description |
@@ -142,7 +157,7 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 - `artifacts/portal/src/pages/admin-dashboard.tsx` — Admin dashboard with metrics + jobs table
 - `artifacts/portal/src/pages/lme-pricing.tsx` — LME Pricing & Accounts page
 - `artifacts/portal/src/pages/user-management.tsx` — User Management page
-- `artifacts/portal/src/pages/settings.tsx` — Settings page with 4 tabs
+- `artifacts/portal/src/pages/settings.tsx` — Settings page with 5 tabs (Profile, Notifications, Security, Battery Weights, System)
 - `artifacts/portal/src/pages/login.tsx` — Login page with split-panel design
 - `artifacts/portal/src/pages/dashboard.tsx` — Depot user dashboard
 - `artifacts/portal/src/pages/depot-form.tsx` — Depot submission form
@@ -154,6 +169,7 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 - `artifacts/api-server/src/routes/lme.ts` — LME pricing API routes
 - `artifacts/api-server/src/routes/users.ts` — User management API routes
 - `artifacts/api-server/src/routes/settings.ts` — Settings API routes (profile, password, notifications, sessions, system)
+- `artifacts/api-server/src/routes/weight-reference.ts` — Battery weight reference CRUD API
 - `artifacts/api-server/src/middlewares/auth.ts` — requireAuth + requireRole middleware
 - `lib/db/src/schema/users.ts` — Users, sessions, and system_settings schemas
 - `lib/db/src/schema/jobs.ts` — Jobs + job_batteries schemas with relations

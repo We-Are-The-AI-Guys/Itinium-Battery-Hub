@@ -109,6 +109,7 @@ interface BatteryInput {
   cellType?: string | null;
   voltage?: string | null;
   looseCellsQty?: string | number | null;
+  estimatedWeightKg?: string | number | null;
   notes?: string | null;
 }
 
@@ -119,8 +120,8 @@ router.post(
     try {
       const { clientName, depot, collectionPoint, collectionDate, tonnage, notes, batteries } = req.body;
 
-      if (!clientName || !depot || !tonnage) {
-        res.status(400).json({ message: "Client name, depot, and tonnage are required" });
+      if (!clientName || !depot) {
+        res.status(400).json({ message: "Client name and depot are required" });
         return;
       }
 
@@ -128,6 +129,15 @@ router.post(
         res.status(400).json({ message: "At least one battery item is required" });
         return;
       }
+
+      const batteryInputs = batteries as BatteryInput[];
+      let autoTonnage = 0;
+      for (const b of batteryInputs) {
+        if (b.estimatedWeightKg) {
+          autoTonnage += parseFloat(String(b.estimatedWeightKg));
+        }
+      }
+      const finalTonnage = tonnage ? String(tonnage) : (autoTonnage / 1000).toFixed(3);
 
       const result = await db.transaction(async (tx) => {
         const jobCount = await tx.select({ count: count() }).from(jobsTable);
@@ -142,14 +152,14 @@ router.post(
             depot,
             collectionPoint: collectionPoint || null,
             collectionDate: collectionDate || null,
-            tonnage: String(tonnage),
+            tonnage: finalTonnage,
             status: "pending",
             notes: notes || null,
             submittedById: req.user!.id,
           })
           .returning();
 
-        const batteryCount = (batteries as BatteryInput[]).length;
+        const batteryCount = batteryInputs.length;
         const seqResult = await tx.execute(
           sql`SELECT nextval('pallet_number_seq') AS seq FROM generate_series(1, ${batteryCount})`
         );
@@ -157,7 +167,7 @@ router.post(
           (r) => `PLT-${String(r.seq).padStart(5, "0")}`
         );
 
-        const batteryRows = (batteries as BatteryInput[]).map((b, idx) => ({
+        const batteryRows = batteryInputs.map((b, idx) => ({
           jobId: job.id,
           palletNumber: palletNumbers[idx],
           assetNumber: b.assetNumber || null,
@@ -166,6 +176,7 @@ router.post(
           cellType: b.cellType || null,
           voltage: b.voltage || null,
           looseCellsQty: b.looseCellsQty ? parseInt(String(b.looseCellsQty), 10) : null,
+          estimatedWeightKg: b.estimatedWeightKg ? String(b.estimatedWeightKg) : null,
           notes: b.notes || null,
         }));
 

@@ -20,6 +20,10 @@ import {
   TrendingUp,
   Eye,
   EyeOff,
+  Weight,
+  Plus,
+  Pencil,
+  X,
 } from "lucide-react";
 
 interface UserProfile {
@@ -62,6 +66,7 @@ const TABS = [
   { id: "profile", label: "Profile", icon: User },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "security", label: "Security", icon: ShieldCheck },
+  { id: "weights", label: "Battery Weights", icon: Weight },
   { id: "system", label: "System", icon: Settings },
 ] as const;
 
@@ -552,6 +557,288 @@ function SecurityTab({ user }: { user: UserProfile }) {
   );
 }
 
+interface WeightRef {
+  id: number;
+  cellType: string;
+  voltage: string | null;
+  weightKg: string;
+}
+
+function WeightsTab() {
+  const { toast } = useToast();
+  const [refs, setRefs] = useState<WeightRef[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editWeight, setEditWeight] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [newCellType, setNewCellType] = useState("");
+  const [newVoltage, setNewVoltage] = useState("");
+  const [newWeight, setNewWeight] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const fetchRefs = useCallback(async () => {
+    try {
+      const res = await fetch("/api/weight-reference", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setRefs(data.references);
+      }
+    } catch {}
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchRefs(); }, [fetchRefs]);
+
+  async function handleUpdate(id: number) {
+    const kg = parseFloat(editWeight);
+    if (isNaN(kg) || kg < 0) {
+      toast({ title: "Error", description: "Weight must be a positive number", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/weight-reference/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ weightKg: kg }),
+      });
+      if (res.ok) {
+        toast({ title: "Updated", description: "Weight reference updated successfully." });
+        setEditingId(null);
+        fetchRefs();
+      } else {
+        const data = await res.json();
+        toast({ title: "Error", description: data.message || "Failed to update", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to update weight reference", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAdd() {
+    if (!newCellType || !newWeight) {
+      toast({ title: "Error", description: "Cell type and weight are required", variant: "destructive" });
+      return;
+    }
+    const kg = parseFloat(newWeight);
+    if (isNaN(kg) || kg < 0) {
+      toast({ title: "Error", description: "Weight must be a positive number", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/weight-reference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ cellType: newCellType, voltage: newVoltage || null, weightKg: kg }),
+      });
+      if (res.ok) {
+        toast({ title: "Added", description: "Weight reference added successfully." });
+        setShowAdd(false);
+        setNewCellType("");
+        setNewVoltage("");
+        setNewWeight("");
+        fetchRefs();
+      } else {
+        const data = await res.json();
+        toast({ title: "Error", description: data.message || "Failed to add", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to add weight reference", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(id: number) {
+    try {
+      const res = await fetch(`/api/weight-reference/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (res.ok) {
+        toast({ title: "Deleted", description: "Weight reference removed." });
+        fetchRefs();
+      } else {
+        toast({ title: "Error", description: "Failed to delete", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to delete weight reference", variant: "destructive" });
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center text-slate-500">
+        Loading weight references...
+      </div>
+    );
+  }
+
+  const grouped: Record<string, WeightRef[]> = {};
+  for (const r of refs) {
+    if (!grouped[r.cellType]) grouped[r.cellType] = [];
+    grouped[r.cellType].push(r);
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-[#0f2744] flex items-center gap-2">
+              <Weight className="w-5 h-5 text-[#0ea5e9]" />
+              Battery Weight References
+            </h3>
+            <p className="text-sm text-slate-500 mt-1">Default weights used to auto-populate the depot collection form</p>
+          </div>
+          <Button
+            size="sm"
+            className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
+            onClick={() => setShowAdd(!showAdd)}
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Add Entry
+          </Button>
+        </div>
+
+        {showAdd && (
+          <div className="px-6 py-4 bg-sky-50 border-b border-sky-100">
+            <div className="flex items-end gap-3 flex-wrap">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Cell Type</label>
+                <Input
+                  value={newCellType}
+                  onChange={(e) => setNewCellType(e.target.value)}
+                  placeholder="e.g., PZB"
+                  className="w-32 h-9 border-slate-200 text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Voltage</label>
+                <Input
+                  value={newVoltage}
+                  onChange={(e) => setNewVoltage(e.target.value)}
+                  placeholder="e.g., 24V (or blank)"
+                  className="w-40 h-9 border-slate-200 text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Weight (kg)</label>
+                <Input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  value={newWeight}
+                  onChange={(e) => setNewWeight(e.target.value)}
+                  placeholder="e.g., 360"
+                  className="w-32 h-9 border-slate-200 text-sm"
+                />
+              </div>
+              <Button
+                size="sm"
+                className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white h-9"
+                onClick={handleAdd}
+                disabled={saving}
+              >
+                {saving ? "Adding..." : "Add"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 border-slate-200"
+                onClick={() => setShowAdd(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="divide-y divide-slate-100">
+          {Object.entries(grouped).map(([cellType, entries]) => (
+            <div key={cellType} className="px-6 py-4">
+              <h4 className="text-sm font-semibold text-[#0f2744] mb-3">{cellType}</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {entries.map((ref) => (
+                  <div
+                    key={ref.id}
+                    className="flex items-center justify-between bg-slate-50 rounded-lg px-4 py-3 border border-slate-100"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">
+                        {ref.voltage || "Per Unit"}
+                      </p>
+                      {editingId === ref.id ? (
+                        <div className="flex items-center gap-2 mt-1">
+                          <Input
+                            type="number"
+                            step="0.001"
+                            min="0"
+                            value={editWeight}
+                            onChange={(e) => setEditWeight(e.target.value)}
+                            className="w-24 h-7 text-xs border-slate-200"
+                          />
+                          <span className="text-xs text-slate-500">kg</span>
+                          <Button
+                            size="sm"
+                            className="h-7 px-2 text-xs bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
+                            onClick={() => handleUpdate(ref.id)}
+                            disabled={saving}
+                          >
+                            <Save className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2 text-xs border-slate-200"
+                            onClick={() => setEditingId(null)}
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="text-lg font-bold text-[#0f2744]">
+                          {parseFloat(ref.weightKg).toLocaleString("en-GB")} kg
+                        </p>
+                      )}
+                    </div>
+                    {editingId !== ref.id && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => { setEditingId(ref.id); setEditWeight(ref.weightKg); }}
+                          className="p-1.5 text-slate-400 hover:text-[#0ea5e9] rounded transition-colors"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(ref.id)}
+                          className="p-1.5 text-slate-400 hover:text-red-500 rounded transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {refs.length === 0 && (
+            <div className="px-6 py-12 text-center text-slate-500">
+              No weight references configured. Add entries to enable auto-populate on the depot form.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SystemTab() {
   const { toast } = useToast();
   const [settings, setSettings] = useState<SystemSettings | null>(null);
@@ -750,7 +1037,7 @@ export default function SettingsPage() {
   useEffect(() => { fetchUser(); }, [fetchUser]);
 
   const isAdmin = user?.role === "head_office_admin";
-  const visibleTabs = isAdmin ? TABS : TABS.filter((t) => t.id !== "system");
+  const visibleTabs = isAdmin ? TABS : TABS.filter((t) => t.id !== "system" && t.id !== "weights");
 
   return (
     <SidebarLayout
@@ -789,6 +1076,7 @@ export default function SettingsPage() {
               )}
               {activeTab === "notifications" && <NotificationsTab />}
               {activeTab === "security" && <SecurityTab user={user} />}
+              {activeTab === "weights" && isAdmin && <WeightsTab />}
               {activeTab === "system" && isAdmin && <SystemTab />}
             </>
           )}
