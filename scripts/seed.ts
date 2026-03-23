@@ -1,7 +1,8 @@
 import { db } from "@workspace/db";
-import { usersTable, jobsTable, jobBatteriesTable, lmePricesTable, systemSettingsTable, batteryWeightReferenceTable, stillageMovementsTable } from "@workspace/db/schema";
+import { usersTable, jobsTable, jobBatteriesTable, lmePricesTable, systemSettingsTable, batteryWeightReferenceTable, stillageMovementsTable, cellModelsTable } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
+import { CELL_MODEL_DATA } from "@workspace/db/data/cell-models";
 
 async function seed() {
   const password = await bcrypt.hash("password123", 10);
@@ -297,6 +298,34 @@ async function seed() {
     await db.insert(stillageMovementsTable).values(sm).onConflictDoNothing();
   }
   console.log(`Seeded ${stillageData.length} stillage movements`);
+
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS cell_models (
+      id SERIAL PRIMARY KEY,
+      model_name VARCHAR(100) NOT NULL UNIQUE,
+      cell_family VARCHAR(50) NOT NULL,
+      cell_height_mm INTEGER NOT NULL,
+      cells_count INTEGER NOT NULL,
+      weight_per_cell_kg DECIMAL(10,3) NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL
+    )
+  `);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family ON cell_models (cell_family)`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family_height ON cell_models (cell_family, cell_height_mm)`);
+
+  await db.delete(cellModelsTable);
+  const batchSize = 50;
+  for (let i = 0; i < CELL_MODEL_DATA.length; i += batchSize) {
+    const batch = CELL_MODEL_DATA.slice(i, i + batchSize).map(cm => ({
+      modelName: cm.modelName,
+      cellFamily: cm.cellFamily,
+      cellHeightMm: cm.cellHeightMm,
+      cellsCount: cm.cellsCount,
+      weightPerCellKg: String(cm.weightPerCellKg),
+    }));
+    await db.insert(cellModelsTable).values(batch).onConflictDoNothing();
+  }
+  console.log(`Seeded ${CELL_MODEL_DATA.length} cell model entries`);
 
   process.exit(0);
 }

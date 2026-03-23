@@ -44,13 +44,17 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 - Indexes: status, submitted_at, composite (status, submitted_at)
 
 ### job_batteries
-- id, job_id (FK → jobs, cascade delete), pallet_number, asset_number, battery_serial, manufacture, cell_type (PZB/PZS/PZV/Blocs/Other), voltage (dropdown: 12V/24V/36V/48V/80V), loose_cells_qty (integer), estimated_weight_kg (decimal), notes
+- id, job_id (FK → jobs, cascade delete), pallet_number, asset_number, battery_serial, manufacture, cell_type (cell model name e.g. "5 PzS 775" or legacy PZB/PZS/PZV/Blocs/Other), voltage (dropdown: 12V/24V/36V/48V/80V), loose_cells_qty (integer), estimated_weight_kg (decimal), notes
 - Admin fields: receipt_confirmed (boolean), pb_content_kg (decimal), value_gbp (decimal), admin_notes (text)
 - pallet_number is auto-generated server-side as PLT-XXXXX using PostgreSQL sequence `pallet_number_seq`
-- estimated_weight_kg auto-populated from battery_weight_reference table on depot form
-- created_at
-- Index: job_id
-- Each job can have multiple battery line items (matches the spreadsheet grid)
+- estimated_weight_kg auto-populated from cell_models table (weight_per_cell × voltage/2) or battery_weight_reference fallback
+
+### cell_models
+- id, model_name (unique, e.g. "5 PzS 775"), cell_family (30 families: EPzS/IPzS/PzS/PzS-ET/MDL/PzB/HPzS/PzV/etc.), cell_height_mm, cells_count, weight_per_cell_kg, created_at
+- 2003 entries extracted from the Data Validation sheet of the client spreadsheet, covering 9 manufacturers and 30 cell families
+- Weight formula: total_weight = weight_per_cell_kg × (voltage / 2)
+- Seeded from lib/db/src/data/cell-models.ts (static data extracted from spreadsheet)
+- API: GET/POST /api/cell-models, GET /api/cell-models/lookup, PATCH/DELETE /api/cell-models/:id
 
 ### battery_weight_reference
 - id, cell_type (varchar), voltage (varchar, nullable), weight_kg (decimal), created_at

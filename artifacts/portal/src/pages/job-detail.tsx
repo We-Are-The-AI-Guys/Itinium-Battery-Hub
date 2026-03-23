@@ -66,6 +66,7 @@ interface BatteryData {
   pbContentKg: string | null;
   valueGbp: string | null;
   adminNotes: string | null;
+  estimatedWeightKg: string | null;
 }
 
 const statusStyles: Record<string, string> = {
@@ -628,6 +629,36 @@ function BatteryAdminRow({
   const [pb, setPb] = useState(battery.pbContentKg || "");
   const [value, setValue] = useState(battery.valueGbp || "");
   const [notes, setNotes] = useState(battery.adminNotes || "");
+  const [autoCalculating, setAutoCalculating] = useState(false);
+
+  async function autoCalculatePb() {
+    if (!battery.cellType || !battery.voltage) return;
+    setAutoCalculating(true);
+    try {
+      const params = new URLSearchParams();
+      const legacyTypes = ["PZB", "PZS", "PZV", "Blocs", "Other"];
+      if (legacyTypes.includes(battery.cellType)) {
+        params.set("cellType", battery.cellType);
+      } else {
+        params.set("cellModel", battery.cellType);
+      }
+      params.set("voltage", battery.voltage);
+      const res = await fetch(`/api/weight-reference/lookup?${params}`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.reference?.weightKg) {
+          setPb(data.reference.weightKg);
+        }
+      }
+    } catch {}
+    setAutoCalculating(false);
+  }
+
+  useEffect(() => {
+    if (!pb && battery.cellType && battery.voltage && !battery.pbContentKg) {
+      autoCalculatePb();
+    }
+  }, []);
 
   return (
     <tr className={index % 2 === 0 ? "bg-white" : "bg-slate-50/30"}>
@@ -641,18 +672,36 @@ function BatteryAdminRow({
       <td className="px-3 py-2.5 text-center">
         <Switch
           checked={receipt}
-          onCheckedChange={setReceipt}
+          onCheckedChange={(checked) => {
+            setReceipt(checked);
+            if (checked && !pb) {
+              autoCalculatePb();
+            }
+          }}
         />
       </td>
       <td className="px-3 py-2.5">
-        <Input
-          type="number"
-          step="0.001"
-          placeholder="0.000"
-          className="h-8 w-24 text-sm bg-slate-50"
-          value={pb}
-          onChange={(e) => setPb(e.target.value)}
-        />
+        <div className="flex items-center gap-1">
+          <Input
+            type="number"
+            step="0.001"
+            placeholder="0.000"
+            className="h-8 w-24 text-sm bg-slate-50"
+            value={pb}
+            onChange={(e) => setPb(e.target.value)}
+          />
+          {battery.cellType && battery.voltage && (
+            <button
+              type="button"
+              onClick={autoCalculatePb}
+              disabled={autoCalculating}
+              className="text-[10px] text-[#0ea5e9] hover:underline whitespace-nowrap"
+              title="Auto-calculate from cell model"
+            >
+              {autoCalculating ? "..." : "auto"}
+            </button>
+          )}
+        </div>
       </td>
       <td className="px-3 py-2.5">
         <Input

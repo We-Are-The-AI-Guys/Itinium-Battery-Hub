@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "wouter";
 import {
   Package,
@@ -21,6 +21,8 @@ import {
   Layers,
   Check,
   ChevronsUpDown,
+  Search,
+  ChevronDown,
 } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Button } from "@/components/ui/button";
@@ -48,6 +50,15 @@ import {
 } from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
 
+interface CellModelOption {
+  id: number;
+  modelName: string;
+  cellFamily: string;
+  cellHeightMm: number;
+  cellsCount: number;
+  weightPerCellKg: string;
+}
+
 interface BatteryRow {
   id: string;
   assetNumber: string;
@@ -55,6 +66,7 @@ interface BatteryRow {
   manufacture: string;
   manufactureCustom: string;
   cellType: string;
+  cellModel: string;
   voltage: string;
   customVoltage: string;
   looseCellsQty: string;
@@ -79,6 +91,7 @@ function createEmptyBattery(): BatteryRow {
     manufacture: "",
     manufactureCustom: "",
     cellType: "",
+    cellModel: "",
     voltage: "",
     customVoltage: "",
     looseCellsQty: "",
@@ -88,11 +101,9 @@ function createEmptyBattery(): BatteryRow {
   };
 }
 
-const CELL_TYPES = [
-  { value: "PZB", label: "PZB" },
-  { value: "PZS", label: "PZS" },
-  { value: "PZV", label: "PZV" },
-  { value: "Blocs", label: "Blocs" },
+const LEGACY_CELL_TYPES = ["PZB", "PZS", "PZV"];
+const SPECIAL_TYPES = [
+  { value: "Blocs", label: "Blocs (Loose Cells)" },
   { value: "Other", label: "Other" },
 ];
 
@@ -137,6 +148,7 @@ export default function DepotFormPage() {
   const [tonnageManual, setTonnageManual] = useState(false);
   const [manufacturers, setManufacturers] = useState<string[]>(DEFAULT_MANUFACTURERS);
   const [mfrPopoverOpen, setMfrPopoverOpen] = useState<Record<string, boolean>>({});
+  const [cellModels, setCellModels] = useState<CellModelOption[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -154,9 +166,20 @@ export default function DepotFormPage() {
       .catch(() => {});
   }, []);
 
-  async function fetchWeightFromApi(cellType: string, voltage: string | null): Promise<string> {
-    if (!cellType) return "";
-    const params = new URLSearchParams({ cellType });
+  useEffect(() => {
+    fetch("/api/cell-models", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.models) setCellModels(data.models);
+      })
+      .catch(() => {});
+  }, []);
+
+  async function fetchWeightFromApi(cellType: string, voltage: string | null, cellModel?: string): Promise<string> {
+    if (!cellType && !cellModel) return "";
+    const params = new URLSearchParams();
+    if (cellModel) params.set("cellModel", cellModel);
+    if (cellType) params.set("cellType", cellType);
     if (voltage) params.set("voltage", voltage);
     try {
       const res = await fetch(`/api/weight-reference/lookup?${params}`, { credentials: "include" });
@@ -184,6 +207,8 @@ export default function DepotFormPage() {
       }
     } else if (battery.cellType === "Other") {
       weight = await fetchWeightFromApi("Other", null);
+    } else if (battery.cellModel && battery.voltage) {
+      weight = await fetchWeightFromApi("", battery.voltage, battery.cellModel);
     } else if (battery.cellType && battery.voltage) {
       const effectiveVoltage = battery.voltage === "Other" ? battery.customVoltage : battery.voltage;
       if (effectiveVoltage) {
@@ -228,8 +253,21 @@ export default function DepotFormPage() {
 
   function updateBattery(id: string, field: keyof BatteryRow, value: string) {
     setBatteries((prev) => {
-      const updated = prev.map((b) => (b.id === id ? { ...b, [field]: value } : b));
-      if (field === "cellType" || field === "voltage" || field === "looseCellsQty" || field === "customVoltage") {
+      const updated = prev.map((b) => {
+        if (b.id !== id) return b;
+        const newB = { ...b, [field]: value };
+        if (field === "cellType" && (value === "Blocs" || value === "Other")) {
+          newB.cellModel = "";
+        }
+        if (field === "cellModel") {
+          const model = cellModels.find((m) => m.modelName === value);
+          if (model) {
+            newB.cellType = model.cellFamily;
+          }
+        }
+        return newB;
+      });
+      if (field === "cellType" || field === "cellModel" || field === "voltage" || field === "looseCellsQty" || field === "customVoltage") {
         const battery = updated.find((b) => b.id === id);
         if (battery && !battery.weightManual) {
           computeAndSetAutoWeight(battery);
@@ -291,7 +329,7 @@ export default function DepotFormPage() {
             assetNumber: b.assetNumber || null,
             batterySerial: b.batterySerial || null,
             manufacture: b.manufacture === "Other" ? (b.manufactureCustom || "Other") : (b.manufacture || null),
-            cellType: b.cellType || null,
+            cellType: b.cellModel || b.cellType || null,
             voltage: (b.voltage === "Other" ? b.customVoltage : b.voltage) || null,
             looseCellsQty: b.looseCellsQty || null,
             estimatedWeightKg: b.estimatedWeightKg || null,
@@ -659,28 +697,34 @@ export default function DepotFormPage() {
                     )}
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
                     <label className="text-xs font-medium text-slate-600">
-                      Type of Cells
+                      Type of Cells / Cell Model
                     </label>
-                    <Select
-                      value={battery.cellType}
-                      onValueChange={(val) => updateBattery(battery.id, "cellType", val)}
-                    >
-                      <SelectTrigger className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus:ring-[#0ea5e9]">
-                        <div className="flex items-center gap-2">
-                          <Layers className="h-3.5 w-3.5 text-slate-400" />
-                          <SelectValue placeholder="Select type..." />
-                        </div>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CELL_TYPES.map((ct) => (
-                          <SelectItem key={ct.value} value={ct.value}>
-                            {ct.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <CellModelCombobox
+                      cellModels={cellModels}
+                      value={battery.cellModel || battery.cellType}
+                      onChange={(val, isModel) => {
+                        if (isModel) {
+                          updateBattery(battery.id, "cellModel", val);
+                        } else {
+                          setBatteries((prev) =>
+                            prev.map((b) =>
+                              b.id === battery.id
+                                ? { ...b, cellType: val, cellModel: "" }
+                                : b
+                            )
+                          );
+                          const updated = { ...battery, cellType: val, cellModel: "" };
+                          if (!updated.weightManual) computeAndSetAutoWeight(updated);
+                        }
+                      }}
+                    />
+                    {battery.cellModel && (
+                      <p className="text-[10px] text-emerald-600">
+                        Cell model selected &mdash; weight = {cellModels.find(m => m.modelName === battery.cellModel)?.weightPerCellKg || "?"} kg/cell
+                      </p>
+                    )}
                   </div>
 
                   {battery.cellType !== "Blocs" && battery.cellType !== "Other" && (
@@ -1001,6 +1045,160 @@ export default function DepotFormPage() {
           </Button>
         </div>
       </footer>
+    </div>
+  );
+}
+
+function CellModelCombobox({
+  cellModels,
+  value,
+  onChange,
+}: {
+  cellModels: CellModelOption[];
+  value: string;
+  onChange: (value: string, isModel: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredModels = useMemo(() => {
+    if (!search.trim()) return cellModels.slice(0, 50);
+    const q = search.toLowerCase().replace(/\s+/g, "");
+    return cellModels
+      .filter((m) => m.modelName.toLowerCase().replace(/\s+/g, "").includes(q) || m.cellFamily.toLowerCase().includes(q))
+      .slice(0, 50);
+  }, [cellModels, search]);
+
+  const groupedModels = useMemo(() => {
+    const groups: Record<string, CellModelOption[]> = {};
+    for (const m of filteredModels) {
+      if (!groups[m.cellFamily]) groups[m.cellFamily] = [];
+      groups[m.cellFamily].push(m);
+    }
+    return groups;
+  }, [filteredModels]);
+
+  const displayValue = value || "";
+  const isSpecial = value === "Blocs" || value === "Other";
+  const isLegacy = LEGACY_CELL_TYPES.includes(value);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div
+        className={`flex items-center h-10 bg-slate-50 border rounded-md px-3 gap-2 cursor-pointer transition-colors ${
+          open ? "border-[#0ea5e9] ring-2 ring-[#0ea5e9]/20" : "border-slate-200 hover:border-slate-300"
+        }`}
+        onClick={() => {
+          setOpen(true);
+          setTimeout(() => inputRef.current?.focus(), 0);
+        }}
+      >
+        <Layers className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+        {open ? (
+          <input
+            ref={inputRef}
+            type="text"
+            className="flex-1 bg-transparent text-sm text-[#1e293b] outline-none placeholder:text-slate-400"
+            placeholder="Search cell models (e.g. 5 PzS 775)..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setOpen(false);
+                setSearch("");
+              }
+            }}
+          />
+        ) : (
+          <span className={`flex-1 text-sm truncate ${displayValue ? "text-[#1e293b]" : "text-slate-400"}`}>
+            {displayValue || "Select cell model or type..."}
+          </span>
+        )}
+        <ChevronDown className={`h-3.5 w-3.5 text-slate-400 flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+      </div>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-[300px] overflow-y-auto">
+          <div className="p-1.5 border-b border-slate-100">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-2 py-1">Special Types</p>
+            {SPECIAL_TYPES.map((st) => (
+              <button
+                key={st.value}
+                type="button"
+                className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${
+                  value === st.value ? "bg-[#0ea5e9]/10 text-[#0ea5e9] font-medium" : "text-slate-700 hover:bg-slate-50"
+                }`}
+                onClick={() => {
+                  onChange(st.value, false);
+                  setOpen(false);
+                  setSearch("");
+                }}
+              >
+                {st.label}
+              </button>
+            ))}
+            {LEGACY_CELL_TYPES.map((lt) => (
+              <button
+                key={lt}
+                type="button"
+                className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${
+                  value === lt && !cellModels.find(m => m.modelName === value) ? "bg-[#0ea5e9]/10 text-[#0ea5e9] font-medium" : "text-slate-700 hover:bg-slate-50"
+                }`}
+                onClick={() => {
+                  onChange(lt, false);
+                  setOpen(false);
+                  setSearch("");
+                }}
+              >
+                {lt} (legacy fallback)
+              </button>
+            ))}
+          </div>
+
+          {Object.keys(groupedModels).length > 0 ? (
+            <div className="p-1.5">
+              {Object.entries(groupedModels).map(([family, models]) => (
+                <div key={family}>
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-2 py-1.5 mt-1">{family}</p>
+                  {models.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className={`w-full text-left px-3 py-1.5 text-sm rounded-md transition-colors flex items-center justify-between ${
+                        value === m.modelName ? "bg-[#0ea5e9]/10 text-[#0ea5e9] font-medium" : "text-slate-700 hover:bg-slate-50"
+                      }`}
+                      onClick={() => {
+                        onChange(m.modelName, true);
+                        setOpen(false);
+                        setSearch("");
+                      }}
+                    >
+                      <span>{m.modelName}</span>
+                      <span className="text-[10px] text-slate-400 ml-2">{m.weightPerCellKg} kg/cell &middot; {m.cellHeightMm}mm</span>
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-4 text-center text-sm text-slate-400">
+              {search ? "No matching cell models found" : "Loading cell models..."}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

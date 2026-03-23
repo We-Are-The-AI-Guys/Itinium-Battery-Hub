@@ -8,6 +8,7 @@ import settingsRouter from "./settings";
 import weightReferenceRouter from "./weight-reference";
 import manufacturersRouter from "./manufacturers";
 import stillagesRouter from "./stillages";
+import cellModelsRouter from "./cell-models";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(settingsRouter);
 router.use(weightReferenceRouter);
 router.use(manufacturersRouter);
 router.use(stillagesRouter);
+router.use(cellModelsRouter);
 
 export default router;

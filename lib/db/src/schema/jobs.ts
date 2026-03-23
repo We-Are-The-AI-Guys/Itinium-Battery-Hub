@@ -48,7 +48,7 @@ export const jobBatteriesTable = pgTable("job_batteries", {
   assetNumber: varchar("asset_number", { length: 100 }),
   batterySerial: varchar("battery_serial", { length: 100 }),
   manufacture: varchar("manufacture", { length: 255 }),
-  cellType: varchar("cell_type", { length: 50 }),
+  cellType: varchar("cell_type", { length: 100 }),
   voltage: varchar("voltage", { length: 50 }),
   looseCellsQty: integer("loose_cells_qty"),
   notes: text("notes"),
@@ -90,3 +90,19 @@ export const batteryWeightReferenceTable = pgTable("battery_weight_reference", {
 });
 
 export type BatteryWeightReference = typeof batteryWeightReferenceTable.$inferSelect;
+
+export const cellModelsTable = pgTable("cell_models", {
+  id: serial("id").primaryKey(),
+  modelName: varchar("model_name", { length: 100 }).notNull().unique(),
+  cellFamily: varchar("cell_family", { length: 50 }).notNull(),
+  cellHeightMm: integer("cell_height_mm").notNull(),
+  cellsCount: integer("cells_count").notNull(),
+  weightPerCellKg: decimal("weight_per_cell_kg", { precision: 10, scale: 3 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_cell_models_family").on(table.cellFamily),
+  index("idx_cell_models_family_height").on(table.cellFamily, table.cellHeightMm),
+]);
+
+export type CellModel = typeof cellModelsTable.$inferSelect;
+export type InsertCellModel = typeof cellModelsTable.$inferInsert;

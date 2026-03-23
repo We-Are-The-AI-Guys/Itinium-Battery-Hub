@@ -35,6 +35,25 @@ async function bootstrap() {
   }
 
   try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS cell_models (
+        id SERIAL PRIMARY KEY,
+        model_name VARCHAR(100) NOT NULL UNIQUE,
+        cell_family VARCHAR(50) NOT NULL,
+        cell_height_mm INTEGER NOT NULL,
+        cells_count INTEGER NOT NULL,
+        weight_per_cell_kg DECIMAL(10,3) NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      )
+    `);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family ON cell_models (cell_family)`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family_height ON cell_models (cell_family, cell_height_mm)`);
+    await db.execute(sql`ALTER TABLE job_batteries ALTER COLUMN cell_type TYPE VARCHAR(100)`);
+  } catch (err) {
+    console.error("Bootstrap: failed to create cell_models table:", err);
+  }
+
+  try {
     const [{ value: userCount }] = await db.select({ value: count() }).from(usersTable);
     if (userCount === 0) {
       console.log("No users found — creating default admin user...");

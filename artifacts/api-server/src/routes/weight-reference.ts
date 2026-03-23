@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { batteryWeightReferenceTable } from "@workspace/db/schema";
+import { batteryWeightReferenceTable, cellModelsTable } from "@workspace/db/schema";
 import { eq, and, isNull, sql } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 
@@ -29,13 +29,43 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res) => {
     try {
-      const { cellType, voltage } = req.query;
-      if (!cellType) {
-        res.status(400).json({ message: "cellType is required" });
+      const { cellType, voltage, cellModel } = req.query;
+
+      if (cellModel && typeof cellModel === "string" && voltage) {
+        const voltageNum = parseInt(String(voltage).replace(/[^0-9]/g, ""), 10);
+        if (isNaN(voltageNum) || voltageNum <= 0 || voltageNum % 2 !== 0) {
+          res.status(400).json({ message: "voltage must be a valid even positive number (e.g. 12V, 24V, 48V)" });
+          return;
+        }
+
+        const [model] = await db
+          .select()
+          .from(cellModelsTable)
+          .where(eq(cellModelsTable.modelName, cellModel));
+
+        if (model) {
+          const numCells = voltageNum / 2;
+          const totalWeight = parseFloat(model.weightPerCellKg) * numCells;
+          res.json({
+            reference: {
+              id: model.id,
+              cellType: model.modelName,
+              voltage: voltage as string,
+              weightKg: totalWeight.toFixed(3),
+            },
+            cellModel: model,
+          });
+          return;
+        }
+      }
+
+      const lookupType = cellType || cellModel;
+      if (!lookupType) {
+        res.status(400).json({ message: "cellType or cellModel is required" });
         return;
       }
 
-      const conditions = [eq(batteryWeightReferenceTable.cellType, cellType as string)];
+      const conditions = [eq(batteryWeightReferenceTable.cellType, lookupType as string)];
       if (voltage) {
         conditions.push(eq(batteryWeightReferenceTable.voltage, voltage as string));
       } else {

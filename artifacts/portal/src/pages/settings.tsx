@@ -564,9 +564,19 @@ interface WeightRef {
   weightKg: string;
 }
 
+interface CellModelData {
+  id: number;
+  modelName: string;
+  cellFamily: string;
+  cellHeightMm: number;
+  cellsCount: number;
+  weightPerCellKg: string;
+}
+
 function WeightsTab() {
   const { toast } = useToast();
   const [refs, setRefs] = useState<WeightRef[]>([]);
+  const [cellModels, setCellModels] = useState<CellModelData[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editWeight, setEditWeight] = useState("");
@@ -575,6 +585,17 @@ function WeightsTab() {
   const [newVoltage, setNewVoltage] = useState("");
   const [newWeight, setNewWeight] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const [cmEditingId, setCmEditingId] = useState<number | null>(null);
+  const [cmEditWeight, setCmEditWeight] = useState("");
+  const [cmShowAdd, setCmShowAdd] = useState(false);
+  const [cmNewName, setCmNewName] = useState("");
+  const [cmNewFamily, setCmNewFamily] = useState("");
+  const [cmNewHeight, setCmNewHeight] = useState("");
+  const [cmNewCells, setCmNewCells] = useState("");
+  const [cmNewWeight, setCmNewWeight] = useState("");
+  const [cmSearch, setCmSearch] = useState("");
+  const [cmFamilyFilter, setCmFamilyFilter] = useState("");
 
   const fetchRefs = useCallback(async () => {
     try {
@@ -587,7 +608,17 @@ function WeightsTab() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchRefs(); }, [fetchRefs]);
+  const fetchCellModels = useCallback(async () => {
+    try {
+      const res = await fetch("/api/cell-models", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setCellModels(data.models);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchRefs(); fetchCellModels(); }, [fetchRefs, fetchCellModels]);
 
   async function handleUpdate(id: number) {
     const kg = parseFloat(editWeight);
@@ -671,12 +702,107 @@ function WeightsTab() {
     }
   }
 
+  async function handleCmUpdate(id: number) {
+    const kg = parseFloat(cmEditWeight);
+    if (isNaN(kg) || kg < 0) {
+      toast({ title: "Error", description: "Weight must be a positive number", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/cell-models/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ weightPerCellKg: kg }),
+      });
+      if (res.ok) {
+        toast({ title: "Updated", description: "Cell model weight updated." });
+        setCmEditingId(null);
+        fetchCellModels();
+      } else {
+        const data = await res.json();
+        toast({ title: "Error", description: data.message || "Failed to update", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to update cell model", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleCmAdd() {
+    if (!cmNewName || !cmNewFamily || !cmNewHeight || !cmNewCells || !cmNewWeight) {
+      toast({ title: "Error", description: "All fields are required", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/cell-models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          modelName: cmNewName,
+          cellFamily: cmNewFamily,
+          cellHeightMm: parseInt(cmNewHeight, 10),
+          cellsCount: parseInt(cmNewCells, 10),
+          weightPerCellKg: parseFloat(cmNewWeight),
+        }),
+      });
+      if (res.ok) {
+        toast({ title: "Added", description: "Cell model added successfully." });
+        setCmShowAdd(false);
+        setCmNewName(""); setCmNewFamily(""); setCmNewHeight(""); setCmNewCells(""); setCmNewWeight("");
+        fetchCellModels();
+      } else {
+        const data = await res.json();
+        toast({ title: "Error", description: data.message || "Failed to add", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to add cell model", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleCmDelete(id: number) {
+    try {
+      const res = await fetch(`/api/cell-models/${id}`, { method: "DELETE", credentials: "include" });
+      if (res.ok) {
+        toast({ title: "Deleted", description: "Cell model removed." });
+        fetchCellModels();
+      } else {
+        toast({ title: "Error", description: "Failed to delete", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to delete cell model", variant: "destructive" });
+    }
+  }
+
   if (loading) {
     return (
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center text-slate-500">
         Loading weight references...
       </div>
     );
+  }
+
+  const families = [...new Set(cellModels.map((m) => m.cellFamily))].sort();
+  const filteredCellModels = cellModels.filter((m) => {
+    if (cmFamilyFilter && m.cellFamily !== cmFamilyFilter) return false;
+    if (cmSearch) {
+      const q = cmSearch.toLowerCase().replace(/\s+/g, "");
+      if (!m.modelName.toLowerCase().replace(/\s+/g, "").includes(q)) return false;
+    }
+    return true;
+  });
+
+  const cmGrouped: Record<string, CellModelData[]> = {};
+  for (const m of filteredCellModels) {
+    const key = `${m.cellFamily} — ${m.cellHeightMm}mm`;
+    if (!cmGrouped[key]) cmGrouped[key] = [];
+    cmGrouped[key].push(m);
   }
 
   const grouped: Record<string, WeightRef[]> = {};
@@ -692,9 +818,128 @@ function WeightsTab() {
           <div>
             <h3 className="text-lg font-bold text-[#0f2744] flex items-center gap-2">
               <Weight className="w-5 h-5 text-[#0ea5e9]" />
-              Battery Weight References
+              Cell Model Reference Data
             </h3>
-            <p className="text-sm text-slate-500 mt-1">Default weights used to auto-populate the depot collection form</p>
+            <p className="text-sm text-slate-500 mt-1">
+              Granular cell model weights used for Pb Content calculation ({cellModels.length} models)
+            </p>
+          </div>
+          <Button
+            size="sm"
+            className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
+            onClick={() => setCmShowAdd(!cmShowAdd)}
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Add Model
+          </Button>
+        </div>
+
+        {cmShowAdd && (
+          <div className="px-6 py-4 bg-sky-50 border-b border-sky-100">
+            <div className="flex items-end gap-3 flex-wrap">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Model Name</label>
+                <Input value={cmNewName} onChange={(e) => setCmNewName(e.target.value)} placeholder="e.g., 5 PzS 775" className="w-36 h-9 border-slate-200 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Family</label>
+                <Input value={cmNewFamily} onChange={(e) => setCmNewFamily(e.target.value)} placeholder="e.g., PzS" className="w-24 h-9 border-slate-200 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Height (mm)</label>
+                <Input type="number" value={cmNewHeight} onChange={(e) => setCmNewHeight(e.target.value)} placeholder="e.g., 530" className="w-24 h-9 border-slate-200 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Cells</label>
+                <Input type="number" value={cmNewCells} onChange={(e) => setCmNewCells(e.target.value)} placeholder="e.g., 5" className="w-20 h-9 border-slate-200 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Wt/Cell (kg)</label>
+                <Input type="number" step="0.001" value={cmNewWeight} onChange={(e) => setCmNewWeight(e.target.value)} placeholder="e.g., 94" className="w-28 h-9 border-slate-200 text-sm" />
+              </div>
+              <Button size="sm" className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white h-9" onClick={handleCmAdd} disabled={saving}>
+                {saving ? "Adding..." : "Add"}
+              </Button>
+              <Button size="sm" variant="outline" className="h-9 border-slate-200" onClick={() => setCmShowAdd(false)}>Cancel</Button>
+            </div>
+          </div>
+        )}
+
+        <div className="px-6 py-3 bg-slate-50/50 border-b border-slate-100 flex items-center gap-3 flex-wrap">
+          <Input
+            placeholder="Search models..."
+            value={cmSearch}
+            onChange={(e) => setCmSearch(e.target.value)}
+            className="w-52 h-8 text-sm border-slate-200"
+          />
+          <select
+            value={cmFamilyFilter}
+            onChange={(e) => setCmFamilyFilter(e.target.value)}
+            className="h-8 text-sm border border-slate-200 rounded-md px-2 bg-white text-slate-700"
+          >
+            <option value="">All families</option>
+            {families.map((f) => (
+              <option key={f} value={f}>{f}</option>
+            ))}
+          </select>
+          <span className="text-xs text-slate-400">{filteredCellModels.length} shown</span>
+        </div>
+
+        <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
+          {Object.entries(cmGrouped).map(([groupKey, models]) => (
+            <div key={groupKey} className="px-6 py-3">
+              <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{groupKey}</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {models.map((cm) => (
+                  <div key={cm.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-[#0f2744] truncate">{cm.modelName}</p>
+                      {cmEditingId === cm.id ? (
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <Input type="number" step="0.001" min="0" value={cmEditWeight} onChange={(e) => setCmEditWeight(e.target.value)} className="w-20 h-6 text-xs border-slate-200" />
+                          <span className="text-[10px] text-slate-500">kg</span>
+                          <Button size="sm" className="h-6 px-1.5 text-[10px] bg-[#0ea5e9] hover:bg-[#0284c7] text-white" onClick={() => handleCmUpdate(cm.id)} disabled={saving}>
+                            <Save className="w-3 h-3" />
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" onClick={() => setCmEditingId(null)}>
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-500">{parseFloat(cm.weightPerCellKg).toFixed(1)} kg/cell &middot; {cm.cellsCount} plates</p>
+                      )}
+                    </div>
+                    {cmEditingId !== cm.id && (
+                      <div className="flex items-center gap-0.5 flex-shrink-0">
+                        <button onClick={() => { setCmEditingId(cm.id); setCmEditWeight(cm.weightPerCellKg); }} className="p-1 text-slate-400 hover:text-[#0ea5e9] rounded transition-colors">
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                        <button onClick={() => handleCmDelete(cm.id)} className="p-1 text-slate-400 hover:text-red-500 rounded transition-colors">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {filteredCellModels.length === 0 && (
+            <div className="px-6 py-8 text-center text-slate-500 text-sm">
+              {cmSearch || cmFamilyFilter ? "No matching cell models found" : "No cell models configured."}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-[#0f2744] flex items-center gap-2">
+              <Weight className="w-5 h-5 text-slate-400" />
+              Legacy Weight References (Fallback)
+            </h3>
+            <p className="text-sm text-slate-500 mt-1">Simple type+voltage weights used when no cell model is selected</p>
           </div>
           <Button
             size="sm"
