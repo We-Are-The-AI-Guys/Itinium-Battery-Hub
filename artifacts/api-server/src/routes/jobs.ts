@@ -118,7 +118,7 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res) => {
     try {
-      const { clientName, depot, collectionPoint, collectionDate, tonnage, notes, batteries } = req.body;
+      const { clientName, depot, collectionPoint, collectionDate, tonnage, tonnageManualOverride, notes, batteries } = req.body;
 
       if (!clientName || !depot) {
         res.status(400).json({ message: "Client name and depot are required" });
@@ -141,9 +141,10 @@ router.post(
         }
       }
       const parsedTonnage = tonnage ? parseFloat(String(tonnage)) : NaN;
-      const finalTonnage = (!isNaN(parsedTonnage) && isFinite(parsedTonnage))
+      const autoTonnageStr = (autoTonnage / 1000).toFixed(3);
+      const finalTonnage = (tonnageManualOverride && !isNaN(parsedTonnage) && isFinite(parsedTonnage))
         ? String(parsedTonnage)
-        : (autoTonnage / 1000).toFixed(3);
+        : autoTonnageStr;
 
       const result = await db.transaction(async (tx) => {
         const jobCount = await tx.select({ count: count() }).from(jobsTable);

@@ -132,7 +132,11 @@ router.patch(
       }
 
       res.json({ reference: updated });
-    } catch (error) {
+    } catch (error: unknown) {
+      if (error instanceof Error && "code" in error && (error as Record<string, unknown>).code === "23505") {
+        res.status(409).json({ message: "A weight reference for this cell type and voltage already exists" });
+        return;
+      }
       console.error("Weight reference update error:", error);
       res.status(500).json({ message: "Internal server error" });
     }

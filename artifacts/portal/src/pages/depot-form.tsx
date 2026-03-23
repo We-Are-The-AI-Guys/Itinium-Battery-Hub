@@ -225,6 +225,7 @@ export default function DepotFormPage() {
           collectionPoint: collectionPoint || null,
           collectionDate: collectionDate || null,
           tonnage: currentLoad > 0 ? currentLoad.toFixed(3) : "0.000",
+          tonnageManualOverride: tonnageManual,
           notes: jobNotes || null,
           batteries: batteries.map((b) => ({
             assetNumber: b.assetNumber || null,
