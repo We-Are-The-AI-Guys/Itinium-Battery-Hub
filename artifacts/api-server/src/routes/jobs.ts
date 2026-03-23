@@ -131,18 +131,21 @@ router.post(
       }
 
       const batteryInputs = batteries as BatteryInput[];
+
+      function sanitizeWeight(val: string | number | null | undefined): string | null {
+        if (val === null || val === undefined || val === "") return null;
+        const parsed = parseFloat(String(val));
+        return isFinite(parsed) && parsed >= 0 ? String(parsed) : null;
+      }
+
       let autoTonnage = 0;
       for (const b of batteryInputs) {
-        if (b.estimatedWeightKg) {
-          const parsed = parseFloat(String(b.estimatedWeightKg));
-          if (!isNaN(parsed) && isFinite(parsed)) {
-            autoTonnage += parsed;
-          }
-        }
+        const w = sanitizeWeight(b.estimatedWeightKg);
+        if (w !== null) autoTonnage += parseFloat(w);
       }
-      const parsedTonnage = tonnage ? parseFloat(String(tonnage)) : NaN;
       const autoTonnageStr = (autoTonnage / 1000).toFixed(3);
-      const finalTonnage = (tonnageManualOverride && !isNaN(parsedTonnage) && isFinite(parsedTonnage))
+      const parsedTonnage = tonnage ? parseFloat(String(tonnage)) : NaN;
+      const finalTonnage = (tonnageManualOverride && !isNaN(parsedTonnage) && isFinite(parsedTonnage) && parsedTonnage >= 0)
         ? String(parsedTonnage)
         : autoTonnageStr;
 
@@ -183,7 +186,7 @@ router.post(
           cellType: b.cellType || null,
           voltage: b.voltage || null,
           looseCellsQty: b.looseCellsQty ? parseInt(String(b.looseCellsQty), 10) : null,
-          estimatedWeightKg: (() => { const v = parseFloat(String(b.estimatedWeightKg)); return b.estimatedWeightKg && isFinite(v) && v >= 0 ? String(v) : null; })(),
+          estimatedWeightKg: sanitizeWeight(b.estimatedWeightKg),
           notes: b.notes || null,
         }));
 
