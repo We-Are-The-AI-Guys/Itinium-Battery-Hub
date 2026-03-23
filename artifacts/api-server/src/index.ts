@@ -7,8 +7,17 @@ import bcrypt from "bcrypt";
 async function bootstrap() {
   try {
     await db.execute(sql`CREATE SEQUENCE IF NOT EXISTS pallet_number_seq START WITH 1 INCREMENT BY 1`);
-    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_job_batteries_pallet_number ON job_batteries (pallet_number) WHERE pallet_number IS NOT NULL`);
+  } catch (err) {
+    console.error("Bootstrap: failed to create pallet_number_seq:", err);
+  }
 
+  try {
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_job_batteries_pallet_number ON job_batteries (pallet_number) WHERE pallet_number IS NOT NULL`);
+  } catch (err) {
+    console.error("Bootstrap: failed to create pallet_number unique index:", err);
+  }
+
+  try {
     const [{ value: userCount }] = await db.select({ value: count() }).from(usersTable);
     if (userCount === 0) {
       console.log("No users found — creating default admin user...");
@@ -22,7 +31,11 @@ async function bootstrap() {
       });
       console.log("Default admin user created: admin@itinium.co.uk");
     }
+  } catch (err) {
+    console.error("Bootstrap: failed to init default admin user:", err);
+  }
 
+  try {
     const [{ value: settingsCount }] = await db.select({ value: count() }).from(systemSettingsTable);
     if (settingsCount === 0) {
       await db.insert(systemSettingsTable).values({
@@ -34,7 +47,7 @@ async function bootstrap() {
       console.log("Default system settings created");
     }
   } catch (err) {
-    console.error("Bootstrap error:", err);
+    console.error("Bootstrap: failed to init system settings:", err);
   }
 }
 
