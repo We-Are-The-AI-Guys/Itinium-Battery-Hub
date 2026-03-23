@@ -76,7 +76,7 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 
 ### Jobs
 - `GET /api/jobs?status=X&invoiceStatus=X&search=X&limit=10&offset=0` — list jobs (requires role: team_leader/accounts/head_office_admin)
-- `GET /api/jobs/:id` — job detail with battery line items (requires auth, owner or admin)
+- `GET /api/jobs/:id` — job detail with battery line items (admin only: team_leader/accounts/head_office_admin)
 - `POST /api/jobs` — create job with battery items array (requires auth)
 - `PATCH /api/jobs/:id/admin` — update admin/financial fields on a job (admin only)
 - `PATCH /api/jobs/:id/status` — update job status (admin only)
