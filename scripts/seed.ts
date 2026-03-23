@@ -47,7 +47,7 @@ async function seed() {
       ],
     },
     {
-      reference: "JOB-2026-00846", clientName: "Metro Waste Solutions", depot: "Manchester North", collectionPoint: "Trafford Park Depot", collectionDate: "2026-03-14", submittedAt: new Date("2026-03-14"), tonnage: "1.800", status: "approved", invoiceStatus: "invoiced", lmeRateUsed: "1724.30", calculatedValue: "3103.74",
+      reference: "JOB-2026-00846", clientName: "Metro Waste Solutions", depot: "Manchester North", collectionPoint: "Trafford Park Depot", collectionDate: "2026-03-14", submittedAt: new Date("2026-03-14"), tonnage: "1.800", status: "approved", invoiceStatus: "invoiced", lmeRateUsed: "1724.30", calculatedValue: "3103.74", cblLmeValue: "1724.30", cblLmePercent: "72.50", cblLmePrice: "2250.22", transportCost: "290.00", customerInvoiceValue: "3103.74", customerInvoiceNo: "INV-2026-0846", cblWasteAdviceNoteNo: "WAN-846", cblDate: "2026-03-16", totalInvoiceValue: "3103.74", grossProfit: "563.52",
       batteries: [
         { palletNumber: "PLT-846-A", assetNumber: "AST-2026-846", batterySerial: "BSN-MW-002", manufacture: "Enersys", cellType: "P2B", voltage: "24V", notes: null },
         { palletNumber: "PLT-846-B", assetNumber: "AST-2026-849", batterySerial: "BSN-MW-003", manufacture: "Hoppecke", cellType: "P2V", voltage: "80V", notes: null },
@@ -69,7 +69,7 @@ async function seed() {
       ],
     },
     {
-      reference: "JOB-2026-00843", clientName: "CleanPower UK", depot: "Bristol South", collectionPoint: "Avonmouth Dock Road", collectionDate: "2026-03-13", submittedAt: new Date("2026-03-13"), tonnage: "4.200", status: "approved", invoiceStatus: "invoiced", lmeRateUsed: "1724.30", calculatedValue: "7242.06",
+      reference: "JOB-2026-00843", clientName: "CleanPower UK", depot: "Bristol South", collectionPoint: "Avonmouth Dock Road", collectionDate: "2026-03-13", submittedAt: new Date("2026-03-13"), tonnage: "4.200", status: "approved", invoiceStatus: "invoiced", lmeRateUsed: "1724.30", calculatedValue: "7242.06", cblLmeValue: "1724.30", cblLmePercent: "72.50", cblLmePrice: "5253.10", transportCost: "480.00", customerInvoiceValue: "7242.06", customerInvoiceNo: "INV-2026-0843", cblWasteAdviceNoteNo: "WAN-843", cblDate: "2026-03-15", totalInvoiceValue: "7242.06", grossProfit: "1508.96",
       batteries: [
         { palletNumber: "PLT-843-A", assetNumber: "AST-2026-843", batterySerial: "BSN-CP-005", manufacture: "Enersys", cellType: "P2B", voltage: "36V", notes: null },
         { palletNumber: "PLT-843-B", assetNumber: "AST-2026-852", batterySerial: "BSN-CP-006", manufacture: "GNB", cellType: "P2S", voltage: "24V", notes: null },
@@ -98,7 +98,7 @@ async function seed() {
       ],
     },
     {
-      reference: "JOB-2026-00839", clientName: "Midlands Power Corp", depot: "Birmingham Central", collectionPoint: "Erdington Depot", collectionDate: "2026-03-10", submittedAt: new Date("2026-03-10"), tonnage: "3.500", status: "approved", invoiceStatus: "invoiced", lmeRateUsed: "1698.20", calculatedValue: "5943.70",
+      reference: "JOB-2026-00839", clientName: "Midlands Power Corp", depot: "Birmingham Central", collectionPoint: "Erdington Depot", collectionDate: "2026-03-10", submittedAt: new Date("2026-03-10"), tonnage: "3.500", status: "approved", invoiceStatus: "invoiced", lmeRateUsed: "1698.20", calculatedValue: "5943.70", cblLmeValue: "1698.20", cblLmePercent: "72.50", cblLmePrice: "4309.43", transportCost: "410.00", customerInvoiceValue: "5943.70", customerInvoiceNo: "INV-2026-0839", cblWasteAdviceNoteNo: "WAN-839", cblDate: "2026-03-12", totalInvoiceValue: "5943.70", grossProfit: "1224.27",
       batteries: [
         { palletNumber: "PLT-839-A", assetNumber: "AST-2026-839", batterySerial: "BSN-MP-009", manufacture: "Enersys", cellType: "P2B", voltage: "12V", notes: null },
         { palletNumber: "PLT-839-B", assetNumber: "AST-2026-855", batterySerial: "BSN-MP-010", manufacture: "Hawker", cellType: "P2S", voltage: "24V", notes: null },
@@ -126,7 +126,7 @@ async function seed() {
       ],
     },
     {
-      reference: "JOB-2026-00835", clientName: "East Anglian Batteries", depot: "London Depot", collectionPoint: "Chelmsford Business Park", collectionDate: "2026-03-07", submittedAt: new Date("2026-03-07"), tonnage: "5.100", status: "approved", invoiceStatus: "invoiced", lmeRateUsed: "1698.20", calculatedValue: "8660.82",
+      reference: "JOB-2026-00835", clientName: "East Anglian Batteries", depot: "London Depot", collectionPoint: "Chelmsford Business Park", collectionDate: "2026-03-07", submittedAt: new Date("2026-03-07"), tonnage: "5.100", status: "approved", invoiceStatus: "invoiced", lmeRateUsed: "1698.20", calculatedValue: "8660.82", cblLmeValue: "1698.20", cblLmePercent: "72.50", cblLmePrice: "6281.07", transportCost: "580.00", customerInvoiceValue: "8660.82", customerInvoiceNo: "INV-2026-0835", cblWasteAdviceNoteNo: "WAN-835", cblDate: "2026-03-09", totalInvoiceValue: "8660.82", grossProfit: "1799.75",
       batteries: [
         { palletNumber: "PLT-835-A", assetNumber: "AST-2026-835", batterySerial: "BSN-EA-013", manufacture: "Exide", cellType: "P2B", voltage: "48V", notes: null },
         { palletNumber: "PLT-835-B", assetNumber: "AST-2026-858", batterySerial: "BSN-EA-014", manufacture: "Exide", cellType: "P2B", voltage: "24V", notes: null },
@@ -171,6 +171,9 @@ async function seed() {
       ],
     },
   ];
+
+  await db.delete(jobBatteriesTable);
+  await db.delete(jobsTable);
 
   for (let i = 0; i < jobsData.length; i++) {
     const { batteries, ...jobValues } = jobsData[i];

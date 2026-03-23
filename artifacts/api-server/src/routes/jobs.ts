@@ -70,6 +70,7 @@ router.get(
 router.get(
   "/jobs/:id",
   requireAuth,
+  requireRole("team_leader", "accounts", "head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
       const jobId = parseInt(String(req.params.id), 10);
@@ -88,31 +89,12 @@ router.get(
         return;
       }
 
-      const user = req.user!;
-      const isAdmin = ["team_leader", "accounts", "head_office_admin"].includes(user.role);
-      if (!isAdmin && job.submittedById !== user.id) {
-        res.status(403).json({ message: "Access denied" });
-        return;
-      }
-
-      const batteriesRaw = await db
+      const batteries = await db
         .select()
         .from(jobBatteriesTable)
         .where(eq(jobBatteriesTable.jobId, jobId));
 
-      if (!isAdmin) {
-        const { cblLmeValue, cblLmePercent, cblLmePrice, transportCost,
-          customerInvoiceValue, customerInvoiceNo, cblWasteAdviceNoteNo,
-          cblDate, totalInvoiceValue, grossProfit, itiniumInvoiceNo,
-          ...safeJob } = job;
-
-        const safeBatteries = batteriesRaw.map(({ receiptConfirmed, pbContentKg, valueGbp, adminNotes, ...rest }) => rest);
-
-        res.json({ job: safeJob, batteries: safeBatteries });
-        return;
-      }
-
-      res.json({ job, batteries: batteriesRaw });
+      res.json({ job, batteries });
     } catch (error) {
       console.error("Job detail error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -215,22 +197,27 @@ router.patch(
         tonnage, lmeRateUsed, calculatedValue, invoiceStatus,
       } = req.body;
 
+      const toDecimal = (v: unknown): string | null =>
+        v !== undefined && v !== null && v !== "" ? String(v) : null;
+      const toStr = (v: unknown): string | null =>
+        v !== undefined && v !== null && v !== "" ? String(v) : null;
+
       const updates: Record<string, string | null> = {};
-      if (cblLmeValue !== undefined) updates.cblLmeValue = cblLmeValue ? String(cblLmeValue) : null;
-      if (cblLmePercent !== undefined) updates.cblLmePercent = cblLmePercent ? String(cblLmePercent) : null;
-      if (cblLmePrice !== undefined) updates.cblLmePrice = cblLmePrice ? String(cblLmePrice) : null;
-      if (transportCost !== undefined) updates.transportCost = transportCost ? String(transportCost) : null;
-      if (customerInvoiceValue !== undefined) updates.customerInvoiceValue = customerInvoiceValue ? String(customerInvoiceValue) : null;
-      if (customerInvoiceNo !== undefined) updates.customerInvoiceNo = customerInvoiceNo || null;
-      if (cblWasteAdviceNoteNo !== undefined) updates.cblWasteAdviceNoteNo = cblWasteAdviceNoteNo || null;
-      if (cblDate !== undefined) updates.cblDate = cblDate || null;
-      if (totalInvoiceValue !== undefined) updates.totalInvoiceValue = totalInvoiceValue ? String(totalInvoiceValue) : null;
-      if (grossProfit !== undefined) updates.grossProfit = grossProfit ? String(grossProfit) : null;
-      if (itiniumInvoiceNo !== undefined) updates.itiniumInvoiceNo = itiniumInvoiceNo || null;
-      if (tonnage !== undefined) updates.tonnage = tonnage ? String(tonnage) : null;
-      if (lmeRateUsed !== undefined) updates.lmeRateUsed = lmeRateUsed ? String(lmeRateUsed) : null;
-      if (calculatedValue !== undefined) updates.calculatedValue = calculatedValue ? String(calculatedValue) : null;
-      if (invoiceStatus !== undefined) updates.invoiceStatus = invoiceStatus || null;
+      if (cblLmeValue !== undefined) updates.cblLmeValue = toDecimal(cblLmeValue);
+      if (cblLmePercent !== undefined) updates.cblLmePercent = toDecimal(cblLmePercent);
+      if (cblLmePrice !== undefined) updates.cblLmePrice = toDecimal(cblLmePrice);
+      if (transportCost !== undefined) updates.transportCost = toDecimal(transportCost);
+      if (customerInvoiceValue !== undefined) updates.customerInvoiceValue = toDecimal(customerInvoiceValue);
+      if (customerInvoiceNo !== undefined) updates.customerInvoiceNo = toStr(customerInvoiceNo);
+      if (cblWasteAdviceNoteNo !== undefined) updates.cblWasteAdviceNoteNo = toStr(cblWasteAdviceNoteNo);
+      if (cblDate !== undefined) updates.cblDate = toStr(cblDate);
+      if (totalInvoiceValue !== undefined) updates.totalInvoiceValue = toDecimal(totalInvoiceValue);
+      if (grossProfit !== undefined) updates.grossProfit = toDecimal(grossProfit);
+      if (itiniumInvoiceNo !== undefined) updates.itiniumInvoiceNo = toStr(itiniumInvoiceNo);
+      if (tonnage !== undefined) updates.tonnage = toDecimal(tonnage);
+      if (lmeRateUsed !== undefined) updates.lmeRateUsed = toDecimal(lmeRateUsed);
+      if (calculatedValue !== undefined) updates.calculatedValue = toDecimal(calculatedValue);
+      if (invoiceStatus !== undefined) updates.invoiceStatus = toStr(invoiceStatus);
 
       if (Object.keys(updates).length === 0) {
         res.status(400).json({ message: "No fields to update" });
@@ -309,11 +296,14 @@ router.patch(
 
       const { receiptConfirmed, pbContentKg, valueGbp, adminNotes } = req.body;
 
+      const toDecimal = (v: unknown): string | null =>
+        v !== undefined && v !== null && v !== "" ? String(v) : null;
+
       const updates: Record<string, string | boolean | null> = {};
       if (receiptConfirmed !== undefined) updates.receiptConfirmed = Boolean(receiptConfirmed);
-      if (pbContentKg !== undefined) updates.pbContentKg = pbContentKg ? String(pbContentKg) : null;
-      if (valueGbp !== undefined) updates.valueGbp = valueGbp ? String(valueGbp) : null;
-      if (adminNotes !== undefined) updates.adminNotes = adminNotes || null;
+      if (pbContentKg !== undefined) updates.pbContentKg = toDecimal(pbContentKg);
+      if (valueGbp !== undefined) updates.valueGbp = toDecimal(valueGbp);
+      if (adminNotes !== undefined) updates.adminNotes = adminNotes !== null && adminNotes !== undefined && adminNotes !== "" ? String(adminNotes) : null;
 
       if (Object.keys(updates).length === 0) {
         res.status(400).json({ message: "No fields to update" });
