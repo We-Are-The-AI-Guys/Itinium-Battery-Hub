@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { jobsTable } from "@workspace/db/schema";
+import { jobsTable, jobBatteriesTable } from "@workspace/db/schema";
 import { eq, sql, and, count, ilike, or } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 
@@ -62,6 +62,101 @@ router.get(
       });
     } catch (error) {
       console.error("Jobs list error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+router.get(
+  "/jobs/:id",
+  requireAuth,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const jobId = parseInt(req.params.id, 10);
+      if (isNaN(jobId)) {
+        res.status(400).json({ message: "Invalid job ID" });
+        return;
+      }
+
+      const [job] = await db
+        .select()
+        .from(jobsTable)
+        .where(eq(jobsTable.id, jobId));
+
+      if (!job) {
+        res.status(404).json({ message: "Job not found" });
+        return;
+      }
+
+      const batteries = await db
+        .select()
+        .from(jobBatteriesTable)
+        .where(eq(jobBatteriesTable.jobId, jobId));
+
+      res.json({ job, batteries });
+    } catch (error) {
+      console.error("Job detail error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+router.post(
+  "/jobs",
+  requireAuth,
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const { clientName, depot, collectionPoint, collectionDate, tonnage, notes, batteries } = req.body;
+
+      if (!clientName || !depot || !tonnage) {
+        res.status(400).json({ message: "Client name, depot, and tonnage are required" });
+        return;
+      }
+
+      if (!batteries || !Array.isArray(batteries) || batteries.length === 0) {
+        res.status(400).json({ message: "At least one battery item is required" });
+        return;
+      }
+
+      const jobCount = await db.select({ count: count() }).from(jobsTable);
+      const nextNum = (jobCount[0]?.count || 0) + 1;
+      const reference = `JOB-${new Date().getFullYear()}-${String(nextNum).padStart(5, "0")}`;
+
+      const [job] = await db
+        .insert(jobsTable)
+        .values({
+          reference,
+          clientName,
+          depot,
+          collectionPoint: collectionPoint || null,
+          collectionDate: collectionDate || null,
+          tonnage: String(tonnage),
+          status: "pending",
+          notes: notes || null,
+          submittedById: req.user!.id,
+        })
+        .returning();
+
+      const batteryRows = batteries.map((b: any) => ({
+        jobId: job.id,
+        palletNumber: b.palletNumber || null,
+        assetNumber: b.assetNumber || null,
+        batterySerial: b.batterySerial || null,
+        manufacture: b.manufacture || null,
+        cellType: b.cellType || null,
+        voltage: b.voltage || null,
+        looseCellsQty: b.looseCellsQty ? parseInt(b.looseCellsQty, 10) : null,
+        notes: b.notes || null,
+      }));
+
+      const insertedBatteries = await db
+        .insert(jobBatteriesTable)
+        .values(batteryRows)
+        .returning();
+
+      res.status(201).json({ job, batteries: insertedBatteries });
+    } catch (error) {
+      console.error("Job creation error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   }

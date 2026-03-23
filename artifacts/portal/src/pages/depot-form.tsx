@@ -1,7 +1,4 @@
 import { useState, useEffect } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { Link } from "wouter";
 import {
   Package,
@@ -13,14 +10,16 @@ import {
   Send,
   FileText,
   Clipboard,
-  Scale,
   Zap,
   X,
   Plus,
-  AlertCircle,
   Clock,
   ChevronLeft,
-  LogOut,
+  Trash2,
+  MapPin,
+  CalendarDays,
+  Factory,
+  Layers,
 } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Button } from "@/components/ui/button";
@@ -33,21 +32,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 
-const depotFormSchema = z.object({
-  palletNumber: z.string().min(1, "Pallet number is required"),
-  assetNumber: z.string().min(1, "Asset number is required"),
-  batterySerial: z.string().min(1, "Battery serial number is required"),
-  cellType: z.string().min(1, "Cell type is required"),
-  voltage: z.string().min(1, "Voltage is required"),
-  weight: z.string().min(1, "Weight is required"),
-  condition: z.string().min(1, "Condition is required"),
-  notes: z.string().optional(),
-});
-
-type DepotFormValues = z.infer<typeof depotFormSchema>;
+interface BatteryRow {
+  id: string;
+  palletNumber: string;
+  assetNumber: string;
+  batterySerial: string;
+  manufacture: string;
+  cellType: string;
+  voltage: string;
+  looseCellsQty: string;
+  notes: string;
+}
 
 interface User {
   id: number;
@@ -57,24 +54,39 @@ interface User {
   depot: string | null;
 }
 
+function createEmptyBattery(): BatteryRow {
+  return {
+    id: crypto.randomUUID(),
+    palletNumber: "",
+    assetNumber: "",
+    batterySerial: "",
+    manufacture: "",
+    cellType: "",
+    voltage: "",
+    looseCellsQty: "",
+    notes: "",
+  };
+}
+
+const CELL_TYPES = [
+  { value: "P2B", label: "P2B" },
+  { value: "P2S", label: "P2S" },
+  { value: "P2V", label: "P2V" },
+  { value: "Blocs", label: "Blocs" },
+  { value: "Other", label: "Other" },
+];
+
 export default function DepotFormPage() {
   const [user, setUser] = useState<User | null>(null);
   const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
+  const [collectionPoint, setCollectionPoint] = useState("");
+  const [collectionDate, setCollectionDate] = useState(
+    new Date().toISOString().split("T")[0]
+  );
+  const [jobNotes, setJobNotes] = useState("");
+  const [batteries, setBatteries] = useState<BatteryRow[]>([createEmptyBattery()]);
+  const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
-
-  const form = useForm<DepotFormValues>({
-    resolver: zodResolver(depotFormSchema),
-    defaultValues: {
-      palletNumber: "",
-      assetNumber: "",
-      batterySerial: "",
-      cellType: "",
-      voltage: "",
-      weight: "",
-      condition: "",
-      notes: "",
-    },
-  });
 
   useEffect(() => {
     fetch("/api/auth/me", { credentials: "include" })
@@ -115,27 +127,99 @@ export default function DepotFormPage() {
     setUploadedPhotos((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function onSubmit(data: DepotFormValues) {
-    toast({
-      title: "Collection submitted",
-      description: `Job submitted with ${uploadedPhotos.length} photo(s) attached.`,
-    });
-    console.log("Form data:", data);
+  function updateBattery(id: string, field: keyof BatteryRow, value: string) {
+    setBatteries((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, [field]: value } : b))
+    );
+  }
+
+  function addBatteryRow() {
+    setBatteries((prev) => [...prev, createEmptyBattery()]);
+  }
+
+  function removeBatteryRow(id: string) {
+    if (batteries.length <= 1) return;
+    setBatteries((prev) => prev.filter((b) => b.id !== id));
+  }
+
+  async function onSubmit() {
+    const hasAtLeastOneSerial = batteries.some(
+      (b) => b.batterySerial.trim() || b.palletNumber.trim() || b.assetNumber.trim()
+    );
+    if (!hasAtLeastOneSerial) {
+      toast({
+        title: "Missing battery data",
+        description: "Please fill in at least one battery row with an identifier.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          clientName: user?.fullName || "Unknown",
+          depot: user?.depot || "Unknown",
+          collectionPoint: collectionPoint || null,
+          collectionDate: collectionDate || null,
+          tonnage: "0.000",
+          notes: jobNotes || null,
+          batteries: batteries.map((b) => ({
+            palletNumber: b.palletNumber || null,
+            assetNumber: b.assetNumber || null,
+            batterySerial: b.batterySerial || null,
+            manufacture: b.manufacture || null,
+            cellType: b.cellType || null,
+            voltage: b.voltage || null,
+            looseCellsQty: b.looseCellsQty || null,
+            notes: b.notes || null,
+          })),
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        toast({
+          title: "Collection submitted",
+          description: `Job ${data.job.reference} submitted with ${batteries.length} battery item(s).`,
+        });
+        setBatteries([createEmptyBattery()]);
+        setCollectionPoint("");
+        setJobNotes("");
+        setUploadedPhotos([]);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast({
+          title: "Submission failed",
+          description: err.message || "Something went wrong.",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Submission failed",
+        description: "Network error. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function onSaveDraft() {
-    const values = form.getValues();
     toast({
       title: "Draft saved",
       description: "Your collection draft has been saved.",
     });
-    console.log("Draft saved:", values);
   }
 
   const currentLoad = 7.2;
   const maxCapacity = 10.0;
   const progressPercent = Math.round((currentLoad / maxCapacity) * 100);
-  const jobRef = `JOB-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 99999)).padStart(5, "0")}`;
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-24 pt-16 flex flex-col items-center">
@@ -169,7 +253,7 @@ export default function DepotFormPage() {
             data-testid="button-header-logout"
           >
             {user?.fullName
-              .split(" ")
+              ?.split(" ")
               .map((n) => n[0])
               .join("")
               .toUpperCase() || ".."}
@@ -177,7 +261,7 @@ export default function DepotFormPage() {
         </div>
       </header>
 
-      <main className="w-full max-w-3xl px-4 sm:px-6 py-6 space-y-6 flex-1 flex flex-col">
+      <main className="w-full max-w-4xl px-4 sm:px-6 py-6 space-y-6 flex-1 flex flex-col">
         <section
           className="bg-sky-50 rounded-xl p-4 sm:p-5 border border-sky-100 shadow-sm relative overflow-hidden"
           data-testid="section-tonnage-progress"
@@ -216,35 +300,22 @@ export default function DepotFormPage() {
         </section>
 
         <section
-          className="bg-white rounded-xl p-5 border border-slate-200 shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-wrap gap-4 items-center justify-between"
-          data-testid="section-job-reference"
+          className="bg-white rounded-xl p-5 border border-slate-200 shadow-[0_2px_10px_rgb(0,0,0,0.02)]"
+          data-testid="section-collection-info"
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-100">
-              <FileText className="w-5 h-5 text-slate-400" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">
-                Job Reference
-              </p>
-              <p
-                className="font-mono font-bold text-[#0f2744]"
-                data-testid="text-job-reference"
-              >
-                {jobRef}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="hidden sm:block text-right">
-              <p className="text-xs text-slate-500 font-medium">Date</p>
-              <p className="text-sm font-medium text-slate-700">
-                {new Date().toLocaleDateString("en-GB", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
-              </p>
+          <div className="flex flex-wrap gap-4 items-end justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-100">
+                <FileText className="w-5 h-5 text-slate-400" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 font-medium">
+                  Redundant Battery Collection Note
+                </p>
+                <p className="text-sm font-medium text-[#0f2744]">
+                  {user?.depot || "..."} &mdash; {user?.fullName || "..."}
+                </p>
+              </div>
             </div>
             <span
               className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200"
@@ -254,325 +325,341 @@ export default function DepotFormPage() {
               Draft
             </span>
           </div>
-        </section>
 
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <section
-            className="bg-white rounded-xl border border-slate-200 shadow-[0_2px_10px_rgb(0,0,0,0.02)] overflow-hidden"
-            data-testid="section-asset-details"
-          >
-            <div className="border-l-4 border-[#0ea5e9] bg-slate-50/50 px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-              <Package className="w-5 h-5 text-[#0ea5e9]" />
-              <h3 className="font-bold text-[#0f2744] text-lg">
-                Asset Details
-              </h3>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-[#1e293b]">
-                  Pallet Number
-                </label>
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Hash className="h-4 w-4 text-slate-400 group-focus-within:text-[#0ea5e9] transition-colors" />
-                  </div>
-                  <Input
-                    placeholder="e.g., PLT-001"
-                    className="pl-10 h-11 bg-slate-50 border-slate-200 text-[#1e293b] focus-visible:ring-[#0ea5e9] focus-visible:border-[#0ea5e9]"
-                    data-testid="input-pallet-number"
-                    {...form.register("palletNumber")}
-                  />
-                </div>
-                {form.formState.errors.palletNumber && (
-                  <p className="text-sm text-red-500">
-                    {form.formState.errors.palletNumber.message}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-[#1e293b]">
-                  Asset Number
-                </label>
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Clipboard className="h-4 w-4 text-slate-400 group-focus-within:text-[#0ea5e9] transition-colors" />
-                  </div>
-                  <Input
-                    placeholder="e.g., AST-2024-1234"
-                    className="pl-10 h-11 bg-slate-50 border-slate-200 text-[#1e293b] focus-visible:ring-[#0ea5e9] focus-visible:border-[#0ea5e9]"
-                    data-testid="input-asset-number"
-                    {...form.register("assetNumber")}
-                  />
-                </div>
-                {form.formState.errors.assetNumber && (
-                  <p className="text-sm text-red-500">
-                    {form.formState.errors.assetNumber.message}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-[#1e293b]">
-                  Battery Serial Number
-                </label>
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Battery className="h-4 w-4 text-slate-400 group-focus-within:text-[#0ea5e9] transition-colors" />
-                  </div>
-                  <Input
-                    placeholder="e.g., BSN-ABCD-5678"
-                    className="pl-10 h-11 bg-slate-50 border-slate-200 text-[#1e293b] focus-visible:ring-[#0ea5e9] focus-visible:border-[#0ea5e9]"
-                    data-testid="input-battery-serial"
-                    {...form.register("batterySerial")}
-                  />
-                </div>
-                {form.formState.errors.batterySerial && (
-                  <p className="text-sm text-red-500">
-                    {form.formState.errors.batterySerial.message}
-                  </p>
-                )}
-              </div>
-            </div>
-          </section>
-
-          <section
-            className="bg-white rounded-xl border border-slate-200 shadow-[0_2px_10px_rgb(0,0,0,0.02)] overflow-hidden"
-            data-testid="section-specifications"
-          >
-            <div className="border-l-4 border-[#0ea5e9] bg-slate-50/50 px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-[#0ea5e9]" />
-              <h3 className="font-bold text-[#0f2744] text-lg">
-                Specifications
-              </h3>
-            </div>
-            <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-[#1e293b]">
-                  Cell Type
-                </label>
-                <Select
-                  onValueChange={(val) => form.setValue("cellType", val, { shouldValidate: true })}
-                >
-                  <SelectTrigger
-                    className="h-11 bg-slate-50 border-slate-200 text-[#1e293b] focus:ring-[#0ea5e9]"
-                    data-testid="select-cell-type"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Battery className="h-4 w-4 text-slate-400" />
-                      <SelectValue placeholder="Select cell type..." />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="lead_acid">Lead Acid</SelectItem>
-                    <SelectItem value="lithium_ion">Lithium Ion</SelectItem>
-                    <SelectItem value="nickel_cadmium">
-                      Nickel Cadmium
-                    </SelectItem>
-                    <SelectItem value="nickel_metal_hydride">
-                      Nickel Metal Hydride
-                    </SelectItem>
-                    <SelectItem value="alkaline">Alkaline</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-                {form.formState.errors.cellType && (
-                  <p className="text-sm text-red-500">
-                    {form.formState.errors.cellType.message}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-[#1e293b]">
-                  Voltage
-                </label>
-                <Select
-                  onValueChange={(val) => form.setValue("voltage", val, { shouldValidate: true })}
-                >
-                  <SelectTrigger
-                    className="h-11 bg-slate-50 border-slate-200 text-[#1e293b] focus:ring-[#0ea5e9]"
-                    data-testid="select-voltage"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Zap className="h-4 w-4 text-slate-400" />
-                      <SelectValue placeholder="Select voltage..." />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="6v">6V</SelectItem>
-                    <SelectItem value="12v">12V</SelectItem>
-                    <SelectItem value="24v">24V</SelectItem>
-                    <SelectItem value="36v">36V</SelectItem>
-                    <SelectItem value="48v">48V</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-                {form.formState.errors.voltage && (
-                  <p className="text-sm text-red-500">
-                    {form.formState.errors.voltage.message}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-[#1e293b]">
-                  Weight (kg)
-                </label>
-                <div className="relative group">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Scale className="h-4 w-4 text-slate-400 group-focus-within:text-[#0ea5e9] transition-colors" />
-                  </div>
-                  <Input
-                    type="number"
-                    placeholder="e.g., 450"
-                    className="pl-10 h-11 bg-slate-50 border-slate-200 text-[#1e293b] focus-visible:ring-[#0ea5e9] focus-visible:border-[#0ea5e9]"
-                    data-testid="input-weight"
-                    {...form.register("weight")}
-                  />
-                </div>
-                {form.formState.errors.weight && (
-                  <p className="text-sm text-red-500">
-                    {form.formState.errors.weight.message}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-[#1e293b]">
-                  Condition
-                </label>
-                <Select
-                  onValueChange={(val) => form.setValue("condition", val, { shouldValidate: true })}
-                >
-                  <SelectTrigger
-                    className="h-11 bg-slate-50 border-slate-200 text-[#1e293b] focus:ring-[#0ea5e9]"
-                    data-testid="select-condition"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Clipboard className="h-4 w-4 text-slate-400" />
-                      <SelectValue placeholder="Select condition..." />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="good">Good</SelectItem>
-                    <SelectItem value="fair">Fair</SelectItem>
-                    <SelectItem value="poor">Poor</SelectItem>
-                    <SelectItem value="damaged">Damaged</SelectItem>
-                    <SelectItem value="leaking">Leaking</SelectItem>
-                  </SelectContent>
-                </Select>
-                {form.formState.errors.condition && (
-                  <p className="text-sm text-red-500">
-                    {form.formState.errors.condition.message}
-                  </p>
-                )}
-              </div>
-            </div>
-          </section>
-
-          <section
-            className="bg-white rounded-xl border border-slate-200 shadow-[0_2px_10px_rgb(0,0,0,0.02)] overflow-hidden"
-            data-testid="section-photo-capture"
-          >
-            <div className="border-l-4 border-[#0ea5e9] bg-slate-50/50 px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-              <Camera className="w-5 h-5 text-[#0ea5e9]" />
-              <h3 className="font-bold text-[#0f2744] text-lg">
-                Photo Capture
-              </h3>
-            </div>
-            <div className="p-5">
-              <button
-                type="button"
-                onClick={handlePhotoUpload}
-                className="w-full flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 hover:border-[#0ea5e9] transition-all group outline-none focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-2"
-                data-testid="button-upload-photo"
-              >
-                <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-sm mb-4 group-hover:scale-110 transition-transform">
-                  <Upload className="w-6 h-6 text-[#0ea5e9]" />
-                </div>
-                <p className="text-[#0f2744] font-bold text-lg mb-1">
-                  Upload Photo
-                </p>
-                <p className="text-[#0ea5e9] text-sm font-medium mb-3 flex items-center gap-1">
-                  <Zap className="w-3.5 h-3.5" /> AI-assisted data extraction
-                </p>
-                <p className="text-slate-500 text-xs">
-                  Supports JPG, PNG up to 10MB
-                </p>
-              </button>
-
-              {uploadedPhotos.length > 0 && (
-                <div className="mt-5">
-                  <p className="text-xs font-medium text-slate-500 mb-3 uppercase tracking-wider">
-                    Attached Photos ({uploadedPhotos.length})
-                  </p>
-                  <div className="flex gap-3 overflow-x-auto pb-2">
-                    {uploadedPhotos.map((src, index) => (
-                      <div
-                        key={index}
-                        className="relative w-24 h-24 rounded-lg bg-slate-200 border border-slate-300 flex-shrink-0 group overflow-hidden"
-                        data-testid={`photo-thumbnail-${index}`}
-                      >
-                        <img
-                          src={src}
-                          alt={`Uploaded photo ${index + 1}`}
-                          className="absolute inset-0 w-full h-full object-cover"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removePhoto(index)}
-                          className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                          data-testid={`button-remove-photo-${index}`}
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={handlePhotoUpload}
-                      className="w-24 h-24 rounded-lg bg-slate-50 border border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:text-[#0ea5e9] hover:bg-sky-50 hover:border-[#0ea5e9] transition-colors flex-shrink-0"
-                      data-testid="button-add-more-photos"
-                    >
-                      <Plus className="w-6 h-6 mb-1" />
-                      <span className="text-xs font-medium">Add</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section
-            className="bg-white rounded-xl border border-slate-200 shadow-[0_2px_10px_rgb(0,0,0,0.02)] overflow-hidden"
-            data-testid="section-notes"
-          >
-            <div className="border-l-4 border-slate-300 bg-slate-50/50 px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-              <FileText className="w-5 h-5 text-slate-400" />
-              <h3 className="font-bold text-[#0f2744] text-lg">
-                Notes{" "}
-                <span className="text-slate-400 font-normal text-sm ml-1">
-                  (Optional)
-                </span>
-              </h3>
-            </div>
-            <div className="p-5">
-              <Textarea
-                placeholder="Add any additional notes about this collection..."
-                className="min-h-[120px] bg-slate-50 border-slate-200 focus-visible:ring-[#0ea5e9] focus-visible:border-[#0ea5e9] resize-y"
-                data-testid="textarea-notes"
-                {...form.register("notes")}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-[#1e293b] flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                Collection Point
+              </label>
+              <Input
+                placeholder="e.g., Unit 4, Aston Industrial Estate"
+                className="h-11 bg-slate-50 border-slate-200 text-[#1e293b] focus-visible:ring-[#0ea5e9] focus-visible:border-[#0ea5e9]"
+                value={collectionPoint}
+                onChange={(e) => setCollectionPoint(e.target.value)}
+                data-testid="input-collection-point"
               />
             </div>
-          </section>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-[#1e293b] flex items-center gap-1.5">
+                <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                Collection Date
+              </label>
+              <Input
+                type="date"
+                className="h-11 bg-slate-50 border-slate-200 text-[#1e293b] focus-visible:ring-[#0ea5e9] focus-visible:border-[#0ea5e9]"
+                value={collectionDate}
+                onChange={(e) => setCollectionDate(e.target.value)}
+                data-testid="input-collection-date"
+              />
+            </div>
+          </div>
+        </section>
 
-          <div className="h-6" />
-        </form>
+        <section
+          className="bg-white rounded-xl border border-slate-200 shadow-[0_2px_10px_rgb(0,0,0,0.02)] overflow-hidden"
+          data-testid="section-battery-items"
+        >
+          <div className="border-l-4 border-[#0ea5e9] bg-slate-50/50 px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Battery className="w-5 h-5 text-[#0ea5e9]" />
+              <h3 className="font-bold text-[#0f2744] text-lg">
+                Battery Items
+              </h3>
+              <span className="text-sm text-slate-500 ml-1">
+                ({batteries.length} {batteries.length === 1 ? "row" : "rows"})
+              </span>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
+              onClick={addBatteryRow}
+              data-testid="button-add-battery-row"
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Add Row
+            </Button>
+          </div>
+
+          <div className="divide-y divide-slate-100">
+            {batteries.map((battery, index) => (
+              <div
+                key={battery.id}
+                className="p-5 bg-white hover:bg-slate-50/30 transition-colors"
+                data-testid={`battery-row-${index}`}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                    Battery #{index + 1}
+                  </span>
+                  {batteries.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeBatteryRow(battery.id)}
+                      className="text-red-400 hover:text-red-600 transition-colors p-1 rounded hover:bg-red-50"
+                      data-testid={`button-remove-battery-${index}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600">
+                      Pallet No.
+                    </label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Hash className="h-3.5 w-3.5 text-slate-400 group-focus-within:text-[#0ea5e9] transition-colors" />
+                      </div>
+                      <Input
+                        placeholder="e.g., PLT-001"
+                        className="pl-9 h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
+                        value={battery.palletNumber}
+                        onChange={(e) => updateBattery(battery.id, "palletNumber", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600">
+                      Asset No.
+                    </label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Clipboard className="h-3.5 w-3.5 text-slate-400 group-focus-within:text-[#0ea5e9] transition-colors" />
+                      </div>
+                      <Input
+                        placeholder="e.g., AST-2026-001"
+                        className="pl-9 h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
+                        value={battery.assetNumber}
+                        onChange={(e) => updateBattery(battery.id, "assetNumber", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600">
+                      Battery Serial No.
+                    </label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Package className="h-3.5 w-3.5 text-slate-400 group-focus-within:text-[#0ea5e9] transition-colors" />
+                      </div>
+                      <Input
+                        placeholder="e.g., BSN-ABCD-001"
+                        className="pl-9 h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
+                        value={battery.batterySerial}
+                        onChange={(e) => updateBattery(battery.id, "batterySerial", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600">
+                      Manufacture
+                    </label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Factory className="h-3.5 w-3.5 text-slate-400 group-focus-within:text-[#0ea5e9] transition-colors" />
+                      </div>
+                      <Input
+                        placeholder="e.g., Enersys, Hawker"
+                        className="pl-9 h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
+                        value={battery.manufacture}
+                        onChange={(e) => updateBattery(battery.id, "manufacture", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600">
+                      Type of Cells
+                    </label>
+                    <Select
+                      value={battery.cellType}
+                      onValueChange={(val) => updateBattery(battery.id, "cellType", val)}
+                    >
+                      <SelectTrigger className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus:ring-[#0ea5e9]">
+                        <div className="flex items-center gap-2">
+                          <Layers className="h-3.5 w-3.5 text-slate-400" />
+                          <SelectValue placeholder="Select type..." />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CELL_TYPES.map((ct) => (
+                          <SelectItem key={ct.value} value={ct.value}>
+                            {ct.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600">
+                      If Complete Battery &mdash; Voltage
+                    </label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Zap className="h-3.5 w-3.5 text-slate-400 group-focus-within:text-[#0ea5e9] transition-colors" />
+                      </div>
+                      <Input
+                        placeholder="e.g., 24V, 48V, 80V"
+                        className="pl-9 h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
+                        value={battery.voltage}
+                        onChange={(e) => updateBattery(battery.id, "voltage", e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600">
+                      If Loose Cells &mdash; Qty
+                    </label>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder="e.g., 12"
+                      className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
+                      value={battery.looseCellsQty}
+                      onChange={(e) => updateBattery(battery.id, "looseCellsQty", e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
+                    <label className="text-xs font-medium text-slate-600">
+                      Notes
+                    </label>
+                    <Input
+                      placeholder="Any notes for this battery..."
+                      className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
+                      value={battery.notes}
+                      onChange={(e) => updateBattery(battery.id, "notes", e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="px-5 py-3 bg-slate-50 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={addBatteryRow}
+              className="w-full py-2.5 text-sm font-medium text-[#0ea5e9] hover:text-[#0284c7] hover:bg-sky-50 rounded-lg transition-colors flex items-center justify-center gap-2"
+              data-testid="button-add-battery-row-bottom"
+            >
+              <Plus className="w-4 h-4" />
+              Add Another Battery Row
+            </button>
+          </div>
+        </section>
+
+        <section
+          className="bg-white rounded-xl border border-slate-200 shadow-[0_2px_10px_rgb(0,0,0,0.02)] overflow-hidden"
+          data-testid="section-photo-capture"
+        >
+          <div className="border-l-4 border-[#0ea5e9] bg-slate-50/50 px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+            <Camera className="w-5 h-5 text-[#0ea5e9]" />
+            <h3 className="font-bold text-[#0f2744] text-lg">
+              Photo Capture
+            </h3>
+          </div>
+          <div className="p-5">
+            <button
+              type="button"
+              onClick={handlePhotoUpload}
+              className="w-full flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 hover:border-[#0ea5e9] transition-all group outline-none focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-2"
+              data-testid="button-upload-photo"
+            >
+              <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-sm mb-4 group-hover:scale-110 transition-transform">
+                <Upload className="w-6 h-6 text-[#0ea5e9]" />
+              </div>
+              <p className="text-[#0f2744] font-bold text-lg mb-1">
+                Upload Photo
+              </p>
+              <p className="text-[#0ea5e9] text-sm font-medium mb-3 flex items-center gap-1">
+                <Zap className="w-3.5 h-3.5" /> AI-assisted data extraction
+              </p>
+              <p className="text-slate-500 text-xs">
+                Supports JPG, PNG up to 10MB
+              </p>
+            </button>
+
+            {uploadedPhotos.length > 0 && (
+              <div className="mt-5">
+                <p className="text-xs font-medium text-slate-500 mb-3 uppercase tracking-wider">
+                  Attached Photos ({uploadedPhotos.length})
+                </p>
+                <div className="flex gap-3 overflow-x-auto pb-2">
+                  {uploadedPhotos.map((src, index) => (
+                    <div
+                      key={index}
+                      className="relative w-24 h-24 rounded-lg bg-slate-200 border border-slate-300 flex-shrink-0 group overflow-hidden"
+                      data-testid={`photo-thumbnail-${index}`}
+                    >
+                      <img
+                        src={src}
+                        alt={`Uploaded photo ${index + 1}`}
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removePhoto(index)}
+                        className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                        data-testid={`button-remove-photo-${index}`}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={handlePhotoUpload}
+                    className="w-24 h-24 rounded-lg bg-slate-50 border border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:text-[#0ea5e9] hover:bg-sky-50 hover:border-[#0ea5e9] transition-colors flex-shrink-0"
+                    data-testid="button-add-more-photos"
+                  >
+                    <Plus className="w-6 h-6 mb-1" />
+                    <span className="text-xs font-medium">Add</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section
+          className="bg-white rounded-xl border border-slate-200 shadow-[0_2px_10px_rgb(0,0,0,0.02)] overflow-hidden"
+          data-testid="section-notes"
+        >
+          <div className="border-l-4 border-slate-300 bg-slate-50/50 px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-slate-400" />
+            <h3 className="font-bold text-[#0f2744] text-lg">
+              Notes{" "}
+              <span className="text-slate-400 font-normal text-sm ml-1">
+                (Optional)
+              </span>
+            </h3>
+          </div>
+          <div className="p-5">
+            <Textarea
+              placeholder="Add any additional notes about this collection..."
+              className="min-h-[120px] bg-slate-50 border-slate-200 focus-visible:ring-[#0ea5e9] focus-visible:border-[#0ea5e9] resize-y"
+              data-testid="textarea-notes"
+              value={jobNotes}
+              onChange={(e) => setJobNotes(e.target.value)}
+            />
+          </div>
+        </section>
+
+        <div className="h-6" />
       </main>
 
       <footer className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 shadow-[0_-4px_20px_rgb(0,0,0,0.05)] z-50 flex items-center justify-between gap-4">
-        <div className="w-full max-w-3xl mx-auto flex items-center justify-between gap-4">
+        <div className="w-full max-w-4xl mx-auto flex items-center justify-between gap-4">
           <Button
             type="button"
             variant="outline"
@@ -586,11 +673,12 @@ export default function DepotFormPage() {
           <Button
             type="button"
             className="flex-1 sm:w-auto h-12 bg-[#0f2744] hover:bg-[#132744] text-white font-medium px-8 shadow-md"
-            onClick={form.handleSubmit(onSubmit)}
+            onClick={onSubmit}
+            disabled={submitting}
             data-testid="button-submit-collection"
           >
             <Send className="w-4 h-4 mr-2" />
-            Submit Collection
+            {submitting ? "Submitting..." : "Submit Collection"}
           </Button>
         </div>
       </footer>

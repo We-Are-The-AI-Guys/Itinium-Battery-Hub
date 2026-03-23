@@ -37,11 +37,15 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 - id, user_id (FK → users), token (unique), user_agent, ip_address, expires_at, created_at
 
 ### jobs
-- id, reference (unique), client_name, depot, submitted_at, tonnage (decimal), status (pending/approved/completed/flagged)
-- Battery details: pallet_number, asset_number, battery_serial, cell_type, voltage, weight, condition
+- id, reference (unique), client_name, depot, collection_point, collection_date, submitted_at, tonnage (decimal), status (pending/approved/completed/flagged)
 - Financial: invoice_status (pending_invoice/invoiced/paid), lme_rate_used, calculated_value
 - notes, submitted_by_id (FK → users), created_at
 - Indexes: status, submitted_at, composite (status, submitted_at)
+
+### job_batteries
+- id, job_id (FK → jobs, cascade delete), pallet_number, asset_number, battery_serial, manufacture, cell_type (P2B/P2S/P2V/Blocs/Other), voltage (free text), loose_cells_qty (integer), notes, created_at
+- Index: job_id
+- Each job can have multiple battery line items (matches the spreadsheet grid)
 
 ### lme_prices
 - id, price_date, usd_price (decimal), exchange_rate (decimal), gbp_price (decimal), source (manual/api), created_at
@@ -67,8 +71,10 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 - `GET /api/auth/me` — current user profile
 - `POST /api/auth/logout` — end session
 
-### Jobs (requires auth + role: team_leader/accounts/head_office_admin)
-- `GET /api/jobs?status=X&invoiceStatus=X&search=X&limit=10&offset=0` — list jobs with filtering, search, and pagination
+### Jobs
+- `GET /api/jobs?status=X&invoiceStatus=X&search=X&limit=10&offset=0` — list jobs (requires role: team_leader/accounts/head_office_admin)
+- `GET /api/jobs/:id` — job detail with battery line items (requires auth)
+- `POST /api/jobs` — create job with battery items array (requires auth)
 
 ### Dashboard (requires auth + role: team_leader/accounts/head_office_admin)
 - `GET /api/dashboard/stats` — summary metrics (pendingJobs, monthlyTonnage, totalInvoiceValue, flaggedExceptions)
@@ -107,7 +113,7 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 | `/settings` | `settings.tsx` | Settings — Profile, Notifications, Security, System (admin-only) tabs |
 | `/jobs` | `placeholder.tsx` | Job Management (placeholder) |
 | `/kpi` | `placeholder.tsx` | KPI Reporting (placeholder) |
-| `/collection/new` | `depot-form.tsx` | Battery collection submission form |
+| `/collection/new` | `depot-form.tsx` | Redundant Battery Collection Note form (multi-row battery items, matches spreadsheet) |
 
 ## Route Guards
 
@@ -140,7 +146,7 @@ Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, Dav
 - `artifacts/api-server/src/routes/settings.ts` — Settings API routes (profile, password, notifications, sessions, system)
 - `artifacts/api-server/src/middlewares/auth.ts` — requireAuth + requireRole middleware
 - `lib/db/src/schema/users.ts` — Users, sessions, and system_settings schemas
-- `lib/db/src/schema/jobs.ts` — Jobs schema with indexes
+- `lib/db/src/schema/jobs.ts` — Jobs + job_batteries schemas with relations
 - `lib/db/src/schema/lme-prices.ts` — LME prices schema
 - `scripts/seed.ts` — Database seeder (12 users + 18 demo jobs + 5 LME prices + system settings)
 

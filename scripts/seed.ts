@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { usersTable, jobsTable, lmePricesTable, systemSettingsTable } from "@workspace/db/schema";
+import { usersTable, jobsTable, jobBatteriesTable, lmePricesTable, systemSettingsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
@@ -28,7 +28,7 @@ async function seed() {
       .onConflictDoNothing();
   }
 
-  console.log("Seeded 4 demo users (password: password123)");
+  console.log("Seeded 12 demo users (password: password123)");
 
   const [depotUser] = await db.select().from(usersTable).where(eq(usersTable.email, "depot@itinium.co.uk"));
   const [teamUser] = await db.select().from(usersTable).where(eq(usersTable.email, "team@itinium.co.uk"));
@@ -37,35 +37,160 @@ async function seed() {
     return submitterIds.length > 0 ? submitterIds[index % submitterIds.length] : undefined;
   }
 
-  const jobs = [
-    { reference: "JOB-2026-00847", clientName: "Greenfield Recycling", depot: "Birmingham Central", submittedAt: new Date("2026-03-15"), tonnage: "2.400", status: "pending", palletNumber: "PLT-847", assetNumber: "AST-2026-847", batterySerial: "BSN-GR-001", cellType: "lead_acid", voltage: "12v", weight: "2400.00", condition: "good", invoiceStatus: "pending_invoice", lmeRateUsed: "1724.30", calculatedValue: "4138.32" },
-    { reference: "JOB-2026-00846", clientName: "Metro Waste Solutions", depot: "Manchester North", submittedAt: new Date("2026-03-14"), tonnage: "1.800", status: "approved", palletNumber: "PLT-846", assetNumber: "AST-2026-846", batterySerial: "BSN-MW-002", cellType: "lead_acid", voltage: "24v", weight: "1800.00", condition: "fair", invoiceStatus: "invoiced", lmeRateUsed: "1724.30", calculatedValue: "3103.74" },
-    { reference: "JOB-2026-00845", clientName: "EcoCollect Ltd", depot: "Leeds Hub", submittedAt: new Date("2026-03-14"), tonnage: "3.100", status: "completed", palletNumber: "PLT-845", assetNumber: "AST-2026-845", batterySerial: "BSN-EC-003", cellType: "lithium_ion", voltage: "48v", weight: "3100.00", condition: "good", invoiceStatus: "paid", lmeRateUsed: "1724.30", calculatedValue: "5345.33" },
-    { reference: "JOB-2026-00844", clientName: "National Grid Services", depot: "London Depot", submittedAt: new Date("2026-03-13"), tonnage: "0.900", status: "pending", palletNumber: "PLT-844", assetNumber: "AST-2026-844", batterySerial: "BSN-NG-004", cellType: "lead_acid", voltage: "12v", weight: "900.00", condition: "good", invoiceStatus: "pending_invoice", lmeRateUsed: "1724.30", calculatedValue: "1551.87" },
-    { reference: "JOB-2026-00843", clientName: "CleanPower UK", depot: "Bristol South", submittedAt: new Date("2026-03-13"), tonnage: "4.200", status: "approved", palletNumber: "PLT-843", assetNumber: "AST-2026-843", batterySerial: "BSN-CP-005", cellType: "nickel_cadmium", voltage: "36v", weight: "4200.00", condition: "fair", invoiceStatus: "invoiced", lmeRateUsed: "1724.30", calculatedValue: "7242.06" },
-    { reference: "JOB-2026-00842", clientName: "Thames Batteries", depot: "Reading Central", submittedAt: new Date("2026-03-12"), tonnage: "1.500", status: "completed", palletNumber: "PLT-842", assetNumber: "AST-2026-842", batterySerial: "BSN-TB-006", cellType: "lead_acid", voltage: "12v", weight: "1500.00", condition: "good", invoiceStatus: "paid", lmeRateUsed: "1698.20", calculatedValue: "2547.30" },
-    { reference: "JOB-2026-00841", clientName: "Northern Energy Co", depot: "Sheffield East", submittedAt: new Date("2026-03-12"), tonnage: "2.700", status: "pending", palletNumber: "PLT-841", assetNumber: "AST-2026-841", batterySerial: "BSN-NE-007", cellType: "lead_acid", voltage: "24v", weight: "2700.00", condition: "poor", invoiceStatus: "pending_invoice", lmeRateUsed: "1698.20", calculatedValue: "4585.14" },
-    { reference: "JOB-2026-00840", clientName: "Severn Trent Recycling", depot: "Coventry West", submittedAt: new Date("2026-03-11"), tonnage: "1.100", status: "flagged", palletNumber: "PLT-840", assetNumber: "AST-2026-840", batterySerial: "BSN-ST-008", cellType: "lithium_ion", voltage: "48v", weight: "1100.00", condition: "damaged", notes: "Leaking observed on arrival", invoiceStatus: "pending_invoice", lmeRateUsed: "1698.20", calculatedValue: "1868.02" },
-    { reference: "JOB-2026-00839", clientName: "Midlands Power Corp", depot: "Birmingham Central", submittedAt: new Date("2026-03-10"), tonnage: "3.500", status: "approved", palletNumber: "PLT-839", assetNumber: "AST-2026-839", batterySerial: "BSN-MP-009", cellType: "lead_acid", voltage: "12v", weight: "3500.00", condition: "good", invoiceStatus: "invoiced", lmeRateUsed: "1698.20", calculatedValue: "5943.70" },
-    { reference: "JOB-2026-00838", clientName: "Yorkshire Metals Ltd", depot: "Leeds Hub", submittedAt: new Date("2026-03-10"), tonnage: "1.900", status: "completed", palletNumber: "PLT-838", assetNumber: "AST-2026-838", batterySerial: "BSN-YM-010", cellType: "nickel_metal_hydride", voltage: "12v", weight: "1900.00", condition: "fair", invoiceStatus: "paid", lmeRateUsed: "1698.20", calculatedValue: "3226.58" },
-    { reference: "JOB-2026-00837", clientName: "Scottish Power Recycling", depot: "Manchester North", submittedAt: new Date("2026-03-09"), tonnage: "2.200", status: "pending", palletNumber: "PLT-837", assetNumber: "AST-2026-837", batterySerial: "BSN-SP-011", cellType: "lead_acid", voltage: "24v", weight: "2200.00", condition: "good", invoiceStatus: "pending_invoice", lmeRateUsed: "1698.20", calculatedValue: "3736.04" },
-    { reference: "JOB-2026-00836", clientName: "Cornwall Waste Services", depot: "Bristol South", submittedAt: new Date("2026-03-08"), tonnage: "0.800", status: "completed", palletNumber: "PLT-836", assetNumber: "AST-2026-836", batterySerial: "BSN-CW-012", cellType: "alkaline", voltage: "6v", weight: "800.00", condition: "good", invoiceStatus: "paid", lmeRateUsed: "1698.20", calculatedValue: "1358.56" },
-    { reference: "JOB-2026-00835", clientName: "East Anglian Batteries", depot: "London Depot", submittedAt: new Date("2026-03-07"), tonnage: "5.100", status: "approved", palletNumber: "PLT-835", assetNumber: "AST-2026-835", batterySerial: "BSN-EA-013", cellType: "lead_acid", voltage: "48v", weight: "5100.00", condition: "good", invoiceStatus: "invoiced", lmeRateUsed: "1698.20", calculatedValue: "8660.82" },
-    { reference: "JOB-2026-00834", clientName: "Welsh Green Energy", depot: "Birmingham Central", submittedAt: new Date("2026-03-06"), tonnage: "1.300", status: "flagged", palletNumber: "PLT-834", assetNumber: "AST-2026-834", batterySerial: "BSN-WG-014", cellType: "lithium_ion", voltage: "36v", weight: "1300.00", condition: "leaking", notes: "Hazardous material flag - requires specialist handling", invoiceStatus: "pending_invoice", lmeRateUsed: "1698.20", calculatedValue: "2207.66" },
-    { reference: "JOB-2026-00833", clientName: "Aberdeen Recycling Group", depot: "Sheffield East", submittedAt: new Date("2026-03-05"), tonnage: "2.000", status: "pending", palletNumber: "PLT-833", assetNumber: "AST-2026-833", batterySerial: "BSN-AR-015", cellType: "lead_acid", voltage: "12v", weight: "2000.00", condition: "fair", invoiceStatus: "pending_invoice", lmeRateUsed: "1698.20", calculatedValue: "3396.40" },
-    { reference: "JOB-2026-00832", clientName: "South Coast Metals", depot: "Reading Central", submittedAt: new Date("2026-03-04"), tonnage: "3.800", status: "completed", palletNumber: "PLT-832", assetNumber: "AST-2026-832", batterySerial: "BSN-SC-016", cellType: "lead_acid", voltage: "24v", weight: "3800.00", condition: "good", invoiceStatus: "paid", lmeRateUsed: "1698.20", calculatedValue: "6453.16" },
-    { reference: "JOB-2026-00831", clientName: "Peak District Energy", depot: "Manchester North", submittedAt: new Date("2026-03-03"), tonnage: "1.600", status: "approved", palletNumber: "PLT-831", assetNumber: "AST-2026-831", batterySerial: "BSN-PD-017", cellType: "nickel_cadmium", voltage: "12v", weight: "1600.00", condition: "good", invoiceStatus: "invoiced", lmeRateUsed: "1698.20", calculatedValue: "2717.12" },
-    { reference: "JOB-2026-00830", clientName: "Highland Batteries Co", depot: "Leeds Hub", submittedAt: new Date("2026-03-02"), tonnage: "2.900", status: "pending", palletNumber: "PLT-830", assetNumber: "AST-2026-830", batterySerial: "BSN-HB-018", cellType: "lead_acid", voltage: "48v", weight: "2900.00", condition: "fair", invoiceStatus: "pending_invoice", lmeRateUsed: "1698.20", calculatedValue: "4924.78" },
+  const jobsData = [
+    {
+      reference: "JOB-2026-00847", clientName: "Greenfield Recycling", depot: "Birmingham Central", collectionPoint: "Unit 4, Aston Industrial Estate", collectionDate: "2026-03-15", submittedAt: new Date("2026-03-15"), tonnage: "2.400", status: "pending", invoiceStatus: "pending_invoice", lmeRateUsed: "1724.30", calculatedValue: "4138.32",
+      batteries: [
+        { palletNumber: "PLT-847-A", assetNumber: "AST-2026-847", batterySerial: "BSN-GR-001", manufacture: "Enersys", cellType: "P2B", voltage: "24V", notes: null },
+        { palletNumber: "PLT-847-B", assetNumber: "AST-2026-848", batterySerial: "BSN-GR-002", manufacture: "Hawker", cellType: "P2S", voltage: "48V", notes: null },
+        { palletNumber: "PLT-847-C", assetNumber: null, batterySerial: null, manufacture: "GNB", cellType: "Blocs", looseCellsQty: 12, notes: "Mixed loose cells from forklift decommission" },
+      ],
+    },
+    {
+      reference: "JOB-2026-00846", clientName: "Metro Waste Solutions", depot: "Manchester North", collectionPoint: "Trafford Park Depot", collectionDate: "2026-03-14", submittedAt: new Date("2026-03-14"), tonnage: "1.800", status: "approved", invoiceStatus: "invoiced", lmeRateUsed: "1724.30", calculatedValue: "3103.74",
+      batteries: [
+        { palletNumber: "PLT-846-A", assetNumber: "AST-2026-846", batterySerial: "BSN-MW-002", manufacture: "Enersys", cellType: "P2B", voltage: "24V", notes: null },
+        { palletNumber: "PLT-846-B", assetNumber: "AST-2026-849", batterySerial: "BSN-MW-003", manufacture: "Hoppecke", cellType: "P2V", voltage: "80V", notes: null },
+      ],
+    },
+    {
+      reference: "JOB-2026-00845", clientName: "EcoCollect Ltd", depot: "Leeds Hub", collectionPoint: "Cross Green Lane Warehouse", collectionDate: "2026-03-14", submittedAt: new Date("2026-03-14"), tonnage: "3.100", status: "completed", invoiceStatus: "paid", lmeRateUsed: "1724.30", calculatedValue: "5345.33",
+      batteries: [
+        { palletNumber: "PLT-845-A", assetNumber: "AST-2026-845", batterySerial: "BSN-EC-003", manufacture: "Exide", cellType: "P2B", voltage: "48V", notes: null },
+        { palletNumber: "PLT-845-B", assetNumber: "AST-2026-850", batterySerial: "BSN-EC-004", manufacture: "Exide", cellType: "P2B", voltage: "24V", notes: null },
+        { palletNumber: "PLT-845-C", assetNumber: "AST-2026-851", batterySerial: "BSN-EC-005", manufacture: "Enersys", cellType: "P2S", voltage: "36V", notes: null },
+        { palletNumber: "PLT-845-D", assetNumber: null, batterySerial: null, manufacture: "Mixed", cellType: "Blocs", looseCellsQty: 24, notes: "Old blocs from various fleet vehicles" },
+      ],
+    },
+    {
+      reference: "JOB-2026-00844", clientName: "National Grid Services", depot: "London Depot", collectionPoint: "Barking Logistics Centre", collectionDate: "2026-03-13", submittedAt: new Date("2026-03-13"), tonnage: "0.900", status: "pending", invoiceStatus: "pending_invoice", lmeRateUsed: "1724.30", calculatedValue: "1551.87",
+      batteries: [
+        { palletNumber: "PLT-844-A", assetNumber: "AST-2026-844", batterySerial: "BSN-NG-004", manufacture: "Hoppecke", cellType: "P2V", voltage: "48V", notes: null },
+      ],
+    },
+    {
+      reference: "JOB-2026-00843", clientName: "CleanPower UK", depot: "Bristol South", collectionPoint: "Avonmouth Dock Road", collectionDate: "2026-03-13", submittedAt: new Date("2026-03-13"), tonnage: "4.200", status: "approved", invoiceStatus: "invoiced", lmeRateUsed: "1724.30", calculatedValue: "7242.06",
+      batteries: [
+        { palletNumber: "PLT-843-A", assetNumber: "AST-2026-843", batterySerial: "BSN-CP-005", manufacture: "Enersys", cellType: "P2B", voltage: "36V", notes: null },
+        { palletNumber: "PLT-843-B", assetNumber: "AST-2026-852", batterySerial: "BSN-CP-006", manufacture: "GNB", cellType: "P2S", voltage: "24V", notes: null },
+        { palletNumber: "PLT-843-C", assetNumber: null, batterySerial: null, manufacture: "Various", cellType: "Blocs", looseCellsQty: 36, notes: "Loose blocs recovered from warehouse clearance" },
+      ],
+    },
+    {
+      reference: "JOB-2026-00842", clientName: "Thames Batteries", depot: "Reading Central", collectionPoint: "Theale Business Park", collectionDate: "2026-03-12", submittedAt: new Date("2026-03-12"), tonnage: "1.500", status: "completed", invoiceStatus: "paid", lmeRateUsed: "1698.20", calculatedValue: "2547.30",
+      batteries: [
+        { palletNumber: "PLT-842-A", assetNumber: "AST-2026-842", batterySerial: "BSN-TB-006", manufacture: "Hawker", cellType: "P2B", voltage: "12V", notes: null },
+        { palletNumber: "PLT-842-B", assetNumber: "AST-2026-853", batterySerial: "BSN-TB-007", manufacture: "Hawker", cellType: "P2B", voltage: "24V", notes: null },
+      ],
+    },
+    {
+      reference: "JOB-2026-00841", clientName: "Northern Energy Co", depot: "Sheffield East", collectionPoint: "Tinsley Park Industrial", collectionDate: "2026-03-12", submittedAt: new Date("2026-03-12"), tonnage: "2.700", status: "pending", invoiceStatus: "pending_invoice", lmeRateUsed: "1698.20", calculatedValue: "4585.14",
+      batteries: [
+        { palletNumber: "PLT-841-A", assetNumber: "AST-2026-841", batterySerial: "BSN-NE-007", manufacture: "Enersys", cellType: "P2B", voltage: "24V", notes: null },
+        { palletNumber: "PLT-841-B", assetNumber: "AST-2026-854", batterySerial: "BSN-NE-008", manufacture: "Exide", cellType: "P2V", voltage: "80V", notes: null },
+        { palletNumber: "PLT-841-C", assetNumber: null, batterySerial: null, manufacture: "GNB", cellType: "Blocs", looseCellsQty: 18, notes: null },
+      ],
+    },
+    {
+      reference: "JOB-2026-00840", clientName: "Severn Trent Recycling", depot: "Coventry West", collectionPoint: "Binley Industrial Estate", collectionDate: "2026-03-11", submittedAt: new Date("2026-03-11"), tonnage: "1.100", status: "flagged", notes: "Leaking observed on arrival", invoiceStatus: "pending_invoice", lmeRateUsed: "1698.20", calculatedValue: "1868.02",
+      batteries: [
+        { palletNumber: "PLT-840-A", assetNumber: "AST-2026-840", batterySerial: "BSN-ST-008", manufacture: "Hoppecke", cellType: "P2B", voltage: "48V", notes: "Signs of leakage on casing" },
+      ],
+    },
+    {
+      reference: "JOB-2026-00839", clientName: "Midlands Power Corp", depot: "Birmingham Central", collectionPoint: "Erdington Depot", collectionDate: "2026-03-10", submittedAt: new Date("2026-03-10"), tonnage: "3.500", status: "approved", invoiceStatus: "invoiced", lmeRateUsed: "1698.20", calculatedValue: "5943.70",
+      batteries: [
+        { palletNumber: "PLT-839-A", assetNumber: "AST-2026-839", batterySerial: "BSN-MP-009", manufacture: "Enersys", cellType: "P2B", voltage: "12V", notes: null },
+        { palletNumber: "PLT-839-B", assetNumber: "AST-2026-855", batterySerial: "BSN-MP-010", manufacture: "Hawker", cellType: "P2S", voltage: "24V", notes: null },
+        { palletNumber: "PLT-839-C", assetNumber: "AST-2026-856", batterySerial: "BSN-MP-011", manufacture: "Exide", cellType: "P2B", voltage: "48V", notes: null },
+      ],
+    },
+    {
+      reference: "JOB-2026-00838", clientName: "Yorkshire Metals Ltd", depot: "Leeds Hub", collectionPoint: "Hunslet Road Works", collectionDate: "2026-03-10", submittedAt: new Date("2026-03-10"), tonnage: "1.900", status: "completed", invoiceStatus: "paid", lmeRateUsed: "1698.20", calculatedValue: "3226.58",
+      batteries: [
+        { palletNumber: "PLT-838-A", assetNumber: "AST-2026-838", batterySerial: "BSN-YM-010", manufacture: "GNB", cellType: "P2V", voltage: "48V", notes: null },
+        { palletNumber: "PLT-838-B", assetNumber: null, batterySerial: null, manufacture: "Mixed", cellType: "Blocs", looseCellsQty: 8, notes: null },
+      ],
+    },
+    {
+      reference: "JOB-2026-00837", clientName: "Scottish Power Recycling", depot: "Manchester North", collectionPoint: "Salford Quays Unit 7", collectionDate: "2026-03-09", submittedAt: new Date("2026-03-09"), tonnage: "2.200", status: "pending", invoiceStatus: "pending_invoice", lmeRateUsed: "1698.20", calculatedValue: "3736.04",
+      batteries: [
+        { palletNumber: "PLT-837-A", assetNumber: "AST-2026-837", batterySerial: "BSN-SP-011", manufacture: "Enersys", cellType: "P2B", voltage: "24V", notes: null },
+        { palletNumber: "PLT-837-B", assetNumber: "AST-2026-857", batterySerial: "BSN-SP-012", manufacture: "Enersys", cellType: "P2B", voltage: "36V", notes: null },
+      ],
+    },
+    {
+      reference: "JOB-2026-00836", clientName: "Cornwall Waste Services", depot: "Bristol South", collectionPoint: "Pool Industrial Estate", collectionDate: "2026-03-08", submittedAt: new Date("2026-03-08"), tonnage: "0.800", status: "completed", invoiceStatus: "paid", lmeRateUsed: "1698.20", calculatedValue: "1358.56",
+      batteries: [
+        { palletNumber: "PLT-836-A", assetNumber: "AST-2026-836", batterySerial: "BSN-CW-012", manufacture: "Hawker", cellType: "P2S", voltage: "12V", notes: null },
+      ],
+    },
+    {
+      reference: "JOB-2026-00835", clientName: "East Anglian Batteries", depot: "London Depot", collectionPoint: "Chelmsford Business Park", collectionDate: "2026-03-07", submittedAt: new Date("2026-03-07"), tonnage: "5.100", status: "approved", invoiceStatus: "invoiced", lmeRateUsed: "1698.20", calculatedValue: "8660.82",
+      batteries: [
+        { palletNumber: "PLT-835-A", assetNumber: "AST-2026-835", batterySerial: "BSN-EA-013", manufacture: "Exide", cellType: "P2B", voltage: "48V", notes: null },
+        { palletNumber: "PLT-835-B", assetNumber: "AST-2026-858", batterySerial: "BSN-EA-014", manufacture: "Exide", cellType: "P2B", voltage: "24V", notes: null },
+        { palletNumber: "PLT-835-C", assetNumber: "AST-2026-859", batterySerial: "BSN-EA-015", manufacture: "Enersys", cellType: "P2V", voltage: "80V", notes: null },
+        { palletNumber: "PLT-835-D", assetNumber: "AST-2026-860", batterySerial: "BSN-EA-016", manufacture: "GNB", cellType: "P2S", voltage: "36V", notes: null },
+        { palletNumber: "PLT-835-E", assetNumber: null, batterySerial: null, manufacture: "Various", cellType: "Blocs", looseCellsQty: 40, notes: "Large batch of decommissioned blocs" },
+      ],
+    },
+    {
+      reference: "JOB-2026-00834", clientName: "Welsh Green Energy", depot: "Birmingham Central", collectionPoint: "Swansea Enterprise Zone", collectionDate: "2026-03-06", submittedAt: new Date("2026-03-06"), tonnage: "1.300", status: "flagged", notes: "Hazardous material flag - requires specialist handling", invoiceStatus: "pending_invoice", lmeRateUsed: "1698.20", calculatedValue: "2207.66",
+      batteries: [
+        { palletNumber: "PLT-834-A", assetNumber: "AST-2026-834", batterySerial: "BSN-WG-014", manufacture: "Hoppecke", cellType: "P2B", voltage: "36V", notes: "Possible lithium contamination - segregate" },
+      ],
+    },
+    {
+      reference: "JOB-2026-00833", clientName: "Aberdeen Recycling Group", depot: "Sheffield East", collectionPoint: "Altens Industrial Estate", collectionDate: "2026-03-05", submittedAt: new Date("2026-03-05"), tonnage: "2.000", status: "pending", invoiceStatus: "pending_invoice", lmeRateUsed: "1698.20", calculatedValue: "3396.40",
+      batteries: [
+        { palletNumber: "PLT-833-A", assetNumber: "AST-2026-833", batterySerial: "BSN-AR-015", manufacture: "Enersys", cellType: "P2B", voltage: "12V", notes: null },
+        { palletNumber: "PLT-833-B", assetNumber: "AST-2026-861", batterySerial: "BSN-AR-016", manufacture: "Exide", cellType: "P2B", voltage: "24V", notes: null },
+      ],
+    },
+    {
+      reference: "JOB-2026-00832", clientName: "South Coast Metals", depot: "Reading Central", collectionPoint: "Poole Trading Estate", collectionDate: "2026-03-04", submittedAt: new Date("2026-03-04"), tonnage: "3.800", status: "completed", invoiceStatus: "paid", lmeRateUsed: "1698.20", calculatedValue: "6453.16",
+      batteries: [
+        { palletNumber: "PLT-832-A", assetNumber: "AST-2026-832", batterySerial: "BSN-SC-016", manufacture: "Hawker", cellType: "P2B", voltage: "24V", notes: null },
+        { palletNumber: "PLT-832-B", assetNumber: "AST-2026-862", batterySerial: "BSN-SC-017", manufacture: "GNB", cellType: "P2S", voltage: "48V", notes: null },
+        { palletNumber: "PLT-832-C", assetNumber: null, batterySerial: null, manufacture: "Mixed", cellType: "Blocs", looseCellsQty: 20, notes: "Standard loose cell collection" },
+      ],
+    },
+    {
+      reference: "JOB-2026-00831", clientName: "Peak District Energy", depot: "Manchester North", collectionPoint: "Buxton Quarry Road", collectionDate: "2026-03-03", submittedAt: new Date("2026-03-03"), tonnage: "1.600", status: "approved", invoiceStatus: "invoiced", lmeRateUsed: "1698.20", calculatedValue: "2717.12",
+      batteries: [
+        { palletNumber: "PLT-831-A", assetNumber: "AST-2026-831", batterySerial: "BSN-PD-017", manufacture: "Enersys", cellType: "P2V", voltage: "80V", notes: null },
+      ],
+    },
+    {
+      reference: "JOB-2026-00830", clientName: "Highland Batteries Co", depot: "Leeds Hub", collectionPoint: "Inverness Retail Park", collectionDate: "2026-03-02", submittedAt: new Date("2026-03-02"), tonnage: "2.900", status: "pending", invoiceStatus: "pending_invoice", lmeRateUsed: "1698.20", calculatedValue: "4924.78",
+      batteries: [
+        { palletNumber: "PLT-830-A", assetNumber: "AST-2026-830", batterySerial: "BSN-HB-018", manufacture: "Exide", cellType: "P2B", voltage: "48V", notes: null },
+        { palletNumber: "PLT-830-B", assetNumber: "AST-2026-863", batterySerial: "BSN-HB-019", manufacture: "Hawker", cellType: "P2B", voltage: "24V", notes: null },
+        { palletNumber: "PLT-830-C", assetNumber: null, batterySerial: null, manufacture: "GNB", cellType: "Blocs", looseCellsQty: 15, notes: null },
+      ],
+    },
   ];
 
-  for (let i = 0; i < jobs.length; i++) {
-    await db
+  for (let i = 0; i < jobsData.length; i++) {
+    const { batteries, ...jobValues } = jobsData[i];
+    const [insertedJob] = await db
       .insert(jobsTable)
-      .values({ ...jobs[i], submittedById: pickSubmitter(i) })
-      .onConflictDoNothing();
+      .values({ ...jobValues, submittedById: pickSubmitter(i) })
+      .onConflictDoNothing()
+      .returning();
+
+    if (insertedJob && batteries) {
+      for (const bat of batteries) {
+        await db
+          .insert(jobBatteriesTable)
+          .values({ jobId: insertedJob.id, ...bat })
+          .onConflictDoNothing();
+      }
+    }
   }
 
-  console.log(`Seeded ${jobs.length} demo jobs`);
+  console.log(`Seeded ${jobsData.length} demo jobs with battery line items`);
 
   const lmePrices = [
     { priceDate: "2026-03-15", usdPrice: "2185.50", exchangeRate: "0.789200", gbpPrice: "1724.30", source: "manual" },
