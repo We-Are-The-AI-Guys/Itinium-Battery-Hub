@@ -103,7 +103,6 @@ router.get(
 );
 
 interface BatteryInput {
-  palletNumber?: string | null;
   assetNumber?: string | null;
   batterySerial?: string | null;
   manufacture?: string | null;
@@ -150,9 +149,17 @@ router.post(
           })
           .returning();
 
-        const batteryRows = (batteries as BatteryInput[]).map((b) => ({
+        const batteryCount = (batteries as BatteryInput[]).length;
+        const seqResult = await tx.execute(
+          sql`SELECT nextval('pallet_number_seq') AS seq FROM generate_series(1, ${batteryCount})`
+        );
+        const palletNumbers = (seqResult.rows as { seq: string }[]).map(
+          (r) => `PLT-${String(r.seq).padStart(5, "0")}`
+        );
+
+        const batteryRows = (batteries as BatteryInput[]).map((b, idx) => ({
           jobId: job.id,
-          palletNumber: b.palletNumber || null,
+          palletNumber: palletNumbers[idx],
           assetNumber: b.assetNumber || null,
           batterySerial: b.batterySerial || null,
           manufacture: b.manufacture || null,

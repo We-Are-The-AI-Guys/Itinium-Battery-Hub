@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { usersTable, jobsTable, jobBatteriesTable, lmePricesTable, systemSettingsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 async function seed() {
@@ -174,6 +174,7 @@ async function seed() {
 
   await db.delete(jobBatteriesTable);
   await db.delete(jobsTable);
+  await db.execute(sql`ALTER SEQUENCE pallet_number_seq RESTART WITH 1`);
 
   for (let i = 0; i < jobsData.length; i++) {
     const { batteries, ...jobValues } = jobsData[i];
@@ -184,10 +185,17 @@ async function seed() {
       .returning();
 
     if (insertedJob && batteries) {
-      for (const bat of batteries) {
+      const seqResult = await db.execute(
+        sql`SELECT nextval('pallet_number_seq') AS seq FROM generate_series(1, ${batteries.length})`
+      );
+      const palletNumbers = (seqResult.rows as { seq: string }[]).map(
+        (r) => `PLT-${String(r.seq).padStart(5, "0")}`
+      );
+      for (let j = 0; j < batteries.length; j++) {
+        const { palletNumber: _unused, ...bat } = batteries[j] as Record<string, unknown>;
         await db
           .insert(jobBatteriesTable)
-          .values({ jobId: insertedJob.id, ...bat })
+          .values({ jobId: insertedJob.id, palletNumber: palletNumbers[j], ...bat })
           .onConflictDoNothing();
       }
     }

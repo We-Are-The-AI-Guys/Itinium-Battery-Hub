@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import {
   Package,
-  Hash,
   Battery,
   Camera,
   Upload,
@@ -36,7 +35,6 @@ import { useToast } from "@/hooks/use-toast";
 
 interface BatteryRow {
   id: string;
-  palletNumber: string;
   assetNumber: string;
   batterySerial: string;
   manufacture: string;
@@ -57,7 +55,6 @@ interface User {
 function createEmptyBattery(): BatteryRow {
   return {
     id: crypto.randomUUID(),
-    palletNumber: "",
     assetNumber: "",
     batterySerial: "",
     manufacture: "",
@@ -145,7 +142,7 @@ export default function DepotFormPage() {
 
   async function onSubmit() {
     const hasAtLeastOneSerial = batteries.some(
-      (b) => b.batterySerial.trim() || b.palletNumber.trim() || b.assetNumber.trim()
+      (b) => b.batterySerial.trim() || b.assetNumber.trim()
     );
     if (!hasAtLeastOneSerial) {
       toast({
@@ -170,7 +167,6 @@ export default function DepotFormPage() {
           tonnage: "0.000",
           notes: jobNotes || null,
           batteries: batteries.map((b) => ({
-            palletNumber: b.palletNumber || null,
             assetNumber: b.assetNumber || null,
             batterySerial: b.batterySerial || null,
             manufacture: b.manufacture || null,
@@ -421,23 +417,6 @@ export default function DepotFormPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-600">
-                      Pallet No.
-                    </label>
-                    <div className="relative group">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Hash className="h-3.5 w-3.5 text-slate-400 group-focus-within:text-[#0ea5e9] transition-colors" />
-                      </div>
-                      <Input
-                        placeholder="e.g., PLT-001"
-                        className="pl-9 h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
-                        value={battery.palletNumber}
-                        onChange={(e) => updateBattery(battery.id, "palletNumber", e.target.value)}
-                      />
-                    </div>
-                  </div>
-
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-slate-600">
                       Asset No.
