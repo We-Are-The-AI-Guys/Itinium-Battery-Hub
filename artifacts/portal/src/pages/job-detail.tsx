@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   ChevronLeft,
@@ -12,6 +12,7 @@ import {
   Calculator,
   PoundSterling,
   ClipboardCheck,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,47 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { useToast } from "@/hooks/use-toast";
+
+interface WeightReference {
+  id: number;
+  cellType: string;
+  voltage: string | null;
+  weightKg: string;
+}
+
+interface LmePrice {
+  id: number;
+  priceDate: string;
+  usdPrice: string;
+  exchangeRate: string;
+  gbpPrice: string;
+  source: string;
+}
+
+function calcPbContent(
+  cellType: string | null,
+  voltage: string | null,
+  weightRefMap: Map<string, number>,
+): number | null {
+  if (!cellType || !voltage) return null;
+  const v = parseFloat(voltage);
+  if (!isFinite(v) || v <= 0) return null;
+  const key = cellType.toLowerCase();
+  const weightPerCell = weightRefMap.get(`${key}|${voltage}`) ?? weightRefMap.get(key);
+  if (weightPerCell === undefined) return null;
+  const result = weightPerCell * (v / 2);
+  return isFinite(result) ? result : null;
+}
+
+function calcValueGbp(
+  pbContentKg: number | null,
+  lmeGbpRate: number | null,
+): number | null {
+  if (pbContentKg === null || lmeGbpRate === null) return null;
+  if (!isFinite(pbContentKg) || !isFinite(lmeGbpRate)) return null;
+  const result = (pbContentKg * lmeGbpRate) / 1000;
+  return isFinite(result) ? result : null;
+}
 
 interface JobData {
   id: number;
@@ -93,6 +135,24 @@ export default function JobDetailPage() {
   const [batteries, setBatteries] = useState<BatteryData[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [lmePrice, setLmePrice] = useState<LmePrice | null>(null);
+  const [weightRefs, setWeightRefs] = useState<WeightReference[]>([]);
+
+  const weightRefMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const ref of weightRefs) {
+      const w = parseFloat(ref.weightKg);
+      if (!isFinite(w)) continue;
+      const key = ref.cellType.toLowerCase();
+      map.set(key, w);
+      if (ref.voltage) {
+        map.set(`${key}|${ref.voltage}`, w);
+      }
+    }
+    return map;
+  }, [weightRefs]);
+
+  const lmeGbpRate = lmePrice ? (isFinite(parseFloat(lmePrice.gbpPrice)) ? parseFloat(lmePrice.gbpPrice) : null) : null;
 
   const [financials, setFinancials] = useState({
     tonnage: "",
@@ -148,7 +208,33 @@ export default function JobDetailPage() {
 
   useEffect(() => {
     loadJob();
+    fetch("/api/lme/current", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data?.price) setLmePrice(data.price); })
+      .catch(() => {});
+    fetch("/api/weight-reference", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data?.references) setWeightRefs(data.references); })
+      .catch(() => {});
   }, [loadJob]);
+
+  function recalculateBattery(battery: BatteryData): { pb: string; value: string } {
+    const pbNum = calcPbContent(battery.cellType, battery.voltage, weightRefMap);
+    const valNum = calcValueGbp(pbNum, lmeGbpRate);
+    return {
+      pb: pbNum !== null ? pbNum.toFixed(3) : "",
+      value: valNum !== null ? valNum.toFixed(2) : "",
+    };
+  }
+
+  function recalculateAll() {
+    const updated = batteries.map((b) => {
+      const { pb, value } = recalculateBattery(b);
+      return { ...b, pbContentKg: pb || b.pbContentKg, valueGbp: value || b.valueGbp };
+    });
+    setBatteries(updated);
+    toast({ title: "Recalculated", description: "Pb Content and £ Value recalculated for all batteries." });
+  }
 
   useEffect(() => {
     const tonnage = parseFloat(financials.tonnage) || 0;
@@ -376,10 +462,32 @@ export default function JobDetailPage() {
           </div>
           <div className="p-6 space-y-6">
             <div>
-              <h4 className="font-semibold text-[#0f2744] mb-3 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-                Battery Receipt Confirmation & Pb Content
-              </h4>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-[#0f2744] flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  Battery Receipt Confirmation & Pb Content
+                </h4>
+                <div className="flex items-center gap-3">
+                  {lmePrice && (
+                    <div className="flex items-center gap-1.5 text-xs bg-sky-50 border border-sky-200 rounded-md px-2.5 py-1.5">
+                      <PoundSterling className="w-3 h-3 text-sky-600" />
+                      <span className="text-slate-500">LME GBP:</span>
+                      <span className="font-semibold text-sky-700">£{parseFloat(lmePrice.gbpPrice).toFixed(2)}/t</span>
+                      <span className="text-slate-400">({lmePrice.priceDate})</span>
+                    </div>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={recalculateAll}
+                    disabled={!lmePrice || weightRefs.length === 0}
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    Recalculate All
+                  </Button>
+                </div>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-y border-slate-100">
@@ -387,18 +495,40 @@ export default function JobDetailPage() {
                       <th className="px-3 py-2.5 text-left font-semibold">#</th>
                       <th className="px-3 py-2.5 text-left font-semibold">Serial / Pallet</th>
                       <th className="px-3 py-2.5 text-left font-semibold">Type</th>
+                      <th className="px-3 py-2.5 text-left font-semibold">Voltage</th>
                       <th className="px-3 py-2.5 text-center font-semibold">Receipt Confirmed</th>
                       <th className="px-3 py-2.5 text-left font-semibold">Pb Content (Kg)</th>
                       <th className="px-3 py-2.5 text-left font-semibold">£ Value</th>
                       <th className="px-3 py-2.5 text-left font-semibold">Admin Notes</th>
-                      <th className="px-3 py-2.5 text-right font-semibold">Save</th>
+                      <th className="px-3 py-2.5 text-right font-semibold">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {batteries.map((b, i) => (
-                      <BatteryAdminRow key={b.id} battery={b} index={i} onSave={updateBatteryAdmin} />
+                      <BatteryAdminRow
+                        key={b.id}
+                        battery={b}
+                        index={i}
+                        onSave={updateBatteryAdmin}
+                        weightRefMap={weightRefMap}
+                        lmeGbpRate={lmeGbpRate}
+                      />
                     ))}
                   </tbody>
+                  <tfoot className="bg-slate-100 border-t-2 border-slate-200">
+                    <tr>
+                      <td colSpan={5} className="px-3 py-2.5 text-right font-bold text-[#0f2744] text-xs uppercase">
+                        Totals
+                      </td>
+                      <td className="px-3 py-2.5 font-bold text-[#0f2744]">
+                        {batteries.reduce((sum, b) => sum + (parseFloat(b.pbContentKg || "0") || 0), 0).toFixed(3)} kg
+                      </td>
+                      <td className="px-3 py-2.5 font-bold text-[#0f2744]">
+                        £{batteries.reduce((sum, b) => sum + (parseFloat(b.valueGbp || "0") || 0), 0).toFixed(2)}
+                      </td>
+                      <td colSpan={2}></td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </div>
@@ -620,45 +750,52 @@ function BatteryAdminRow({
   battery,
   index,
   onSave,
+  weightRefMap,
+  lmeGbpRate,
 }: {
   battery: BatteryData;
   index: number;
   onSave: (id: number, updates: Record<string, string | boolean | null>) => void;
+  weightRefMap: Map<string, number>;
+  lmeGbpRate: number | null;
 }) {
   const [receipt, setReceipt] = useState(battery.receiptConfirmed ?? false);
   const [pb, setPb] = useState(battery.pbContentKg || "");
   const [value, setValue] = useState(battery.valueGbp || "");
   const [notes, setNotes] = useState(battery.adminNotes || "");
-  const [autoCalculating, setAutoCalculating] = useState(false);
-
-  async function autoCalculatePb() {
-    if (!battery.cellType || !battery.voltage) return;
-    setAutoCalculating(true);
-    try {
-      const params = new URLSearchParams();
-      const legacyTypes = ["PZB", "PZS", "PZV", "Blocs", "Other"];
-      if (legacyTypes.includes(battery.cellType)) {
-        params.set("cellType", battery.cellType);
-      } else {
-        params.set("cellModel", battery.cellType);
-      }
-      params.set("voltage", battery.voltage);
-      const res = await fetch(`/api/weight-reference/lookup?${params}`, { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.reference?.weightKg) {
-          setPb(data.reference.weightKg);
-        }
-      }
-    } catch {}
-    setAutoCalculating(false);
-  }
+  const [isAutoCalced, setIsAutoCalced] = useState(false);
 
   useEffect(() => {
-    if (!pb && battery.cellType && battery.voltage && !battery.pbContentKg) {
-      autoCalculatePb();
+    setPb(battery.pbContentKg || "");
+    setValue(battery.valueGbp || "");
+  }, [battery.pbContentKg, battery.valueGbp]);
+
+  useEffect(() => {
+    if (weightRefMap.size === 0 || lmeGbpRate === null) return;
+    const pbNum = calcPbContent(battery.cellType, battery.voltage, weightRefMap);
+    if (!battery.pbContentKg && pbNum !== null) {
+      setPb(pbNum.toFixed(3));
+      setIsAutoCalced(true);
     }
-  }, []);
+    const effectivePb = battery.pbContentKg ? parseFloat(battery.pbContentKg) : pbNum;
+    if (!battery.valueGbp && effectivePb !== null && isFinite(effectivePb!)) {
+      const valNum = calcValueGbp(effectivePb, lmeGbpRate);
+      if (valNum !== null) {
+        setValue(valNum.toFixed(2));
+        setIsAutoCalced(true);
+      }
+    }
+  }, [battery.cellType, battery.voltage, battery.pbContentKg, battery.valueGbp, weightRefMap, lmeGbpRate]);
+
+  function handleRecalculate() {
+    const pbNum = calcPbContent(battery.cellType, battery.voltage, weightRefMap);
+    const valNum = calcValueGbp(pbNum, lmeGbpRate);
+    if (pbNum !== null) setPb(pbNum.toFixed(3));
+    if (valNum !== null) setValue(valNum.toFixed(2));
+    setIsAutoCalced(true);
+  }
+
+  const canRecalculate = battery.cellType && battery.voltage && weightRefMap.size > 0 && lmeGbpRate !== null;
 
   return (
     <tr className={index % 2 === 0 ? "bg-white" : "bg-slate-50/30"}>
@@ -669,48 +806,36 @@ function BatteryAdminRow({
       <td className="px-3 py-2.5">
         <Badge variant="outline" className="text-xs">{battery.cellType || "—"}</Badge>
       </td>
+      <td className="px-3 py-2.5 text-slate-700">{battery.voltage || "—"}</td>
       <td className="px-3 py-2.5 text-center">
         <Switch
           checked={receipt}
           onCheckedChange={(checked) => {
             setReceipt(checked);
             if (checked && !pb) {
-              autoCalculatePb();
+              handleRecalculate();
             }
           }}
         />
       </td>
       <td className="px-3 py-2.5">
-        <div className="flex items-center gap-1">
-          <Input
-            type="number"
-            step="0.001"
-            placeholder="0.000"
-            className="h-8 w-24 text-sm bg-slate-50"
-            value={pb}
-            onChange={(e) => setPb(e.target.value)}
-          />
-          {battery.cellType && battery.voltage && (
-            <button
-              type="button"
-              onClick={autoCalculatePb}
-              disabled={autoCalculating}
-              className="text-[10px] text-[#0ea5e9] hover:underline whitespace-nowrap"
-              title="Auto-calculate from cell model"
-            >
-              {autoCalculating ? "..." : "auto"}
-            </button>
-          )}
-        </div>
+        <Input
+          type="number"
+          step="0.001"
+          placeholder="0.000"
+          className={`h-8 w-24 text-sm ${isAutoCalced && pb ? "bg-sky-50 border-sky-200" : "bg-slate-50"}`}
+          value={pb}
+          onChange={(e) => { setPb(e.target.value); setIsAutoCalced(false); }}
+        />
       </td>
       <td className="px-3 py-2.5">
         <Input
           type="number"
           step="0.01"
           placeholder="0.00"
-          className="h-8 w-24 text-sm bg-slate-50"
+          className={`h-8 w-24 text-sm ${isAutoCalced && value ? "bg-sky-50 border-sky-200" : "bg-slate-50"}`}
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => { setValue(e.target.value); setIsAutoCalced(false); }}
         />
       </td>
       <td className="px-3 py-2.5">
@@ -722,21 +847,34 @@ function BatteryAdminRow({
         />
       </td>
       <td className="px-3 py-2.5 text-right">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs"
-          onClick={() =>
-            onSave(battery.id, {
-              receiptConfirmed: receipt,
-              pbContentKg: pb || null,
-              valueGbp: value || null,
-              adminNotes: notes || null,
-            })
-          }
-        >
-          Save
-        </Button>
+        <div className="flex items-center justify-end gap-1">
+          {canRecalculate && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={handleRecalculate}
+              title="Recalculate Pb & Value"
+            >
+              <RefreshCw className="w-3 h-3" />
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() =>
+              onSave(battery.id, {
+                receiptConfirmed: receipt,
+                pbContentKg: pb || null,
+                valueGbp: value || null,
+                adminNotes: notes || null,
+              })
+            }
+          >
+            Save
+          </Button>
+        </div>
       </td>
     </tr>
   );

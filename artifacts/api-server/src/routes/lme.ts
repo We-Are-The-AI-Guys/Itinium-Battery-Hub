@@ -10,7 +10,7 @@ const router: IRouter = Router();
 router.get(
   "/lme/current",
   requireAuth,
-  requireRole("accounts", "head_office_admin"),
+  requireRole("team_leader", "accounts", "head_office_admin"),
   async (_req, res) => {
     try {
       const [latest] = await db
