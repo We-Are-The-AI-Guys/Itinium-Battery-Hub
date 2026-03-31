@@ -1,0 +1,77 @@
+Perfect. Here's the precise spec for both workflows, ready to build in Replit.
+
+---
+
+## Loose Cells Workflow
+
+**Trigger:** Checkbox labelled "Loose cells?" on each battery row.
+
+**Default state (unchecked — Complete Battery):**
+- Show: Voltage dropdown
+- Hide: Cell Qty field
+
+**Checked state (Loose Cells):**
+- Hide: Voltage dropdown (clear its value)
+- Show: Cell Qty field (numeric input, whole numbers only)
+- Weight auto-calc should switch logic — since there's no voltage, the Pb weight can't be auto-calculated from the formula. The Est. Weight field should become a **required manual entry** when loose cells is checked, with a clear label change to "Total Weight (kg) — required"
+
+**Data model note:** Store both `is_loose_cells` (boolean), `cell_qty` (integer, nullable), and `voltage` (integer, nullable) on the battery row. Never both populated at the same time.
+
+---
+
+## Unknown / Damaged Serial Workflow
+
+**Trigger:** A button or link below the Serial No. field — "Serial unknown or damaged?" — not a second input, just a clear action the user deliberately takes.
+
+**What happens on trigger:**
+
+**1. Flag the row visually**
+- Add an amber warning badge to the Battery row header: `⚠ Needs Review`
+- The row gets a left border colour change (amber) so it's scannable at a glance when Itinium reviews the submission
+
+**2. Reason dropdown appears** (required before submission)
+- Options: `Unknown serial`, `Damaged — unreadable`, `N/A (no serial fitted)`
+- This replaces the serial number text input — grey it out and populate it with the selected reason as a display value
+
+**3. Photo upload becomes mandatory for that row**
+- The per-row photo upload (which you're moving into each battery row anyway) should switch from optional to required
+- Show a clear message: "A photo is required for batteries without a readable serial number"
+- Block form submission if a flagged row has no photo attached
+
+**4. On submission to Itinium**
+- These rows surface prominently in the Itinium admin review dashboard — flagged rows should be visually distinct so the reviewer knows immediately which batteries need manual attention
+- No separate alert needed at this stage since Itinium reviews all submissions before approval anyway
+
+---
+
+## Revised Battery Row Field Order
+
+With all of the above, here's the complete field layout for each battery row in the correct order:
+
+```
+[⚠ Needs Review badge — amber, only shown when flagged]
+
+Pallet No.          Asset No.           Battery Serial No.
+[auto-generated]    [text input]        [text input]  
+                                        [Serial unknown or damaged? →]
+
+Manufacturer        Type of Cells       [ ] Loose cells?
+[dropdown]          [dropdown]          
+
+If unchecked:       If checked:
+Voltage             Cell Qty
+[dropdown]          [number input]
+
+Est. Weight (kg)    Notes
+[auto-calc]         [text input]
+[manual if loose]   
+
+[📷 Upload Photo]  ← optional normally, mandatory if flagged
+[Reason dropdown]  ← only shown if flagged
+```
+
+---
+
+## One Additional Thing to Decide
+
+When a row is flagged and the reason is set to `N/A (no serial fitted)` — this is actually a normal, known state (you saw it frequently in the real data). You might want to treat `N/A` differently from `Unknown` and `Damaged`: no photo requirement for `N/A`, since there's nothing to photograph. Worth confirming with Itinium whether `N/A` batteries need a photo or not before you build the validation rule.
