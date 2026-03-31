@@ -318,7 +318,9 @@ async function seed() {
   await db.execute(sql`ALTER TABLE cell_models DROP CONSTRAINT IF EXISTS cell_models_model_name_unique`);
   await db.execute(sql`DROP INDEX IF EXISTS cell_models_model_name_unique`);
   await db.execute(sql`DROP INDEX IF EXISTS idx_cell_models_model_name`);
-  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_cell_models_mfr_model ON cell_models (manufacturer, model_name)`);
+  await db.execute(sql`DROP INDEX IF EXISTS idx_cell_models_mfr_model`);
+  await db.execute(sql`DROP INDEX IF EXISTS idx_cell_models_mfr_model_height`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_mfr_model ON cell_models (manufacturer, model_name)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family ON cell_models (cell_family)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family_height ON cell_models (cell_family, cell_height_mm)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_manufacturer ON cell_models (manufacturer)`);
@@ -334,7 +336,7 @@ async function seed() {
       cellsCount: cm.cellsCount,
       weightPerCellKg: String(cm.weightPerCellKg),
     }));
-    await db.insert(cellModelsTable).values(batch).onConflictDoNothing();
+    await db.insert(cellModelsTable).values(batch);
   }
   const countResult = await db.execute(sql`SELECT COUNT(*)::int as count FROM cell_models`);
   const cellModelCount = Number(countResult.rows?.[0]?.count ?? countResult[0]?.count ?? 0);
