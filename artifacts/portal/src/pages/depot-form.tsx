@@ -306,6 +306,14 @@ export default function DepotFormPage() {
         if (field === "cellType" && (value === "Blocs" || value === "Other")) {
           newB.cellModel = "";
         }
+        if (field === "manufacture" && newB.cellModel) {
+          const effMfr = value === "Other" ? newB.manufactureCustom : value;
+          const stillValid = !effMfr || cellModels.some((m) => m.modelName === newB.cellModel && m.manufacturer === effMfr);
+          if (!stillValid) {
+            newB.cellModel = "";
+            newB.cellType = "";
+          }
+        }
         if (field === "cellModel") {
           const mfr = newB.manufacture === "Other" ? newB.manufactureCustom : newB.manufacture;
           const model = cellModels.find((m) => m.modelName === value && (!mfr || m.manufacturer === mfr)) || cellModels.find((m) => m.modelName === value);

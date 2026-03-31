@@ -31,7 +31,6 @@ router.get(
       }
 
       if (conditions.length > 0) {
-        const { and } = await import("drizzle-orm");
         query = query.where(and(...conditions));
       }
 
