@@ -316,6 +316,8 @@ async function seed() {
   `);
   await db.execute(sql`ALTER TABLE cell_models ADD COLUMN IF NOT EXISTS manufacturer VARCHAR(100) NOT NULL DEFAULT 'Unknown'`);
   await db.execute(sql`ALTER TABLE cell_models DROP CONSTRAINT IF EXISTS cell_models_model_name_unique`);
+  await db.execute(sql`DROP INDEX IF EXISTS cell_models_model_name_unique`);
+  await db.execute(sql`DROP INDEX IF EXISTS idx_cell_models_model_name`);
   await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_cell_models_mfr_model ON cell_models (manufacturer, model_name)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family ON cell_models (cell_family)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family_height ON cell_models (cell_family, cell_height_mm)`);
@@ -334,7 +336,12 @@ async function seed() {
     }));
     await db.insert(cellModelsTable).values(batch).onConflictDoNothing();
   }
-  console.log(`Seeded ${CELL_MODEL_DATA.length} cell model entries`);
+  const countResult = await db.execute(sql`SELECT COUNT(*)::int as count FROM cell_models`);
+  const cellModelCount = Number(countResult.rows?.[0]?.count ?? countResult[0]?.count ?? 0);
+  console.log(`Seeded ${cellModelCount} cell model entries (expected ${CELL_MODEL_DATA.length})`);
+  if (cellModelCount !== CELL_MODEL_DATA.length) {
+    console.warn(`WARNING: Expected ${CELL_MODEL_DATA.length} cell models but inserted ${cellModelCount}. Check for duplicates in data file.`);
+  }
 
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS collection_points (
