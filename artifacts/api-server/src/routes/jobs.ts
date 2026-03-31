@@ -166,6 +166,20 @@ router.post(
         ? String(parsedTonnage)
         : autoTonnageStr;
 
+      const finalTonnageNum = parseFloat(finalTonnage);
+      const MIN_TONNAGE = 9.5;
+      const MAX_TONNAGE = 26.0;
+      if (isFinite(finalTonnageNum)) {
+        if (finalTonnageNum < MIN_TONNAGE) {
+          res.status(400).json({ message: `Minimum collection weight is 10t. Current load is ${finalTonnageNum.toFixed(3)}t.` });
+          return;
+        }
+        if (finalTonnageNum > MAX_TONNAGE) {
+          res.status(400).json({ message: `Maximum collection weight is ${MAX_TONNAGE}t. Current load is ${finalTonnageNum.toFixed(3)}t.` });
+          return;
+        }
+      }
+
       const result = await db.transaction(async (tx) => {
         const jobCount = await tx.select({ count: count() }).from(jobsTable);
         const nextNum = (jobCount[0]?.count || 0) + 1;
