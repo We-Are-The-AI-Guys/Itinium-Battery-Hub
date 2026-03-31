@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { cellModelsTable } from "@workspace/db/schema";
-import { eq, ilike, or, sql } from "drizzle-orm";
+import { eq, ilike, or, sql, and } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -54,16 +54,21 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res) => {
     try {
-      const { modelName } = req.query;
+      const { modelName, manufacturer } = req.query;
       if (!modelName || typeof modelName !== "string") {
         res.status(400).json({ message: "modelName is required" });
         return;
       }
 
+      const conditions = [eq(cellModelsTable.modelName, modelName)];
+      if (manufacturer && typeof manufacturer === "string") {
+        conditions.push(eq(cellModelsTable.manufacturer, manufacturer));
+      }
+
       const [model] = await db
         .select()
         .from(cellModelsTable)
-        .where(eq(cellModelsTable.modelName, modelName));
+        .where(and(...conditions));
 
       res.json({ model: model || null });
     } catch (error) {
