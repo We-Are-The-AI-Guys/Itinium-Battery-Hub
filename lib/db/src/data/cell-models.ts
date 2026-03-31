@@ -1,13 +1,4 @@
-export interface CellModelData {
-  manufacturer: string;
-  modelName: string;
-  cellFamily: string;
-  cellHeightMm: number;
-  cellsCount: number;
-  weightPerCellKg: number;
-}
-
-export const CELL_MODEL_DATA: CellModelData[] = [
+export const CELL_MODEL_DATA = [
   { manufacturer: "TAB", modelName: "Unknown", cellFamily: "Unknown", cellHeightMm: 0, cellsCount: 1, weightPerCellKg: 0 },
   { manufacturer: "Espex", modelName: "Unknown", cellFamily: "Unknown", cellHeightMm: 0, cellsCount: 1, weightPerCellKg: 0 },
   { manufacturer: "EnerSys / Hawker", modelName: "Unknown", cellFamily: "Unknown", cellHeightMm: 0, cellsCount: 1, weightPerCellKg: 0 },
@@ -1701,7 +1692,7 @@ export const CELL_MODEL_DATA: CellModelData[] = [
   { manufacturer: "Espex", modelName: "10 IPzS 900A-ORC", cellFamily: "IPzS", cellHeightMm: 720, cellsCount: 10, weightPerCellKg: 38.2 },
   { manufacturer: "EnerSys / Hawker", modelName: "7 PzM 875", cellFamily: "PzM", cellHeightMm: 720, cellsCount: 7, weightPerCellKg: 35.8 },
   { manufacturer: "Eternity / Juice", modelName: "9 PzS-ET985-LM", cellFamily: "PzS-ET-LM", cellHeightMm: 720, cellsCount: 9, weightPerCellKg: 39.9 },
-  { manufacturer: "Triathlon / Sunlight", modelName: "QUA1480", cellFamily: "QUA1480", cellHeightMm: 720, cellsCount: 1, weightPerCellKg: 34.5 },
+  { manufacturer: "Triathlon / Sunlight", modelName: "QUA1480 (34.5kg)", cellFamily: "QUA1480", cellHeightMm: 720, cellsCount: 1, weightPerCellKg: 34.5 },
   { manufacturer: "Velaris / Ecobat / EDrive", modelName: "2PzV110", cellFamily: "2PzV110", cellHeightMm: 720, cellsCount: 1, weightPerCellKg: 6.5 },
   { manufacturer: "TAB", modelName: "5 PzV 600", cellFamily: "PzV", cellHeightMm: 720, cellsCount: 5, weightPerCellKg: 42.1 },
   { manufacturer: "Espex", modelName: "2 IPzS 210A-ORC", cellFamily: "IPzS", cellHeightMm: 720, cellsCount: 2, weightPerCellKg: 10.17 },
@@ -2353,7 +2344,7 @@ export const CELL_MODEL_DATA: CellModelData[] = [
   { manufacturer: "EnerSys / Hawker", modelName: "3NXS375", cellFamily: "3NXS375", cellHeightMm: 611, cellsCount: 1, weightPerCellKg: 18.87 },
   { manufacturer: "Eternity / Juice", modelName: "QUA1480", cellFamily: "QUA1480", cellHeightMm: 611, cellsCount: 1, weightPerCellKg: 29.6 },
   { manufacturer: "EnerSys / Hawker", modelName: "4NXS500", cellFamily: "4NXS500", cellHeightMm: 611, cellsCount: 1, weightPerCellKg: 24.48 },
-  { manufacturer: "Eternity / Juice", modelName: "QUA1480", cellFamily: "QUA1480", cellHeightMm: 611, cellsCount: 1, weightPerCellKg: 34.5 },
+  { manufacturer: "Eternity / Juice", modelName: "QUA1480 (34.5kg)", cellFamily: "QUA1480", cellHeightMm: 611, cellsCount: 1, weightPerCellKg: 34.5 },
   { manufacturer: "EnerSys / Hawker", modelName: "5NXS625", cellFamily: "5NXS625", cellHeightMm: 611, cellsCount: 1, weightPerCellKg: 30.175 },
   { manufacturer: "Eternity / Juice", modelName: "QUA1720", cellFamily: "QUA1720", cellHeightMm: 611, cellsCount: 1, weightPerCellKg: 39.3 },
   { manufacturer: "EnerSys / Hawker", modelName: "6NXS750", cellFamily: "6NXS750", cellHeightMm: 611, cellsCount: 1, weightPerCellKg: 35.785000000000004 },

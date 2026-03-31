@@ -54,7 +54,7 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 
 ### cell_models
 - id, manufacturer (varchar 100, not null, default 'Unknown'), model_name, cell_family, cell_height_mm, cells_count, weight_per_cell_kg, created_at
-- Composite index on (manufacturer, model_name) for efficient lookups; same model name can appear with different heights/weights
+- Composite unique index on (manufacturer, model_name, cell_height_mm) — same model can appear at different cell heights
 - 2,437 entries from the Cell_types spreadsheet, across 9 manufacturers: TAB, Espex, EnerSys / Hawker, Exide / GNB, Midac, Eternity / Juice, Triathlon / Sunlight, Velaris / Ecobat / EDrive, Hoppecke
 - Weight formula: total_weight = weight_per_cell_kg × (voltage / 2)
 - Seeded from lib/db/src/data/cell-models.ts (static data parsed from spreadsheet)

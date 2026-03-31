@@ -320,12 +320,13 @@ async function seed() {
   await db.execute(sql`DROP INDEX IF EXISTS idx_cell_models_model_name`);
   await db.execute(sql`DROP INDEX IF EXISTS idx_cell_models_mfr_model`);
   await db.execute(sql`DROP INDEX IF EXISTS idx_cell_models_mfr_model_height`);
-  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_mfr_model ON cell_models (manufacturer, model_name)`);
+
+  await db.delete(cellModelsTable);
+
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_cell_models_mfr_model_height ON cell_models (manufacturer, model_name, cell_height_mm)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family ON cell_models (cell_family)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family_height ON cell_models (cell_family, cell_height_mm)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_manufacturer ON cell_models (manufacturer)`);
-
-  await db.delete(cellModelsTable);
   const batchSize = 50;
   for (let i = 0; i < CELL_MODEL_DATA.length; i += batchSize) {
     const batch = CELL_MODEL_DATA.slice(i, i + batchSize).map(cm => ({
@@ -336,7 +337,7 @@ async function seed() {
       cellsCount: cm.cellsCount,
       weightPerCellKg: String(cm.weightPerCellKg),
     }));
-    await db.insert(cellModelsTable).values(batch);
+    await db.insert(cellModelsTable).values(batch).onConflictDoNothing();
   }
   const countResult = await db.execute(sql`SELECT COUNT(*)::int as count FROM cell_models`);
   const cellModelCount = Number(countResult.rows?.[0]?.count ?? countResult[0]?.count ?? 0);
