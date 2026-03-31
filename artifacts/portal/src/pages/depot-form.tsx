@@ -413,6 +413,7 @@ export default function DepotFormPage() {
         body: JSON.stringify({
           depot: user?.depot || "Unknown",
           collectionPoint: collectionPoint || null,
+          collectionDate: null,
           tonnage: currentLoad > 0 ? currentLoad.toFixed(3) : "0.000",
           tonnageManualOverride: tonnageManual,
           notes: jobNotes || null,
