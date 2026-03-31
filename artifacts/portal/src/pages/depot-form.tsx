@@ -240,7 +240,7 @@ export default function DepotFormPage() {
 
   async function computeAndSetAutoWeight(battery: BatteryRow) {
     if (battery.weightManual) return;
-    if (battery.isLooseCells && battery.cellType !== "Blocs") return;
+    if (battery.isLooseCells) return;
     const version = (weightLookupVersion.current[battery.id] || 0) + 1;
     weightLookupVersion.current[battery.id] = version;
 
@@ -796,9 +796,9 @@ export default function DepotFormPage() {
                         <Package className="h-3.5 w-3.5 text-slate-400 group-focus-within:text-[#0ea5e9] transition-colors" />
                       </div>
                       <Input
-                        placeholder={battery.serialFlagged ? battery.serialFlagReason || "Flagged" : "e.g., BSN-ABCD-001"}
+                        placeholder="e.g., BSN-ABCD-001"
                         className={`pl-9 h-10 border-slate-200 text-sm focus-visible:ring-[#0ea5e9] ${battery.serialFlagged ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-slate-50 text-[#1e293b]"}`}
-                        value={battery.serialFlagged ? "" : battery.batterySerial}
+                        value={battery.serialFlagged ? (battery.serialFlagReason || "Flagged") : battery.batterySerial}
                         onChange={(e) => updateBattery(battery.id, "batterySerial", e.target.value)}
                         disabled={battery.serialFlagged}
                       />
@@ -1096,7 +1096,7 @@ export default function DepotFormPage() {
                     {battery.estimatedWeightKg && !battery.weightManual && (
                       <p className="text-[10px] text-emerald-600">Auto-populated from reference</p>
                     )}
-                    {battery.weightManual && battery.cellType && (
+                    {battery.weightManual && battery.cellType && !battery.isLooseCells && (
                       <button
                         type="button"
                         className="text-[10px] text-[#0ea5e9] hover:underline"
@@ -1169,13 +1169,17 @@ export default function DepotFormPage() {
                           input.onchange = (ev) => {
                             const file = (ev.target as HTMLInputElement).files?.[0];
                             if (file) {
-                              const url = URL.createObjectURL(file);
-                              setBatteries((prev) =>
-                                prev.map((b) =>
-                                  b.id === battery.id ? { ...b, rowPhoto: url } : b
-                                )
-                              );
-                              toast({ title: "Photo attached", description: "Row photo added." });
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                const dataUrl = reader.result as string;
+                                setBatteries((prev) =>
+                                  prev.map((b) =>
+                                    b.id === battery.id ? { ...b, rowPhoto: dataUrl } : b
+                                  )
+                                );
+                                toast({ title: "Photo attached", description: "Row photo added." });
+                              };
+                              reader.readAsDataURL(file);
                             }
                           };
                           input.click();

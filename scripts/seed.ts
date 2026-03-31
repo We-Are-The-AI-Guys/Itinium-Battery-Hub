@@ -243,6 +243,9 @@ async function seed() {
   await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_bwr_cell_voltage_notnull ON battery_weight_reference (cell_type, voltage) WHERE voltage IS NOT NULL`);
   await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_bwr_cell_voltage_null ON battery_weight_reference (cell_type) WHERE voltage IS NULL`);
   await db.execute(sql`ALTER TABLE job_batteries ADD COLUMN IF NOT EXISTS estimated_weight_kg DECIMAL(10,3)`);
+  await db.execute(sql`ALTER TABLE job_batteries ADD COLUMN IF NOT EXISTS is_loose_cells BOOLEAN DEFAULT FALSE`);
+  await db.execute(sql`ALTER TABLE job_batteries ADD COLUMN IF NOT EXISTS serial_flag_reason VARCHAR(100)`);
+  await db.execute(sql`ALTER TABLE job_batteries ADD COLUMN IF NOT EXISTS row_photo TEXT`);
 
   await db.delete(batteryWeightReferenceTable);
   const weightRefs = [
