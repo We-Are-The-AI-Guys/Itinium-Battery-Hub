@@ -53,6 +53,7 @@ import { useToast } from "@/hooks/use-toast";
 
 interface CellModelOption {
   id: number;
+  manufacturer: string;
   modelName: string;
   cellFamily: string;
   cellHeightMm: number;
@@ -128,17 +129,15 @@ const VOLTAGE_OPTIONS = [
 ];
 
 const DEFAULT_MANUFACTURERS = [
-  "EnerSys Hawker",
+  "EnerSys / Hawker",
   "Espex",
-  "Eternity",
+  "Eternity / Juice",
   "Exide / GNB",
-  "Hawker",
-  "Velaris / Ecobat / EDrive",
   "Hoppecke",
-  "Juice",
   "Midac",
   "TAB",
   "Triathlon / Sunlight",
+  "Velaris / Ecobat / EDrive",
   "Other",
 ];
 
@@ -220,12 +219,13 @@ export default function DepotFormPage() {
       cp.address.toLowerCase().includes(collectionPoint.toLowerCase())
   );
 
-  async function fetchWeightFromApi(cellType: string, voltage: string | null, cellModel?: string): Promise<string> {
+  async function fetchWeightFromApi(cellType: string, voltage: string | null, cellModel?: string, manufacturer?: string): Promise<string> {
     if (!cellType && !cellModel) return "";
     const params = new URLSearchParams();
     if (cellModel) params.set("cellModel", cellModel);
     if (cellType) params.set("cellType", cellType);
     if (voltage) params.set("voltage", voltage);
+    if (manufacturer) params.set("manufacturer", manufacturer);
     try {
       const res = await fetch(`/api/weight-reference/lookup?${params}`, { credentials: "include" });
       if (!res.ok) return "";
@@ -254,7 +254,8 @@ export default function DepotFormPage() {
     } else if (battery.cellType === "Other") {
       weight = await fetchWeightFromApi("Other", null);
     } else if (battery.cellModel && battery.voltage) {
-      weight = await fetchWeightFromApi("", battery.voltage, battery.cellModel);
+      const mfr = battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture;
+      weight = await fetchWeightFromApi("", battery.voltage, battery.cellModel, mfr || undefined);
     } else if (battery.cellType && battery.voltage) {
       const effectiveVoltage = battery.voltage === "Other" ? battery.customVoltage : battery.voltage;
       if (effectiveVoltage) {
@@ -313,7 +314,7 @@ export default function DepotFormPage() {
         }
         return newB;
       });
-      if (field === "cellType" || field === "cellModel" || field === "voltage" || field === "looseCellsQty" || field === "customVoltage") {
+      if (field === "cellType" || field === "cellModel" || field === "voltage" || field === "looseCellsQty" || field === "customVoltage" || field === "manufacture") {
         const battery = updated.find((b) => b.id === id);
         if (battery && !battery.weightManual) {
           computeAndSetAutoWeight(battery);
@@ -953,6 +954,7 @@ export default function DepotFormPage() {
                     </label>
                     <CellModelCombobox
                       cellModels={cellModels}
+                      manufacturer={battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture}
                       value={battery.cellModel || battery.cellType}
                       onChange={(val, isModel) => {
                         if (isModel) {
@@ -1397,10 +1399,12 @@ export default function DepotFormPage() {
 
 function CellModelCombobox({
   cellModels,
+  manufacturer,
   value,
   onChange,
 }: {
   cellModels: CellModelOption[];
+  manufacturer: string;
   value: string;
   onChange: (value: string, isModel: boolean) => void;
 }) {
@@ -1419,13 +1423,19 @@ function CellModelCombobox({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const manufacturerModels = useMemo(() => {
+    if (!manufacturer) return cellModels;
+    const filtered = cellModels.filter((m) => m.manufacturer === manufacturer);
+    return filtered.length > 0 ? filtered : cellModels;
+  }, [cellModels, manufacturer]);
+
   const filteredModels = useMemo(() => {
-    if (!search.trim()) return cellModels.slice(0, 50);
+    if (!search.trim()) return manufacturerModels.slice(0, 50);
     const q = search.toLowerCase().replace(/\s+/g, "");
-    return cellModels
+    return manufacturerModels
       .filter((m) => m.modelName.toLowerCase().replace(/\s+/g, "").includes(q) || m.cellFamily.toLowerCase().includes(q))
       .slice(0, 50);
-  }, [cellModels, search]);
+  }, [manufacturerModels, search]);
 
   const groupedModels = useMemo(() => {
     const groups: Record<string, CellModelOption[]> = {};

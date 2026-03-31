@@ -29,7 +29,7 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res) => {
     try {
-      const { cellType, voltage, cellModel } = req.query;
+      const { cellType, voltage, cellModel, manufacturer } = req.query;
 
       if (cellModel && typeof cellModel === "string" && voltage) {
         const voltageNum = parseInt(String(voltage).replace(/[^0-9]/g, ""), 10);
@@ -38,10 +38,14 @@ router.get(
           return;
         }
 
+        const conditions = [eq(cellModelsTable.modelName, cellModel as string)];
+        if (manufacturer && typeof manufacturer === "string") {
+          conditions.push(eq(cellModelsTable.manufacturer, manufacturer));
+        }
         const [model] = await db
           .select()
           .from(cellModelsTable)
-          .where(eq(cellModelsTable.modelName, cellModel));
+          .where(and(...conditions));
 
         if (model) {
           const numCells = voltageNum / 2;

@@ -3,17 +3,15 @@ import { Router } from "express";
 const router = Router();
 
 const MANUFACTURERS = [
-  "EnerSys Hawker",
+  "EnerSys / Hawker",
   "Espex",
-  "Eternity",
+  "Eternity / Juice",
   "Exide / GNB",
-  "Hawker",
-  "Velaris / Ecobat / EDrive",
   "Hoppecke",
-  "Juice",
   "Midac",
   "TAB",
   "Triathlon / Sunlight",
+  "Velaris / Ecobat / EDrive",
   "Other",
 ];
 

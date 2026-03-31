@@ -96,7 +96,8 @@ export type BatteryWeightReference = typeof batteryWeightReferenceTable.$inferSe
 
 export const cellModelsTable = pgTable("cell_models", {
   id: serial("id").primaryKey(),
-  modelName: varchar("model_name", { length: 100 }).notNull().unique(),
+  manufacturer: varchar("manufacturer", { length: 100 }).notNull().default("Unknown"),
+  modelName: varchar("model_name", { length: 100 }).notNull(),
   cellFamily: varchar("cell_family", { length: 50 }).notNull(),
   cellHeightMm: integer("cell_height_mm").notNull(),
   cellsCount: integer("cells_count").notNull(),
@@ -105,6 +106,7 @@ export const cellModelsTable = pgTable("cell_models", {
 }, (table) => [
   index("idx_cell_models_family").on(table.cellFamily),
   index("idx_cell_models_family_height").on(table.cellFamily, table.cellHeightMm),
+  index("idx_cell_models_manufacturer").on(table.manufacturer),
 ]);
 
 export type CellModel = typeof cellModelsTable.$inferSelect;

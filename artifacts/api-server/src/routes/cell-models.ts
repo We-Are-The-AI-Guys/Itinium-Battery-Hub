@@ -11,10 +11,13 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res) => {
     try {
-      const { search, family } = req.query;
+      const { search, family, manufacturer } = req.query;
       let query = db.select().from(cellModelsTable).$dynamic();
 
       const conditions = [];
+      if (manufacturer && typeof manufacturer === "string") {
+        conditions.push(eq(cellModelsTable.manufacturer, manufacturer));
+      }
       if (family && typeof family === "string") {
         conditions.push(eq(cellModelsTable.cellFamily, family));
       }
@@ -76,7 +79,7 @@ router.post(
   requireRole("head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
-      const { modelName, cellFamily, cellHeightMm, cellsCount, weightPerCellKg } = req.body;
+      const { modelName, cellFamily, cellHeightMm, cellsCount, weightPerCellKg, manufacturer } = req.body;
       if (!modelName || !cellFamily || !cellHeightMm || !cellsCount || weightPerCellKg === undefined) {
         res.status(400).json({ message: "All fields are required" });
         return;
@@ -106,6 +109,7 @@ router.post(
       const [model] = await db
         .insert(cellModelsTable)
         .values({
+          manufacturer: manufacturer ? String(manufacturer).trim() : "Unknown",
           modelName: trimmedName,
           cellFamily: trimmedFamily,
           cellHeightMm: height,

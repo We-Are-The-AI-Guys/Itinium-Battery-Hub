@@ -53,11 +53,13 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 - estimated_weight_kg auto-populated from cell_models table (weight_per_cell × voltage/2) or battery_weight_reference fallback
 
 ### cell_models
-- id, model_name (unique, e.g. "5 PzS 775"), cell_family (30 families: EPzS/IPzS/PzS/PzS-ET/MDL/PzB/HPzS/PzV/etc.), cell_height_mm, cells_count, weight_per_cell_kg, created_at
-- 2003 entries extracted from the Data Validation sheet of the client spreadsheet, covering 9 manufacturers and 30 cell families
+- id, manufacturer (varchar 100, not null, default 'Unknown'), model_name, cell_family, cell_height_mm, cells_count, weight_per_cell_kg, created_at
+- Composite unique index on (manufacturer, model_name) — same model can have different Pb weights per manufacturer
+- 2,437 entries from the Cell_types spreadsheet, across 9 manufacturers: TAB, Espex, EnerSys / Hawker, Exide / GNB, Midac, Eternity / Juice, Triathlon / Sunlight, Velaris / Ecobat / EDrive, Hoppecke
 - Weight formula: total_weight = weight_per_cell_kg × (voltage / 2)
-- Seeded from lib/db/src/data/cell-models.ts (static data extracted from spreadsheet)
-- API: GET/POST /api/cell-models, GET /api/cell-models/lookup, PATCH/DELETE /api/cell-models/:id
+- Seeded from lib/db/src/data/cell-models.ts (static data parsed from spreadsheet)
+- API: GET/POST /api/cell-models?manufacturer=X, GET /api/cell-models/lookup, PATCH/DELETE /api/cell-models/:id
+- Depot form filters cell model dropdown by selected manufacturer for accuracy
 
 ### battery_weight_reference
 - id, cell_type (varchar), voltage (varchar, nullable), weight_kg (decimal), created_at

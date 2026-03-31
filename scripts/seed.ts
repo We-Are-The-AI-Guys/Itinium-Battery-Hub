@@ -305,7 +305,8 @@ async function seed() {
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS cell_models (
       id SERIAL PRIMARY KEY,
-      model_name VARCHAR(100) NOT NULL UNIQUE,
+      manufacturer VARCHAR(100) NOT NULL DEFAULT 'Unknown',
+      model_name VARCHAR(100) NOT NULL,
       cell_family VARCHAR(50) NOT NULL,
       cell_height_mm INTEGER NOT NULL,
       cells_count INTEGER NOT NULL,
@@ -313,13 +314,18 @@ async function seed() {
       created_at TIMESTAMP DEFAULT NOW() NOT NULL
     )
   `);
+  await db.execute(sql`ALTER TABLE cell_models ADD COLUMN IF NOT EXISTS manufacturer VARCHAR(100) NOT NULL DEFAULT 'Unknown'`);
+  await db.execute(sql`ALTER TABLE cell_models DROP CONSTRAINT IF EXISTS cell_models_model_name_unique`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_cell_models_mfr_model ON cell_models (manufacturer, model_name)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family ON cell_models (cell_family)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family_height ON cell_models (cell_family, cell_height_mm)`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_manufacturer ON cell_models (manufacturer)`);
 
   await db.delete(cellModelsTable);
   const batchSize = 50;
   for (let i = 0; i < CELL_MODEL_DATA.length; i += batchSize) {
     const batch = CELL_MODEL_DATA.slice(i, i + batchSize).map(cm => ({
+      manufacturer: cm.manufacturer,
       modelName: cm.modelName,
       cellFamily: cm.cellFamily,
       cellHeightMm: cm.cellHeightMm,
