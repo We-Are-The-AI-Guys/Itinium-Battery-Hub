@@ -440,10 +440,21 @@ export default function DepotFormPage() {
   const minTonnage = 9.5;
   const maxCapacity = 26.0;
   const targetMin = 10.0;
+  const approachLowerBound = 11.0;
+  const approachUpperBound = 24.0;
   const progressPercent = Math.min(100, Math.round((currentLoad / maxCapacity) * 100));
-  const isBelowMin = currentLoad > 0 && currentLoad < minTonnage;
-  const isAboveMax = currentLoad > maxCapacity;
-  const isInRange = currentLoad >= minTonnage && currentLoad <= maxCapacity;
+
+  type LoadState = "empty" | "red-low" | "red-high" | "amber-low" | "amber-high" | "green";
+  let loadState: LoadState = "empty";
+  if (currentLoad > 0 && currentLoad < minTonnage) loadState = "red-low";
+  else if (currentLoad > maxCapacity) loadState = "red-high";
+  else if (currentLoad >= minTonnage && currentLoad < approachLowerBound) loadState = "amber-low";
+  else if (currentLoad > approachUpperBound && currentLoad <= maxCapacity) loadState = "amber-high";
+  else if (currentLoad >= approachLowerBound && currentLoad <= approachUpperBound) loadState = "green";
+
+  const isRed = loadState === "red-low" || loadState === "red-high";
+  const isAmber = loadState === "amber-low" || loadState === "amber-high";
+  const isGreen = loadState === "green";
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-24 pt-16 flex flex-col items-center">
@@ -488,7 +499,7 @@ export default function DepotFormPage() {
       <main className="w-full max-w-4xl px-4 sm:px-6 py-6 space-y-6 flex-1 flex flex-col">
         <section
           className={`rounded-xl p-4 sm:p-5 border shadow-sm relative overflow-hidden ${
-            isAboveMax ? "bg-red-50 border-red-200" : isBelowMin ? "bg-amber-50 border-amber-200" : isInRange ? "bg-emerald-50 border-emerald-200" : "bg-sky-50 border-sky-100"
+            isRed ? "bg-red-50 border-red-200" : isAmber ? "bg-amber-50 border-amber-200" : isGreen ? "bg-emerald-50 border-emerald-200" : "bg-sky-50 border-sky-100"
           }`}
           data-testid="section-tonnage-progress"
         >
@@ -497,7 +508,7 @@ export default function DepotFormPage() {
               <p className="text-xs sm:text-sm font-semibold text-slate-600 uppercase tracking-wider mb-1">
                 Current Load
               </p>
-              <h3 className={`text-lg sm:text-xl font-bold ${isAboveMax ? "text-red-700" : isBelowMin ? "text-amber-700" : "text-[#0f2744]"}`}>
+              <h3 className={`text-lg sm:text-xl font-bold ${isRed ? "text-red-700" : isAmber ? "text-amber-700" : "text-[#0f2744]"}`}>
                 {currentLoad.toFixed(3)}t{" "}
                 <span className="text-slate-500 text-sm sm:text-base font-normal">
                   / {maxCapacity}t max
@@ -506,31 +517,41 @@ export default function DepotFormPage() {
             </div>
             <div className="text-right flex flex-col items-end gap-1">
               <span className={`text-xs font-medium px-2 py-1 rounded ${
-                isAboveMax ? "text-red-700 bg-red-100" : isBelowMin ? "text-amber-700 bg-amber-100" : isInRange ? "text-emerald-700 bg-emerald-100" : "text-sky-700 bg-sky-100"
+                isRed ? "text-red-700 bg-red-100" : isAmber ? "text-amber-700 bg-amber-100" : isGreen ? "text-emerald-700 bg-emerald-100" : "text-sky-700 bg-sky-100"
               }`}>
                 {progressPercent}% Capacity
               </span>
             </div>
           </div>
-          {isBelowMin && (
-            <p className="text-xs font-medium text-amber-700 mb-2">
-              Minimum {targetMin}t required (grace from {minTonnage}t). Add more batteries to submit.
+          {loadState === "red-low" && (
+            <p className="text-xs font-medium text-red-700 mb-2">
+              Below minimum {targetMin}t (grace from {minTonnage}t). Cannot submit until at least {minTonnage}t.
             </p>
           )}
-          {isAboveMax && (
+          {loadState === "red-high" && (
             <p className="text-xs font-medium text-red-700 mb-2">
               Exceeds maximum {maxCapacity}t truck capacity. Remove batteries to submit.
             </p>
           )}
-          {isInRange && (
+          {loadState === "amber-low" && (
+            <p className="text-xs font-medium text-amber-700 mb-2">
+              Approaching minimum threshold. Target is {targetMin}t+.
+            </p>
+          )}
+          {loadState === "amber-high" && (
+            <p className="text-xs font-medium text-amber-700 mb-2">
+              Approaching maximum {maxCapacity}t capacity. Consider limiting the load.
+            </p>
+          )}
+          {isGreen && (
             <p className="text-xs font-medium text-emerald-700 mb-2">
-              Load is within the acceptable range ({minTonnage}t - {maxCapacity}t).
+              Load is within the optimal range.
             </p>
           )}
           <div className="relative h-3 w-full bg-slate-200 rounded-full overflow-hidden mt-3">
             <div
               className={`absolute top-0 left-0 h-full rounded-full transition-all duration-500 ${
-                isAboveMax ? "bg-gradient-to-r from-red-400 to-red-500" : isBelowMin ? "bg-gradient-to-r from-amber-400 to-amber-500" : "bg-gradient-to-r from-[#0ea5e9] to-[#10b981]"
+                isRed ? "bg-gradient-to-r from-red-400 to-red-500" : isAmber ? "bg-gradient-to-r from-amber-400 to-amber-500" : "bg-gradient-to-r from-[#0ea5e9] to-[#10b981]"
               }`}
               style={{ width: `${progressPercent}%` }}
             />
