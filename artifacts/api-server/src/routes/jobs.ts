@@ -138,10 +138,11 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res) => {
     try {
-      const { clientName, depot, collectionPoint, collectionDate, tonnage, tonnageManualOverride, notes, batteries } = req.body;
+      const { depot, collectionPoint, collectionDate, tonnage, tonnageManualOverride, notes, batteries } = req.body;
+      const clientName = req.user!.fullName || "Unknown";
 
-      if (!clientName || !depot) {
-        res.status(400).json({ message: "Client name and depot are required" });
+      if (!depot) {
+        res.status(400).json({ message: "Depot is required" });
         return;
       }
 

@@ -16,7 +16,6 @@ import {
   ChevronLeft,
   Trash2,
   MapPin,
-  CalendarDays,
   Factory,
   Layers,
   Check,
@@ -150,11 +149,7 @@ interface CollectionPointPreset {
 export default function DepotFormPage() {
   const [user, setUser] = useState<User | null>(null);
   const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
-  const [customerName, setCustomerName] = useState("");
   const [collectionPoint, setCollectionPoint] = useState("");
-  const [collectionDate, setCollectionDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
   const [jobNotes, setJobNotes] = useState("");
   const [batteries, setBatteries] = useState<BatteryRow[]>([createEmptyBattery()]);
   const [submitting, setSubmitting] = useState(false);
@@ -416,10 +411,8 @@ export default function DepotFormPage() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          clientName: customerName || user?.fullName || "Unknown",
           depot: user?.depot || "Unknown",
           collectionPoint: collectionPoint || null,
-          collectionDate: collectionDate || null,
           tonnage: currentLoad > 0 ? currentLoad.toFixed(3) : "0.000",
           tonnageManualOverride: tonnageManual,
           notes: jobNotes || null,
@@ -446,7 +439,6 @@ export default function DepotFormPage() {
           description: `Job ${data.job.reference} submitted with ${batteries.length} battery item(s).`,
         });
         setBatteries([createEmptyBattery()]);
-        setCustomerName("");
         setCollectionPoint("");
         setJobNotes("");
         setUploadedPhotos([]);
@@ -645,75 +637,47 @@ export default function DepotFormPage() {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-[#1e293b] flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-slate-400" />
-                Customer Name
-              </label>
-              <Input
-                placeholder="e.g., Acme Logistics Ltd"
-                className="h-11 bg-slate-50 border-slate-200 text-[#1e293b] focus-visible:ring-[#0ea5e9] focus-visible:border-[#0ea5e9]"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                data-testid="input-customer-name"
-              />
-            </div>
-            <div className="space-y-1.5 relative">
-              <label className="text-sm font-medium text-[#1e293b] flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                Collection Point
-              </label>
-              <Input
-                ref={cpInputRef}
-                placeholder="Search or type address..."
-                className="h-11 bg-slate-50 border-slate-200 text-[#1e293b] focus-visible:ring-[#0ea5e9] focus-visible:border-[#0ea5e9]"
-                value={collectionPoint}
-                onChange={(e) => {
-                  setCollectionPoint(e.target.value);
-                  setShowCPDropdown(true);
-                }}
-                onFocus={() => setShowCPDropdown(true)}
-                data-testid="input-collection-point"
-                autoComplete="off"
-              />
-              {showCPDropdown && filteredCPPresets.length > 0 && (
-                <div
-                  ref={cpDropdownRef}
-                  className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto"
-                  data-testid="collection-point-dropdown"
-                >
-                  {filteredCPPresets.map((cp) => (
-                    <button
-                      key={cp.id}
-                      type="button"
-                      className="w-full text-left px-3 py-2.5 hover:bg-sky-50 transition-colors border-b border-slate-50 last:border-b-0"
-                      onClick={() => {
-                        setCollectionPoint(`${cp.name} — ${cp.address}`);
-                        setShowCPDropdown(false);
-                      }}
-                      data-testid={`cp-option-${cp.id}`}
-                    >
-                      <p className="text-sm font-medium text-[#0f2744]">{cp.name}</p>
-                      <p className="text-xs text-slate-500 mt-0.5 truncate">{cp.address}</p>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-[#1e293b] flex items-center gap-1.5">
-                <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
-                Collection Date
-              </label>
-              <Input
-                type="date"
-                className="h-11 bg-slate-50 border-slate-200 text-[#1e293b] focus-visible:ring-[#0ea5e9] focus-visible:border-[#0ea5e9]"
-                value={collectionDate}
-                onChange={(e) => setCollectionDate(e.target.value)}
-                data-testid="input-collection-date"
-              />
-            </div>
+          <div className="space-y-1.5 relative max-w-xl">
+            <label className="text-sm font-medium text-[#1e293b] flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-slate-400" />
+              Collection Point
+            </label>
+            <Input
+              ref={cpInputRef}
+              placeholder="Search or type address..."
+              className="h-11 bg-slate-50 border-slate-200 text-[#1e293b] focus-visible:ring-[#0ea5e9] focus-visible:border-[#0ea5e9]"
+              value={collectionPoint}
+              onChange={(e) => {
+                setCollectionPoint(e.target.value);
+                setShowCPDropdown(true);
+              }}
+              onFocus={() => setShowCPDropdown(true)}
+              data-testid="input-collection-point"
+              autoComplete="off"
+            />
+            {showCPDropdown && filteredCPPresets.length > 0 && (
+              <div
+                ref={cpDropdownRef}
+                className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                data-testid="collection-point-dropdown"
+              >
+                {filteredCPPresets.map((cp) => (
+                  <button
+                    key={cp.id}
+                    type="button"
+                    className="w-full text-left px-3 py-2.5 hover:bg-sky-50 transition-colors border-b border-slate-50 last:border-b-0"
+                    onClick={() => {
+                      setCollectionPoint(`${cp.name} — ${cp.address}`);
+                      setShowCPDropdown(false);
+                    }}
+                    data-testid={`cp-option-${cp.id}`}
+                  >
+                    <p className="text-sm font-medium text-[#0f2744]">{cp.name}</p>
+                    <p className="text-xs text-slate-500 mt-0.5 truncate">{cp.address}</p>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </section>
 
