@@ -110,7 +110,6 @@ function createEmptyBattery(): BatteryRow {
   };
 }
 
-const LEGACY_CELL_TYPES = ["PZB", "PZS", "PZV"];
 const SPECIAL_TYPES = [
   { value: "Blocs", label: "Blocs (Loose Cells)" },
   { value: "Other", label: "Other" },
@@ -1422,7 +1421,6 @@ function CellModelCombobox({
 
   const displayValue = value || "";
   const isSpecial = value === "Blocs" || value === "Other";
-  const isLegacy = LEGACY_CELL_TYPES.includes(value);
 
   return (
     <div ref={containerRef} className="relative">
@@ -1477,22 +1475,6 @@ function CellModelCombobox({
                 }}
               >
                 {st.label}
-              </button>
-            ))}
-            {LEGACY_CELL_TYPES.map((lt) => (
-              <button
-                key={lt}
-                type="button"
-                className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${
-                  value === lt && !cellModels.find(m => m.modelName === value) ? "bg-[#0ea5e9]/10 text-[#0ea5e9] font-medium" : "text-slate-700 hover:bg-slate-50"
-                }`}
-                onClick={() => {
-                  onChange(lt, false);
-                  setOpen(false);
-                  setSearch("");
-                }}
-              >
-                {lt} (legacy fallback)
               </button>
             ))}
           </div>
