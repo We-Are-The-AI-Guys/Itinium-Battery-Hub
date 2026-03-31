@@ -1427,7 +1427,7 @@ function CellModelCombobox({
   const manufacturerModels = useMemo(() => {
     if (!manufacturer) return cellModels;
     const filtered = cellModels.filter((m) => m.manufacturer === manufacturer);
-    return filtered.length > 0 ? filtered : cellModels;
+    return filtered;
   }, [cellModels, manufacturer]);
 
   const filteredModels = useMemo(() => {
@@ -1551,7 +1551,7 @@ function CellModelCombobox({
             </div>
           ) : (
             <div className="p-4 text-center text-sm text-slate-400">
-              {search ? "No matching cell models found" : "Loading cell models..."}
+              {search ? "No matching cell models found" : manufacturer ? `No cell models found for ${manufacturer}` : "Loading cell models..."}
             </div>
           )}
         </div>
