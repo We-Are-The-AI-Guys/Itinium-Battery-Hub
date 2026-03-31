@@ -155,14 +155,16 @@ router.post(
       for (let i = 0; i < batteryInputs.length; i++) {
         const b = batteryInputs[i];
         if (b.isLooseCells) {
-          if (b.voltage) {
-            b.voltage = null;
-          }
+          b.voltage = null;
           const w = b.estimatedWeightKg;
-          if (w === null || w === undefined || w === "" || w === "0") {
-            res.status(400).json({ message: `Battery row ${i + 1}: Estimated weight is required for loose cells.` });
+          const parsed = w !== null && w !== undefined && w !== "" ? parseFloat(String(w)) : NaN;
+          if (!isFinite(parsed) || parsed <= 0) {
+            res.status(400).json({ message: `Battery row ${i + 1}: Estimated weight is required for loose cells and must be a positive number.` });
             return;
           }
+        }
+        if (b.rowPhoto && !b.rowPhoto.startsWith("data:image/")) {
+          b.rowPhoto = null;
         }
         if (b.serialFlagReason && b.serialFlagReason !== "N/A (no serial fitted)" && !b.rowPhoto) {
           res.status(400).json({ message: `Battery row ${i + 1}: A photo is required for batteries with unknown or damaged serial numbers.` });
