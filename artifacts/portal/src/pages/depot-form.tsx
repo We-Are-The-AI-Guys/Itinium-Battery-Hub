@@ -307,7 +307,8 @@ export default function DepotFormPage() {
           newB.cellModel = "";
         }
         if (field === "cellModel") {
-          const model = cellModels.find((m) => m.modelName === value);
+          const mfr = newB.manufacture;
+          const model = cellModels.find((m) => m.modelName === value && (!mfr || m.manufacturer === mfr)) || cellModels.find((m) => m.modelName === value);
           if (model) {
             newB.cellType = model.cellFamily;
           }
@@ -974,7 +975,7 @@ export default function DepotFormPage() {
                     />
                     {battery.cellModel && (
                       <p className="text-[10px] text-emerald-600">
-                        Cell model selected &mdash; weight = {cellModels.find(m => m.modelName === battery.cellModel)?.weightPerCellKg || "?"} kg/cell
+                        Cell model selected &mdash; weight = {(cellModels.find(m => m.modelName === battery.cellModel && (!battery.manufacture || m.manufacturer === battery.manufacture)) || cellModels.find(m => m.modelName === battery.cellModel))?.weightPerCellKg || "?"} kg/cell
                       </p>
                     )}
                   </div>
