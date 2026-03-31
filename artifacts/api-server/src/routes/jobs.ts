@@ -128,6 +128,9 @@ interface BatteryInput {
   looseCellsQty?: string | number | null;
   estimatedWeightKg?: string | number | null;
   notes?: string | null;
+  isLooseCells?: boolean;
+  serialFlagReason?: string | null;
+  rowPhoto?: string | null;
 }
 
 router.post(
@@ -148,6 +151,24 @@ router.post(
       }
 
       const batteryInputs = batteries as BatteryInput[];
+
+      for (let i = 0; i < batteryInputs.length; i++) {
+        const b = batteryInputs[i];
+        if (b.isLooseCells) {
+          if (b.voltage) {
+            b.voltage = null;
+          }
+          const w = b.estimatedWeightKg;
+          if (w === null || w === undefined || w === "" || w === "0") {
+            res.status(400).json({ message: `Battery row ${i + 1}: Estimated weight is required for loose cells.` });
+            return;
+          }
+        }
+        if (b.serialFlagReason && b.serialFlagReason !== "N/A (no serial fitted)" && !b.rowPhoto) {
+          res.status(400).json({ message: `Battery row ${i + 1}: A photo is required for batteries with unknown or damaged serial numbers.` });
+          return;
+        }
+      }
 
       function sanitizeWeight(val: string | number | null | undefined): string | null {
         if (val === null || val === undefined || val === "") return null;
@@ -215,9 +236,12 @@ router.post(
           batterySerial: b.batterySerial || null,
           manufacture: b.manufacture || null,
           cellType: b.cellType || null,
-          voltage: b.voltage || null,
+          voltage: b.isLooseCells ? null : (b.voltage || null),
           looseCellsQty: b.looseCellsQty ? parseInt(String(b.looseCellsQty), 10) : null,
           estimatedWeightKg: sanitizeWeight(b.estimatedWeightKg),
+          isLooseCells: b.isLooseCells || false,
+          serialFlagReason: b.serialFlagReason || null,
+          rowPhoto: b.rowPhoto || null,
           notes: b.notes || null,
         }));
 

@@ -56,6 +56,9 @@ export const jobBatteriesTable = pgTable("job_batteries", {
   pbContentKg: decimal("pb_content_kg", { precision: 10, scale: 3 }),
   valueGbp: decimal("value_gbp", { precision: 12, scale: 2 }),
   estimatedWeightKg: decimal("estimated_weight_kg", { precision: 10, scale: 3 }),
+  isLooseCells: boolean("is_loose_cells").default(false),
+  serialFlagReason: varchar("serial_flag_reason", { length: 100 }),
+  rowPhoto: text("row_photo"),
   adminNotes: text("admin_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [

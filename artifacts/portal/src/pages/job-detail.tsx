@@ -109,6 +109,9 @@ interface BatteryData {
   valueGbp: string | null;
   adminNotes: string | null;
   estimatedWeightKg: string | null;
+  isLooseCells: boolean | null;
+  serialFlagReason: string | null;
+  rowPhoto: string | null;
 }
 
 const statusStyles: Record<string, string> = {
@@ -426,22 +429,42 @@ export default function JobDetailPage() {
                       <th className="px-3 py-2.5 text-left font-semibold">Cell Type</th>
                       <th className="px-3 py-2.5 text-left font-semibold">Voltage</th>
                       <th className="px-3 py-2.5 text-left font-semibold">Loose Qty</th>
+                      <th className="px-3 py-2.5 text-left font-semibold">Flags</th>
                       <th className="px-3 py-2.5 text-left font-semibold">Notes</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {batteries.map((b, i) => (
-                      <tr key={b.id} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/30"}>
+                      <tr key={b.id} className={`${b.serialFlagReason ? "bg-amber-50/60 border-l-4 border-l-amber-400" : (i % 2 === 0 ? "bg-white" : "bg-slate-50/30")}`}>
                         <td className="px-3 py-2.5 text-slate-500">{i + 1}</td>
                         <td className="px-3 py-2.5 text-slate-700">{b.palletNumber || "—"}</td>
                         <td className="px-3 py-2.5 text-slate-700">{b.assetNumber || "—"}</td>
                         <td className="px-3 py-2.5 font-medium text-[#0f2744]">{b.batterySerial || "—"}</td>
                         <td className="px-3 py-2.5 text-slate-700">{b.manufacture || "—"}</td>
                         <td className="px-3 py-2.5">
-                          <Badge variant="outline" className="text-xs">{b.cellType || "—"}</Badge>
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant="outline" className="text-xs">{b.cellType || "—"}</Badge>
+                            {b.isLooseCells && (
+                              <Badge variant="outline" className="text-xs bg-sky-50 text-sky-700 border-sky-200">Loose</Badge>
+                            )}
+                          </div>
                         </td>
                         <td className="px-3 py-2.5 text-slate-700">{b.voltage || "—"}</td>
                         <td className="px-3 py-2.5 text-slate-700">{b.looseCellsQty ?? "—"}</td>
+                        <td className="px-3 py-2.5">
+                          {b.serialFlagReason ? (
+                            <div className="flex flex-col gap-1">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200 w-fit">
+                                <AlertTriangle className="w-3 h-3" />
+                                Needs Review
+                              </span>
+                              <span className="text-[10px] text-amber-700">{b.serialFlagReason}</span>
+                              {b.rowPhoto && (
+                                <a href={b.rowPhoto} target="_blank" rel="noreferrer" className="text-[10px] text-[#0ea5e9] hover:underline">View Photo</a>
+                              )}
+                            </div>
+                          ) : "—"}
+                        </td>
                         <td className="px-3 py-2.5 text-slate-500 max-w-[200px] truncate">{b.notes || "—"}</td>
                       </tr>
                     ))}

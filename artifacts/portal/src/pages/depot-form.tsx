@@ -23,6 +23,7 @@ import {
   ChevronsUpDown,
   Search,
   ChevronDown,
+  AlertTriangle,
 } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Button } from "@/components/ui/button";
@@ -73,6 +74,10 @@ interface BatteryRow {
   estimatedWeightKg: string;
   weightManual: boolean;
   notes: string;
+  isLooseCells: boolean;
+  serialFlagged: boolean;
+  serialFlagReason: string;
+  rowPhoto: string;
 }
 
 interface User {
@@ -98,6 +103,10 @@ function createEmptyBattery(): BatteryRow {
     estimatedWeightKg: "",
     weightManual: false,
     notes: "",
+    isLooseCells: false,
+    serialFlagged: false,
+    serialFlagReason: "",
+    rowPhoto: "",
   };
 }
 
@@ -231,6 +240,7 @@ export default function DepotFormPage() {
 
   async function computeAndSetAutoWeight(battery: BatteryRow) {
     if (battery.weightManual) return;
+    if (battery.isLooseCells && battery.cellType !== "Blocs") return;
     const version = (weightLookupVersion.current[battery.id] || 0) + 1;
     weightLookupVersion.current[battery.id] = version;
 
@@ -323,10 +333,10 @@ export default function DepotFormPage() {
   }
 
   async function onSubmit() {
-    const hasAtLeastOneSerial = batteries.some(
-      (b) => b.batterySerial.trim() || b.assetNumber.trim()
+    const hasAtLeastOneIdentifier = batteries.some(
+      (b) => b.batterySerial.trim() || b.assetNumber.trim() || b.serialFlagged
     );
-    if (!hasAtLeastOneSerial) {
+    if (!hasAtLeastOneIdentifier) {
       toast({
         title: "Missing battery data",
         description: "Please fill in at least one battery row with an identifier.",
@@ -342,6 +352,30 @@ export default function DepotFormPage() {
       toast({
         title: "Missing manufacturer name",
         description: "Please enter the manufacturer name for batteries marked as 'Other'.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const looseCellsMissingWeight = batteries.some(
+      (b) => b.isLooseCells && (!b.estimatedWeightKg || parseFloat(b.estimatedWeightKg) <= 0)
+    );
+    if (looseCellsMissingWeight) {
+      toast({
+        title: "Missing weight for loose cells",
+        description: "Estimated weight is required for all loose cell rows. Please enter the total weight.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const flaggedMissingPhoto = batteries.some(
+      (b) => b.serialFlagged && b.serialFlagReason !== "N/A (no serial fitted)" && !b.rowPhoto
+    );
+    if (flaggedMissingPhoto) {
+      toast({
+        title: "Photo required",
+        description: "A photo is required for batteries with unknown or damaged serial numbers.",
         variant: "destructive",
       });
       return;
@@ -381,12 +415,15 @@ export default function DepotFormPage() {
           notes: jobNotes || null,
           batteries: batteries.map((b) => ({
             assetNumber: b.assetNumber || null,
-            batterySerial: b.batterySerial || null,
+            batterySerial: b.serialFlagged ? (b.serialFlagReason || "Unknown") : (b.batterySerial || null),
             manufacture: b.manufacture === "Other" ? (b.manufactureCustom || "Other") : (b.manufacture || null),
             cellType: b.cellModel || b.cellType || null,
-            voltage: (b.voltage === "Other" ? b.customVoltage : b.voltage) || null,
+            voltage: b.isLooseCells ? null : ((b.voltage === "Other" ? b.customVoltage : b.voltage) || null),
             looseCellsQty: b.looseCellsQty || null,
             estimatedWeightKg: b.estimatedWeightKg || null,
+            isLooseCells: b.isLooseCells,
+            serialFlagReason: b.serialFlagged ? (b.serialFlagReason || null) : null,
+            rowPhoto: b.rowPhoto || null,
             notes: b.notes || null,
           })),
         }),
@@ -700,13 +737,26 @@ export default function DepotFormPage() {
             {batteries.map((battery, index) => (
               <div
                 key={battery.id}
-                className="p-5 bg-white hover:bg-slate-50/30 transition-colors"
+                className={`p-5 bg-white hover:bg-slate-50/30 transition-colors ${battery.serialFlagged ? "border-l-4 border-l-amber-400" : ""}`}
                 data-testid={`battery-row-${index}`}
               >
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    Battery #{index + 1}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Battery #{index + 1}
+                    </span>
+                    {battery.serialFlagged && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                        <AlertTriangle className="w-3 h-3" />
+                        Needs Review
+                      </span>
+                    )}
+                    {battery.isLooseCells && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-100 text-sky-800 border border-sky-200">
+                        Loose Cells
+                      </span>
+                    )}
+                  </div>
                   {batteries.length > 1 && (
                     <button
                       type="button"
@@ -746,13 +796,77 @@ export default function DepotFormPage() {
                         <Package className="h-3.5 w-3.5 text-slate-400 group-focus-within:text-[#0ea5e9] transition-colors" />
                       </div>
                       <Input
-                        placeholder="e.g., BSN-ABCD-001"
-                        className="pl-9 h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
-                        value={battery.batterySerial}
+                        placeholder={battery.serialFlagged ? battery.serialFlagReason || "Flagged" : "e.g., BSN-ABCD-001"}
+                        className={`pl-9 h-10 border-slate-200 text-sm focus-visible:ring-[#0ea5e9] ${battery.serialFlagged ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-slate-50 text-[#1e293b]"}`}
+                        value={battery.serialFlagged ? "" : battery.batterySerial}
                         onChange={(e) => updateBattery(battery.id, "batterySerial", e.target.value)}
+                        disabled={battery.serialFlagged}
                       />
                     </div>
+                    {!battery.serialFlagged ? (
+                      <button
+                        type="button"
+                        className="text-[10px] text-amber-600 hover:text-amber-800 hover:underline flex items-center gap-1"
+                        onClick={() => {
+                          setBatteries((prev) =>
+                            prev.map((b) =>
+                              b.id === battery.id
+                                ? { ...b, serialFlagged: true, serialFlagReason: "Unknown serial", batterySerial: "" }
+                                : b
+                            )
+                          );
+                        }}
+                      >
+                        <AlertTriangle className="w-3 h-3" />
+                        Serial unknown or damaged?
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-[10px] text-[#0ea5e9] hover:underline"
+                        onClick={() => {
+                          setBatteries((prev) =>
+                            prev.map((b) =>
+                              b.id === battery.id
+                                ? { ...b, serialFlagged: false, serialFlagReason: "", rowPhoto: "" }
+                                : b
+                            )
+                          );
+                        }}
+                      >
+                        Clear flag — enter serial manually
+                      </button>
+                    )}
                   </div>
+
+                  {battery.serialFlagged && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-amber-700">
+                        Reason
+                      </label>
+                      <Select
+                        value={battery.serialFlagReason}
+                        onValueChange={(val) => {
+                          setBatteries((prev) =>
+                            prev.map((b) =>
+                              b.id === battery.id
+                                ? { ...b, serialFlagReason: val }
+                                : b
+                            )
+                          );
+                        }}
+                      >
+                        <SelectTrigger className="h-10 bg-amber-50 border-amber-200 text-sm text-amber-900 focus:ring-amber-400">
+                          <SelectValue placeholder="Select reason..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Unknown serial">Unknown serial</SelectItem>
+                          <SelectItem value="Damaged — unreadable">Damaged — unreadable</SelectItem>
+                          <SelectItem value="N/A (no serial fitted)">N/A (no serial fitted)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-slate-600">
@@ -863,7 +977,35 @@ export default function DepotFormPage() {
                     )}
                   </div>
 
-                  {battery.cellType !== "Blocs" && battery.cellType !== "Other" && (
+                  <div className="space-y-1.5 flex items-end">
+                    <label className="flex items-center gap-2 cursor-pointer h-10 px-3 bg-slate-50 border border-slate-200 rounded-md w-full">
+                      <input
+                        type="checkbox"
+                        checked={battery.isLooseCells}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setBatteries((prev) =>
+                            prev.map((b) => {
+                              if (b.id !== battery.id) return b;
+                              const updated = {
+                                ...b,
+                                isLooseCells: checked,
+                                voltage: checked ? "" : b.voltage,
+                                customVoltage: checked ? "" : b.customVoltage,
+                                looseCellsQty: checked ? b.looseCellsQty : (b.cellType === "Blocs" ? b.looseCellsQty : ""),
+                                weightManual: checked ? true : b.weightManual,
+                              };
+                              return updated;
+                            })
+                          );
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 text-[#0ea5e9] focus:ring-[#0ea5e9]"
+                      />
+                      <span className="text-xs font-medium text-slate-600">Loose cells?</span>
+                    </label>
+                  </div>
+
+                  {!battery.isLooseCells && battery.cellType !== "Blocs" && battery.cellType !== "Other" && (
                     <>
                       <div className="space-y-1.5">
                         <label className="text-xs font-medium text-slate-600">
@@ -910,10 +1052,10 @@ export default function DepotFormPage() {
                     </>
                   )}
 
-                  {battery.cellType === "Blocs" && (
+                  {(battery.isLooseCells || battery.cellType === "Blocs") && (
                     <div className="space-y-1.5">
                       <label className="text-xs font-medium text-slate-600">
-                        If Loose Cells &mdash; Qty
+                        Cell Qty
                       </label>
                       <Input
                         type="number"
@@ -928,7 +1070,7 @@ export default function DepotFormPage() {
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-slate-600">
-                      Est. Weight (kg)
+                      {battery.isLooseCells ? "Total Weight (kg) — required" : "Est. Weight (kg)"}
                     </label>
                     <Input
                       type="number"
@@ -984,6 +1126,70 @@ export default function DepotFormPage() {
                       value={battery.notes}
                       onChange={(e) => updateBattery(battery.id, "notes", e.target.value)}
                     />
+                  </div>
+
+                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+                    <label className={`text-xs font-medium ${battery.serialFlagged && battery.serialFlagReason !== "N/A (no serial fitted)" ? "text-amber-700" : "text-slate-600"}`}>
+                      Row Photo {battery.serialFlagged && battery.serialFlagReason !== "N/A (no serial fitted)" && "(Required)"}
+                    </label>
+                    {battery.serialFlagged && battery.serialFlagReason !== "N/A (no serial fitted)" && !battery.rowPhoto && (
+                      <p className="text-[10px] text-amber-600">A photo is required for batteries without a readable serial number</p>
+                    )}
+                    {battery.rowPhoto ? (
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-16 h-16 rounded-lg bg-slate-200 border border-slate-300 group overflow-hidden">
+                          <img
+                            src={battery.rowPhoto}
+                            alt="Battery row photo"
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBatteries((prev) =>
+                                prev.map((b) =>
+                                  b.id === battery.id ? { ...b, rowPhoto: "" } : b
+                                )
+                              );
+                            }}
+                            className="absolute top-0.5 right-0.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <span className="text-xs text-emerald-600">Photo attached</span>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const input = document.createElement("input");
+                          input.type = "file";
+                          input.accept = "image/jpeg,image/png";
+                          input.onchange = (ev) => {
+                            const file = (ev.target as HTMLInputElement).files?.[0];
+                            if (file) {
+                              const url = URL.createObjectURL(file);
+                              setBatteries((prev) =>
+                                prev.map((b) =>
+                                  b.id === battery.id ? { ...b, rowPhoto: url } : b
+                                )
+                              );
+                              toast({ title: "Photo attached", description: "Row photo added." });
+                            }
+                          };
+                          input.click();
+                        }}
+                        className={`flex items-center gap-2 px-4 py-2.5 border-2 border-dashed rounded-lg text-sm transition-colors ${
+                          battery.serialFlagged && battery.serialFlagReason !== "N/A (no serial fitted)"
+                            ? "border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700"
+                            : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500"
+                        }`}
+                      >
+                        <Camera className="w-4 h-4" />
+                        Upload Photo
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

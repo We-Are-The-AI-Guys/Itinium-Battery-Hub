@@ -46,6 +46,9 @@ Custom email/password auth with bcrypt password hashing and cookie-based session
 ### job_batteries
 - id, job_id (FK → jobs, cascade delete), pallet_number, asset_number, battery_serial, manufacture, cell_type (cell model name e.g. "5 PzS 775" or legacy PZB/PZS/PZV/Blocs/Other), voltage (dropdown: 12V/24V/36V/48V/80V), loose_cells_qty (integer), estimated_weight_kg (decimal), notes
 - Admin fields: receipt_confirmed (boolean), pb_content_kg (decimal), value_gbp (decimal), admin_notes (text)
+- Loose cells: is_loose_cells (boolean, default false) — hides voltage, shows cell qty, weight becomes required manual entry
+- Serial flag: serial_flag_reason (varchar 100, nullable) — stores reason when serial is unknown/damaged ("Unknown serial", "Damaged — unreadable", "N/A (no serial fitted)")
+- Row photo: row_photo (text, nullable) — per-row photo URL (blob URL for now, storage backend TBD)
 - pallet_number is auto-generated server-side as PLT-XXXXX using PostgreSQL sequence `pallet_number_seq`
 - estimated_weight_kg auto-populated from cell_models table (weight_per_cell × voltage/2) or battery_weight_reference fallback
 
