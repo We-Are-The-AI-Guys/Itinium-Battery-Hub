@@ -169,7 +169,6 @@ async function seed() {
   }
   console.log(`Seeded ${collectionPoints.length} collection point presets`);
 
-  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_lme_prices_price_date ON lme_prices (price_date)`);
   await db.insert(lmePricesTable).values({
     priceDate: "2026-04-02",
     usdPrice: "2200.00",
