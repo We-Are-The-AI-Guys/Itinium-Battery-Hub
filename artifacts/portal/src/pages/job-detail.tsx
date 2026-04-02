@@ -119,6 +119,7 @@ export default function JobDetailPage() {
   const [lmePrice, setLmePrice] = useState<LmePrice | null>(null);
   const cblLmeInitialRef = useRef<string | null>(null);
   const lmePriceRef = useRef<LmePrice | null>(null);
+  const lmePrefillDoneRef = useRef(false);
   const [prefilled, setPrefilled] = useState<Record<string, boolean>>({});
 
   const lmeGbpRate = lmePrice ? (isFinite(parseFloat(lmePrice.gbpPrice)) ? parseFloat(lmePrice.gbpPrice) : null) : null;
@@ -159,6 +160,7 @@ export default function JobDetailPage() {
             if (isFinite(gbp) && gbp > 0) {
               cblLmeValue = gbp.toFixed(2);
               prefilledFlags.cblLmeValue = true;
+              lmePrefillDoneRef.current = true;
             }
           }
           cblLmeInitialRef.current = cblLmeValue;
@@ -214,11 +216,13 @@ export default function JobDetailPage() {
 
   useEffect(() => {
     if (!lmePrice) return;
+    if (lmePrefillDoneRef.current) return;
     if (financials.cblLmeValue) return;
     const gbp = parseFloat(lmePrice.gbpPrice);
     if (!isFinite(gbp) || gbp <= 0) return;
     const newVal = gbp.toFixed(2);
     cblLmeInitialRef.current = newVal;
+    lmePrefillDoneRef.current = true;
     setFinancials((prev) => ({ ...prev, cblLmeValue: newVal }));
     setPrefilled((pf) => ({ ...pf, cblLmeValue: true }));
   }, [lmePrice, financials.cblLmeValue]);
