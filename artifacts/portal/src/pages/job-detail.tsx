@@ -810,9 +810,6 @@ function BatteryAdminRow({
           checked={receipt}
           onCheckedChange={(checked) => {
             setReceipt(checked);
-            if (checked && !pb) {
-              handleRecalculate();
-            }
           }}
         />
       </td>

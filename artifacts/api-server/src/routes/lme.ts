@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { lmePricesTable, jobBatteriesTable } from "@workspace/db/schema";
-import { desc, sql, and, isNotNull, gt, or, eq, isNull } from "drizzle-orm";
+import { lmePricesTable } from "@workspace/db/schema";
+import { desc, sql } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { z } from "zod";
 
