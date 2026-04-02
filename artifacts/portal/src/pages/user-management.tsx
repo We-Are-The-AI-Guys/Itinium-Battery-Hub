@@ -183,7 +183,7 @@ export default function UserManagementPage() {
     setEditingUser(user);
     const depotVal = user.depot || "";
     setEditForm({ fullName: user.fullName, role: user.role, depot: depotVal });
-    setEditCustomDepot(depotVal !== "" && !depotList.includes(depotVal));
+    setEditCustomDepot(depotVal !== "" && depotList.length > 0 && !depotList.includes(depotVal));
     setEditError("");
   }
 
