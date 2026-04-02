@@ -149,6 +149,17 @@ export default function JobDetailPage() {
           setJob(data.job);
           setBatteries(data.batteries);
           cblLmeInitialRef.current = data.job.cblLmeValue || "";
+
+          let totalInvoiceValue = data.job.totalInvoiceValue || "";
+          if (!totalInvoiceValue) {
+            const batteryValueSum = (data.batteries as BatteryData[]).reduce(
+              (sum: number, b: BatteryData) => sum + (parseFloat(b.valueGbp || "0") || 0), 0
+            );
+            if (batteryValueSum > 0) {
+              totalInvoiceValue = batteryValueSum.toFixed(2);
+            }
+          }
+
           setFinancials({
             tonnage: data.job.tonnage || "",
             cblLmeValue: data.job.cblLmeValue || "",
@@ -159,7 +170,7 @@ export default function JobDetailPage() {
             customerInvoiceNo: data.job.customerInvoiceNo || "",
             cblWasteAdviceNoteNo: data.job.cblWasteAdviceNoteNo || "",
             cblDate: data.job.cblDate || "",
-            totalInvoiceValue: data.job.totalInvoiceValue || "",
+            totalInvoiceValue,
             grossProfit: data.job.grossProfit || "",
             itiniumInvoiceNo: data.job.itiniumInvoiceNo || "",
             lmeRateUsed: data.job.lmeRateUsed || "",
@@ -181,6 +192,18 @@ export default function JobDetailPage() {
       .then((data) => { if (data?.price) setLmePrice(data.price); })
       .catch(() => {});
   }, [loadJob]);
+
+  useEffect(() => {
+    if (!lmePrice) return;
+    const gbp = parseFloat(lmePrice.gbpPrice);
+    if (!isFinite(gbp) || gbp <= 0) return;
+    setFinancials((prev) => {
+      if (prev.cblLmeValue) return prev;
+      const newVal = gbp.toFixed(2);
+      cblLmeInitialRef.current = newVal;
+      return { ...prev, cblLmeValue: newVal };
+    });
+  }, [lmePrice]);
 
   function getEffectiveLmeRate(): number | null {
     const cblRate = parseFloat(financials.cblLmeValue);
