@@ -118,6 +118,8 @@ export default function JobDetailPage() {
   const [saving, setSaving] = useState(false);
   const [lmePrice, setLmePrice] = useState<LmePrice | null>(null);
   const cblLmeInitialRef = useRef<string | null>(null);
+  const lmePriceRef = useRef<LmePrice | null>(null);
+  const [prefilled, setPrefilled] = useState<Record<string, boolean>>({});
 
   const lmeGbpRate = lmePrice ? (isFinite(parseFloat(lmePrice.gbpPrice)) ? parseFloat(lmePrice.gbpPrice) : null) : null;
 
@@ -148,21 +150,33 @@ export default function JobDetailPage() {
         if (data) {
           setJob(data.job);
           setBatteries(data.batteries);
-          cblLmeInitialRef.current = data.job.cblLmeValue || "";
+
+          const prefilledFlags: Record<string, boolean> = {};
+
+          let cblLmeValue = data.job.cblLmeValue || "";
+          if (!cblLmeValue && lmePriceRef.current) {
+            const gbp = parseFloat(lmePriceRef.current.gbpPrice);
+            if (isFinite(gbp) && gbp > 0) {
+              cblLmeValue = gbp.toFixed(2);
+              prefilledFlags.cblLmeValue = true;
+            }
+          }
+          cblLmeInitialRef.current = cblLmeValue;
 
           let totalInvoiceValue = data.job.totalInvoiceValue || "";
           if (!totalInvoiceValue) {
             const batteryValueSum = (data.batteries as BatteryData[]).reduce(
               (sum: number, b: BatteryData) => sum + (parseFloat(b.valueGbp || "0") || 0), 0
             );
-            if (batteryValueSum > 0) {
-              totalInvoiceValue = batteryValueSum.toFixed(2);
-            }
+            totalInvoiceValue = batteryValueSum.toFixed(2);
+            prefilledFlags.totalInvoiceValue = true;
           }
+
+          setPrefilled(prefilledFlags);
 
           setFinancials({
             tonnage: data.job.tonnage || "",
-            cblLmeValue: data.job.cblLmeValue || "",
+            cblLmeValue,
             cblLmePercent: data.job.cblLmePercent || "",
             cblLmePrice: data.job.cblLmePrice || "",
             transportCost: data.job.transportCost || "",
@@ -189,21 +203,25 @@ export default function JobDetailPage() {
     loadJob();
     fetch("/api/lme/current", { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (data?.price) setLmePrice(data.price); })
+      .then((data) => {
+        if (data?.price) {
+          lmePriceRef.current = data.price;
+          setLmePrice(data.price);
+        }
+      })
       .catch(() => {});
   }, [loadJob]);
 
   useEffect(() => {
     if (!lmePrice) return;
+    if (financials.cblLmeValue) return;
     const gbp = parseFloat(lmePrice.gbpPrice);
     if (!isFinite(gbp) || gbp <= 0) return;
-    setFinancials((prev) => {
-      if (prev.cblLmeValue) return prev;
-      const newVal = gbp.toFixed(2);
-      cblLmeInitialRef.current = newVal;
-      return { ...prev, cblLmeValue: newVal };
-    });
-  }, [lmePrice]);
+    const newVal = gbp.toFixed(2);
+    cblLmeInitialRef.current = newVal;
+    setFinancials((prev) => ({ ...prev, cblLmeValue: newVal }));
+    setPrefilled((pf) => ({ ...pf, cblLmeValue: true }));
+  }, [lmePrice, financials.cblLmeValue]);
 
   function getEffectiveLmeRate(): number | null {
     const cblRate = parseFloat(financials.cblLmeValue);
@@ -578,9 +596,10 @@ export default function JobDetailPage() {
                 <FinancialField
                   label="CBL LME Value £"
                   value={financials.cblLmeValue}
-                  onChange={(v) => setFinancials((p) => ({ ...p, cblLmeValue: v }))}
+                  onChange={(v) => { setPrefilled((pf) => ({ ...pf, cblLmeValue: false })); setFinancials((p) => ({ ...p, cblLmeValue: v })); }}
                   icon={<PoundSterling className="w-3.5 h-3.5" />}
                   prefix="£"
+                  autoPrefilled={!!prefilled.cblLmeValue}
                 />
                 <FinancialField
                   label="CBL LME %"
@@ -629,8 +648,9 @@ export default function JobDetailPage() {
                 <FinancialField
                   label="Total Invoice Value £"
                   value={financials.totalInvoiceValue}
-                  onChange={(v) => setFinancials((p) => ({ ...p, totalInvoiceValue: v }))}
+                  onChange={(v) => { setPrefilled((pf) => ({ ...pf, totalInvoiceValue: false })); setFinancials((p) => ({ ...p, totalInvoiceValue: v })); }}
                   prefix="£"
+                  autoPrefilled={!!prefilled.totalInvoiceValue}
                 />
                 <FinancialField
                   label="Gross Profit £ (Calculated)"
@@ -907,6 +927,7 @@ function FinancialField({
   icon,
   type = "number",
   computed = false,
+  autoPrefilled = false,
 }: {
   label: string;
   value: string;
@@ -916,6 +937,7 @@ function FinancialField({
   icon?: React.ReactNode;
   type?: string;
   computed?: boolean;
+  autoPrefilled?: boolean;
 }) {
   return (
     <div className="space-y-1.5">
@@ -923,6 +945,7 @@ function FinancialField({
         {icon && <span className="text-slate-400">{icon}</span>}
         {label}
         {computed && <span className="text-[#0ea5e9] text-[10px]">(auto)</span>}
+        {autoPrefilled && !computed && <span className="text-sky-500 text-[10px]">(pre-filled)</span>}
       </label>
       <div className="relative">
         {prefix && (
@@ -933,7 +956,7 @@ function FinancialField({
           step={type === "number" ? "0.01" : undefined}
           className={`h-9 text-sm border-slate-200 focus-visible:ring-[#0ea5e9] ${
             prefix ? "pl-7" : ""
-          } ${suffix ? "pr-7" : ""} ${computed ? "bg-sky-50/50 font-medium" : "bg-slate-50"}`}
+          } ${suffix ? "pr-7" : ""} ${computed ? "bg-sky-50/50 font-medium" : autoPrefilled ? "bg-sky-50/40 border-sky-200" : "bg-slate-50"}`}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           readOnly={computed}
