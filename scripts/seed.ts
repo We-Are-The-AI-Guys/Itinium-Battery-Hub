@@ -169,20 +169,15 @@ async function seed() {
   }
   console.log(`Seeded ${collectionPoints.length} collection point presets`);
 
-  const existingLme = await db.execute(sql`SELECT COUNT(*)::int as count FROM lme_prices`);
-  const lmeCount = Number(existingLme.rows?.[0]?.count ?? 0);
-  if (lmeCount === 0) {
-    await db.insert(lmePricesTable).values({
-      priceDate: "2026-04-02",
-      usdPrice: "2200.00",
-      exchangeRate: "0.790000",
-      gbpPrice: "1738.00",
-      source: "manual",
-    });
-    console.log("Seeded initial LME price (£1738.00/t)");
-  } else {
-    console.log(`LME prices already exist (${lmeCount} entries), skipping`);
-  }
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_lme_prices_price_date ON lme_prices (price_date)`);
+  await db.insert(lmePricesTable).values({
+    priceDate: "2026-04-02",
+    usdPrice: "2200.00",
+    exchangeRate: "0.790000",
+    gbpPrice: "1738.00",
+    source: "manual",
+  }).onConflictDoNothing();
+  console.log("Ensured initial LME price (£1738.00/t, 2026-04-02)");
 
   process.exit(0);
 }

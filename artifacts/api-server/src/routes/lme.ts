@@ -54,14 +54,19 @@ router.post(
       const { usdPrice, exchangeRate } = parsed.data;
       const gbpPrice = (parseFloat(usdPrice) * parseFloat(exchangeRate)).toFixed(2);
 
+      const today = new Date().toISOString().split("T")[0];
       const [price] = await db
         .insert(lmePricesTable)
         .values({
-          priceDate: new Date().toISOString().split("T")[0],
+          priceDate: today,
           usdPrice,
           exchangeRate,
           gbpPrice,
           source: "manual",
+        })
+        .onConflictDoUpdate({
+          target: lmePricesTable.priceDate,
+          set: { usdPrice, exchangeRate, gbpPrice, source: "manual" },
         })
         .returning();
 
