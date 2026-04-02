@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { usersTable, systemSettingsTable, batteryWeightReferenceTable, cellModelsTable, collectionPointsTable } from "@workspace/db/schema";
+import { usersTable, systemSettingsTable, batteryWeightReferenceTable, cellModelsTable, collectionPointsTable, lmePricesTable } from "@workspace/db/schema";
 import { sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { CELL_MODEL_DATA } from "@workspace/db/data/cell-models";
@@ -168,6 +168,21 @@ async function seed() {
     await db.insert(collectionPointsTable).values(cp).onConflictDoNothing();
   }
   console.log(`Seeded ${collectionPoints.length} collection point presets`);
+
+  const existingLme = await db.execute(sql`SELECT COUNT(*)::int as count FROM lme_prices`);
+  const lmeCount = Number(existingLme.rows?.[0]?.count ?? 0);
+  if (lmeCount === 0) {
+    await db.insert(lmePricesTable).values({
+      priceDate: "2026-04-02",
+      usdPrice: "2200.00",
+      exchangeRate: "0.790000",
+      gbpPrice: "1738.00",
+      source: "manual",
+    });
+    console.log("Seeded initial LME price (£1738.00/t)");
+  } else {
+    console.log(`LME prices already exist (${lmeCount} entries), skipping`);
+  }
 
   process.exit(0);
 }
