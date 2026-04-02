@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { jobsTable, jobBatteriesTable } from "@workspace/db/schema";
+import { jobsTable, jobBatteriesTable, cellModelsTable } from "@workspace/db/schema";
 import { eq, sql, and, count, ilike, or, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 
@@ -232,21 +232,50 @@ router.post(
           (r) => `PLT-${String(r.seq).padStart(5, "0")}`
         );
 
-        const batteryRows = batteryInputs.map((b, idx) => ({
-          jobId: job.id,
-          palletNumber: palletNumbers[idx],
-          assetNumber: b.assetNumber || null,
-          batterySerial: b.batterySerial || null,
-          manufacture: b.manufacture || null,
-          cellType: b.cellType || null,
-          voltage: b.isLooseCells ? null : (b.voltage || null),
-          looseCellsQty: b.looseCellsQty ? parseInt(String(b.looseCellsQty), 10) : null,
-          estimatedWeightKg: sanitizeWeight(b.estimatedWeightKg),
-          isLooseCells: b.isLooseCells || false,
-          serialFlagReason: b.serialFlagReason || null,
-          rowPhoto: b.rowPhoto || null,
-          notes: b.notes || null,
-        }));
+        const uniqueCellKeys = [...new Set(
+          batteryInputs
+            .filter(b => b.manufacture && b.cellType)
+            .map(b => `${b.manufacture}|${b.cellType}`)
+        )];
+        const pbLookup = new Map<string, string>();
+        if (uniqueCellKeys.length > 0) {
+          const cellModels = await tx
+            .select({
+              manufacturer: cellModelsTable.manufacturer,
+              modelName: cellModelsTable.modelName,
+              pbContentKgPerCell: cellModelsTable.pbContentKgPerCell,
+              cellsCount: cellModelsTable.cellsCount,
+            })
+            .from(cellModelsTable);
+          for (const cm of cellModels) {
+            if (cm.pbContentKgPerCell != null) {
+              const key = `${cm.manufacturer}|${cm.modelName}`;
+              const totalPb = parseFloat(cm.pbContentKgPerCell) * cm.cellsCount;
+              pbLookup.set(key, totalPb.toFixed(3));
+            }
+          }
+        }
+
+        const batteryRows = batteryInputs.map((b, idx) => {
+          const pbKey = `${b.manufacture}|${b.cellType}`;
+          const pbContentKg = pbLookup.get(pbKey) || null;
+          return {
+            jobId: job.id,
+            palletNumber: palletNumbers[idx],
+            assetNumber: b.assetNumber || null,
+            batterySerial: b.batterySerial || null,
+            manufacture: b.manufacture || null,
+            cellType: b.cellType || null,
+            voltage: b.isLooseCells ? null : (b.voltage || null),
+            looseCellsQty: b.looseCellsQty ? parseInt(String(b.looseCellsQty), 10) : null,
+            estimatedWeightKg: sanitizeWeight(b.estimatedWeightKg),
+            isLooseCells: b.isLooseCells || false,
+            serialFlagReason: b.serialFlagReason || null,
+            rowPhoto: b.rowPhoto || null,
+            notes: b.notes || null,
+            pbContentKg,
+          };
+        });
 
         const insertedBatteries = await tx
           .insert(jobBatteriesTable)
