@@ -59,7 +59,6 @@ async function seed() {
   await db.execute(sql`ALTER TABLE job_batteries ADD COLUMN IF NOT EXISTS is_loose_cells BOOLEAN DEFAULT FALSE`);
   await db.execute(sql`ALTER TABLE job_batteries ADD COLUMN IF NOT EXISTS serial_flag_reason VARCHAR(100)`);
   await db.execute(sql`ALTER TABLE job_batteries ADD COLUMN IF NOT EXISTS row_photo TEXT`);
-  await db.execute(sql`ALTER TABLE cell_models ADD COLUMN IF NOT EXISTS pb_content_kg_per_cell DECIMAL(10,3)`);
 
   await db.delete(batteryWeightReferenceTable);
   const weightRefs = [
@@ -105,6 +104,7 @@ async function seed() {
     )
   `);
   await db.execute(sql`ALTER TABLE cell_models ADD COLUMN IF NOT EXISTS manufacturer VARCHAR(100) NOT NULL DEFAULT 'Unknown'`);
+  await db.execute(sql`ALTER TABLE cell_models ADD COLUMN IF NOT EXISTS pb_content_kg_per_cell DECIMAL(10,3)`);
   await db.execute(sql`ALTER TABLE cell_models DROP CONSTRAINT IF EXISTS cell_models_model_name_unique`);
   await db.execute(sql`DROP INDEX IF EXISTS cell_models_model_name_unique`);
   await db.execute(sql`DROP INDEX IF EXISTS idx_cell_models_model_name`);
