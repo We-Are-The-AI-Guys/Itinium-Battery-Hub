@@ -102,6 +102,7 @@ export const cellModelsTable = pgTable("cell_models", {
   cellHeightMm: integer("cell_height_mm").notNull(),
   cellsCount: integer("cells_count").notNull(),
   weightPerCellKg: decimal("weight_per_cell_kg", { precision: 10, scale: 3 }).notNull(),
+  pbContentKgPerCell: decimal("pb_content_kg_per_cell", { precision: 10, scale: 3 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   uniqueIndex("idx_cell_models_mfr_model").on(table.manufacturer, table.modelName),

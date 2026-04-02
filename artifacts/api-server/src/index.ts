@@ -50,6 +50,7 @@ async function bootstrap() {
     await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family ON cell_models (cell_family)`);
     await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family_height ON cell_models (cell_family, cell_height_mm)`);
     await db.execute(sql`ALTER TABLE job_batteries ALTER COLUMN cell_type TYPE VARCHAR(100)`);
+    await db.execute(sql`ALTER TABLE cell_models ADD COLUMN IF NOT EXISTS pb_content_kg_per_cell DECIMAL(10,3)`);
   } catch (err) {
     console.error("Bootstrap: failed to create cell_models table:", err);
   }
@@ -145,6 +146,7 @@ async function bootstrap() {
           cellHeightMm: cm.cellHeightMm,
           cellsCount: cm.cellsCount,
           weightPerCellKg: String(cm.weightPerCellKg),
+          pbContentKgPerCell: cm.pbContentKgPerCell ? String(cm.pbContentKgPerCell) : null,
         }));
         await db.insert(cellModelsTable).values(batch).onConflictDoNothing();
       }
