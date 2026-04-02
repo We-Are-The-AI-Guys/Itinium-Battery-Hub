@@ -126,7 +126,7 @@ async function seed() {
       cellHeightMm: cm.cellHeightMm,
       cellsCount: cm.cellsCount,
       weightPerCellKg: String(cm.weightPerCellKg),
-      pbContentKgPerCell: cm.pbContentKgPerCell ? String(cm.pbContentKgPerCell) : null,
+      pbContentKgPerCell: cm.pbContentKgPerCell != null ? String(cm.pbContentKgPerCell) : null,
     }));
     await db.insert(cellModelsTable).values(batch).onConflictDoNothing();
   }
