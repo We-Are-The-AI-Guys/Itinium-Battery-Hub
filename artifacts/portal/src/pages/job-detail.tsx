@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   ChevronLeft,
@@ -21,13 +21,6 @@ import { Switch } from "@/components/ui/switch";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { useToast } from "@/hooks/use-toast";
 
-interface WeightReference {
-  id: number;
-  cellType: string;
-  voltage: string | null;
-  weightKg: string;
-}
-
 interface LmePrice {
   id: number;
   priceDate: string;
@@ -35,21 +28,6 @@ interface LmePrice {
   exchangeRate: string;
   gbpPrice: string;
   source: string;
-}
-
-function calcPbContent(
-  cellType: string | null,
-  voltage: string | null,
-  weightRefMap: Map<string, number>,
-): number | null {
-  if (!cellType || !voltage) return null;
-  const v = parseFloat(voltage);
-  if (!isFinite(v) || v <= 0) return null;
-  const key = cellType.toLowerCase();
-  const weightPerCell = weightRefMap.get(`${key}|${voltage}`) ?? weightRefMap.get(key);
-  if (weightPerCell === undefined) return null;
-  const result = weightPerCell * (v / 2);
-  return isFinite(result) ? result : null;
 }
 
 function calcValueGbp(
@@ -139,21 +117,7 @@ export default function JobDetailPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [lmePrice, setLmePrice] = useState<LmePrice | null>(null);
-  const [weightRefs, setWeightRefs] = useState<WeightReference[]>([]);
-
-  const weightRefMap = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const ref of weightRefs) {
-      const w = parseFloat(ref.weightKg);
-      if (!isFinite(w)) continue;
-      const key = ref.cellType.toLowerCase();
-      map.set(key, w);
-      if (ref.voltage) {
-        map.set(`${key}|${ref.voltage}`, w);
-      }
-    }
-    return map;
-  }, [weightRefs]);
+  const cblLmeInitialRef = useRef<string | null>(null);
 
   const lmeGbpRate = lmePrice ? (isFinite(parseFloat(lmePrice.gbpPrice)) ? parseFloat(lmePrice.gbpPrice) : null) : null;
 
@@ -184,6 +148,7 @@ export default function JobDetailPage() {
         if (data) {
           setJob(data.job);
           setBatteries(data.batteries);
+          cblLmeInitialRef.current = data.job.cblLmeValue || "";
           setFinancials({
             tonnage: data.job.tonnage || "",
             cblLmeValue: data.job.cblLmeValue || "",
@@ -215,28 +180,32 @@ export default function JobDetailPage() {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => { if (data?.price) setLmePrice(data.price); })
       .catch(() => {});
-    fetch("/api/weight-reference", { credentials: "include" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (data?.references) setWeightRefs(data.references); })
-      .catch(() => {});
   }, [loadJob]);
 
-  function recalculateBattery(battery: BatteryData): { pb: string; value: string } {
-    const pbNum = calcPbContent(battery.cellType, battery.voltage, weightRefMap);
-    const valNum = calcValueGbp(pbNum, lmeGbpRate);
+  function getEffectiveLmeRate(): number | null {
+    const cblRate = parseFloat(financials.cblLmeValue);
+    if (isFinite(cblRate) && cblRate > 0) return cblRate;
+    return lmeGbpRate;
+  }
+
+  function recalculateBattery(battery: BatteryData, rate?: number | null): { pb: string; value: string } {
+    const pbNum = battery.pbContentKg ? parseFloat(battery.pbContentKg) : null;
+    const effectiveRate = rate !== undefined ? rate : getEffectiveLmeRate();
+    const valNum = calcValueGbp(pbNum, effectiveRate);
     return {
-      pb: pbNum !== null ? pbNum.toFixed(3) : "",
+      pb: pbNum !== null && isFinite(pbNum) ? pbNum.toFixed(3) : "",
       value: valNum !== null ? valNum.toFixed(2) : "",
     };
   }
 
   function recalculateAll() {
+    const rate = getEffectiveLmeRate();
     const updated = batteries.map((b) => {
-      const { pb, value } = recalculateBattery(b);
+      const { pb, value } = recalculateBattery(b, rate);
       return { ...b, pbContentKg: pb || b.pbContentKg, valueGbp: value || b.valueGbp };
     });
     setBatteries(updated);
-    toast({ title: "Recalculated", description: "Pb Content and £ Value recalculated for all batteries." });
+    toast({ title: "Recalculated", description: "£ Value recalculated for all batteries using " + (parseFloat(financials.cblLmeValue) > 0 ? "CBL LME Value" : "latest LME price") + "." });
   }
 
   useEffect(() => {
@@ -254,6 +223,21 @@ export default function JobDetailPage() {
     const gp = totalInvoice - transport - cblLme;
     setFinancials((prev) => ({ ...prev, grossProfit: gp.toFixed(2) }));
   }, [financials.totalInvoiceValue, financials.transportCost, financials.cblLmePrice]);
+
+  useEffect(() => {
+    if (cblLmeInitialRef.current === null) return;
+    if (financials.cblLmeValue === cblLmeInitialRef.current) return;
+    cblLmeInitialRef.current = financials.cblLmeValue;
+    const rate = parseFloat(financials.cblLmeValue);
+    if (!isFinite(rate) || rate <= 0) return;
+    setBatteries((prev) =>
+      prev.map((b) => {
+        const pbNum = b.pbContentKg ? parseFloat(b.pbContentKg) : null;
+        const valNum = calcValueGbp(pbNum, rate);
+        return valNum !== null ? { ...b, valueGbp: valNum.toFixed(2) } : b;
+      })
+    );
+  }, [financials.cblLmeValue]);
 
   async function saveFinancials() {
     setSaving(true);
@@ -504,7 +488,7 @@ export default function JobDetailPage() {
                     size="sm"
                     className="h-7 text-xs gap-1"
                     onClick={recalculateAll}
-                    disabled={!lmePrice || weightRefs.length === 0}
+                    disabled={getEffectiveLmeRate() === null}
                   >
                     <RefreshCw className="w-3 h-3" />
                     Recalculate All
@@ -533,8 +517,7 @@ export default function JobDetailPage() {
                         battery={b}
                         index={i}
                         onSave={updateBatteryAdmin}
-                        weightRefMap={weightRefMap}
-                        lmeGbpRate={lmeGbpRate}
+                        lmeGbpRate={getEffectiveLmeRate()}
                       />
                     ))}
                   </tbody>
@@ -773,13 +756,11 @@ function BatteryAdminRow({
   battery,
   index,
   onSave,
-  weightRefMap,
   lmeGbpRate,
 }: {
   battery: BatteryData;
   index: number;
   onSave: (id: number, updates: Record<string, string | boolean | null>) => void;
-  weightRefMap: Map<string, number>;
   lmeGbpRate: number | null;
 }) {
   const [receipt, setReceipt] = useState(battery.receiptConfirmed ?? false);
@@ -794,31 +775,25 @@ function BatteryAdminRow({
   }, [battery.pbContentKg, battery.valueGbp]);
 
   useEffect(() => {
-    if (weightRefMap.size === 0 || lmeGbpRate === null) return;
-    const pbNum = calcPbContent(battery.cellType, battery.voltage, weightRefMap);
-    if (!battery.pbContentKg && pbNum !== null) {
-      setPb(pbNum.toFixed(3));
-      setIsAutoCalced(true);
-    }
-    const effectivePb = battery.pbContentKg ? parseFloat(battery.pbContentKg) : pbNum;
-    if (!battery.valueGbp && effectivePb !== null && isFinite(effectivePb!)) {
-      const valNum = calcValueGbp(effectivePb, lmeGbpRate);
+    if (lmeGbpRate === null) return;
+    const pbNum = battery.pbContentKg ? parseFloat(battery.pbContentKg) : null;
+    if (pbNum !== null && isFinite(pbNum) && !battery.valueGbp) {
+      const valNum = calcValueGbp(pbNum, lmeGbpRate);
       if (valNum !== null) {
         setValue(valNum.toFixed(2));
         setIsAutoCalced(true);
       }
     }
-  }, [battery.cellType, battery.voltage, battery.pbContentKg, battery.valueGbp, weightRefMap, lmeGbpRate]);
+  }, [battery.pbContentKg, battery.valueGbp, lmeGbpRate]);
 
   function handleRecalculate() {
-    const pbNum = calcPbContent(battery.cellType, battery.voltage, weightRefMap);
+    const pbNum = pb ? parseFloat(pb) : null;
     const valNum = calcValueGbp(pbNum, lmeGbpRate);
-    if (pbNum !== null) setPb(pbNum.toFixed(3));
     if (valNum !== null) setValue(valNum.toFixed(2));
     setIsAutoCalced(true);
   }
 
-  const canRecalculate = battery.cellType && battery.voltage && weightRefMap.size > 0 && lmeGbpRate !== null;
+  const canRecalculate = pb && lmeGbpRate !== null;
 
   return (
     <tr className={index % 2 === 0 ? "bg-white" : "bg-slate-50/30"}>

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { jobsTable, jobBatteriesTable, cellModelsTable } from "@workspace/db/schema";
-import { eq, sql, and, count, ilike, or, inArray } from "drizzle-orm";
+import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable } from "@workspace/db/schema";
+import { eq, sql, and, count, ilike, or, inArray, desc } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -256,9 +256,25 @@ router.post(
           }
         }
 
+        let latestLmeGbpPrice: number | null = null;
+        const [latestLme] = await tx
+          .select({ gbpPrice: lmePricesTable.gbpPrice })
+          .from(lmePricesTable)
+          .orderBy(desc(lmePricesTable.createdAt))
+          .limit(1);
+        if (latestLme) {
+          const parsed = parseFloat(latestLme.gbpPrice);
+          if (isFinite(parsed) && parsed > 0) latestLmeGbpPrice = parsed;
+        }
+
         const batteryRows = batteryInputs.map((b, idx) => {
           const pbKey = `${b.manufacture}|${b.cellType}`;
           const pbContentKg = pbLookup.get(pbKey) || null;
+          let valueGbp: string | null = null;
+          if (pbContentKg && latestLmeGbpPrice !== null) {
+            const val = (parseFloat(pbContentKg) * latestLmeGbpPrice) / 1000;
+            if (isFinite(val)) valueGbp = val.toFixed(2);
+          }
           return {
             jobId: job.id,
             palletNumber: palletNumbers[idx],
@@ -274,6 +290,7 @@ router.post(
             rowPhoto: b.rowPhoto || null,
             notes: b.notes || null,
             pbContentKg,
+            valueGbp,
           };
         });
 
@@ -493,6 +510,46 @@ router.patch(
       res.json({ battery: updated });
     } catch (error) {
       console.error("Battery admin update error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+router.post(
+  "/jobs/batteries/recalculate-values",
+  requireAuth,
+  requireRole("accounts", "head_office_admin"),
+  async (_req: AuthenticatedRequest, res) => {
+    try {
+      const [latestLme] = await db
+        .select({ gbpPrice: lmePricesTable.gbpPrice })
+        .from(lmePricesTable)
+        .orderBy(desc(lmePricesTable.createdAt))
+        .limit(1);
+
+      if (!latestLme) {
+        res.status(400).json({ message: "No LME price available. Add an LME price first." });
+        return;
+      }
+
+      const gbpPrice = parseFloat(latestLme.gbpPrice);
+      if (!isFinite(gbpPrice) || gbpPrice <= 0) {
+        res.status(400).json({ message: "Invalid LME GBP price." });
+        return;
+      }
+
+      const result = await db.execute(
+        sql`UPDATE job_batteries
+            SET value_gbp = ROUND((pb_content_kg::numeric * ${gbpPrice} / 1000), 2)
+            WHERE pb_content_kg IS NOT NULL
+              AND pb_content_kg::numeric > 0
+              AND (value_gbp IS NULL OR value_gbp::numeric = 0)`
+      );
+
+      const updatedCount = (result as any).rowCount || 0;
+      res.json({ updated: updatedCount, lmeGbpPrice: gbpPrice });
+    } catch (error) {
+      console.error("Battery value backfill error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   }
