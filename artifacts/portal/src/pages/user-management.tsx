@@ -168,6 +168,7 @@ export default function UserManagementPage() {
         setNewUser({ fullName: "", email: "", role: "", depot: "" });
         fetchUsers();
         fetchStats();
+        fetchDepots();
       } else {
         const data = await res.json();
         setFormError(data.message || "Failed to create user");
@@ -210,6 +211,7 @@ export default function UserManagementPage() {
         setEditingUser(null);
         fetchUsers();
         fetchStats();
+        fetchDepots();
       } else {
         const data = await res.json();
         setEditError(data.message || "Failed to update user");
