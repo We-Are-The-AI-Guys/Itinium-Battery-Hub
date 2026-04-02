@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { lmePricesTable } from "@workspace/db/schema";
-import { desc, sql } from "drizzle-orm";
+import { lmePricesTable, jobBatteriesTable } from "@workspace/db/schema";
+import { desc, sql, and, isNotNull, gt, or, eq, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { z } from "zod";
 
@@ -65,7 +65,20 @@ router.post(
         })
         .returning();
 
-      res.json({ price });
+      const gbpNum = parseFloat(gbpPrice);
+      let backfilledCount = 0;
+      if (isFinite(gbpNum) && gbpNum > 0) {
+        const backfillResult = await db.execute(
+          sql`UPDATE job_batteries
+              SET value_gbp = ROUND((pb_content_kg::numeric * ${gbpNum} / 1000), 2)
+              WHERE pb_content_kg IS NOT NULL
+                AND pb_content_kg::numeric > 0
+                AND (value_gbp IS NULL OR value_gbp::numeric = 0)`
+        );
+        backfilledCount = Number(backfillResult.rowCount) || 0;
+      }
+
+      res.json({ price, backfilledBatteries: backfilledCount });
     } catch (error) {
       console.error("LME update error:", error);
       res.status(500).json({ message: "Internal server error" });

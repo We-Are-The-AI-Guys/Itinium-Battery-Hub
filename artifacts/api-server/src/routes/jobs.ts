@@ -546,7 +546,7 @@ router.post(
               AND (value_gbp IS NULL OR value_gbp::numeric = 0)`
       );
 
-      const updatedCount = (result as any).rowCount || 0;
+      const updatedCount = Number(result.rowCount) || 0;
       res.json({ updated: updatedCount, lmeGbpPrice: gbpPrice });
     } catch (error) {
       console.error("Battery value backfill error:", error);
