@@ -94,8 +94,12 @@ export default function UserManagementPage() {
     depot: "",
   });
 
+  const [depotList, setDepotList] = useState<string[]>([]);
+  const [newUserCustomDepot, setNewUserCustomDepot] = useState(false);
+
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
   const [editForm, setEditForm] = useState({ fullName: "", role: "", depot: "" });
+  const [editCustomDepot, setEditCustomDepot] = useState(false);
   const [editError, setEditError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -126,8 +130,19 @@ export default function UserManagementPage() {
     } catch {}
   }, [page, activeFilter, searchQuery]);
 
+  const fetchDepots = useCallback(async () => {
+    try {
+      const res = await fetch("/api/depots", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setDepotList(data.depots || []);
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  useEffect(() => { fetchDepots(); }, [fetchDepots]);
 
   async function handleCreateUser() {
     setFormError("");
@@ -166,7 +181,9 @@ export default function UserManagementPage() {
 
   function openEditModal(user: UserData) {
     setEditingUser(user);
-    setEditForm({ fullName: user.fullName, role: user.role, depot: user.depot || "" });
+    const depotVal = user.depot || "";
+    setEditForm({ fullName: user.fullName, role: user.role, depot: depotVal });
+    setEditCustomDepot(depotVal !== "" && !depotList.includes(depotVal));
     setEditError("");
   }
 
@@ -310,7 +327,7 @@ export default function UserManagementPage() {
             </div>
             <Button
               className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-none shadow-sm"
-              onClick={() => { setShowModal(true); setFormError(""); }}
+              onClick={() => { setShowModal(true); setFormError(""); setNewUserCustomDepot(false); }}
             >
               <Plus className="w-4 h-4 mr-2" />
               Add New User
@@ -514,12 +531,47 @@ export default function UserManagementPage() {
                     Assigned Depot
                     <span className="text-xs text-slate-500 font-normal ml-2">(Required for Depot User and Team Leader roles)</span>
                   </label>
-                  <Input
-                    placeholder="e.g. Birmingham Central"
-                    className="border-slate-200 focus-visible:ring-[#0ea5e9]"
-                    value={newUser.depot}
-                    onChange={(e) => setNewUser({ ...newUser, depot: e.target.value })}
-                  />
+                  {newUserCustomDepot ? (
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Enter new depot name..."
+                        className="border-slate-200 focus-visible:ring-[#0ea5e9] flex-1"
+                        value={newUser.depot}
+                        onChange={(e) => setNewUser({ ...newUser, depot: e.target.value })}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 px-2.5 text-slate-500 border-slate-200"
+                        onClick={() => { setNewUserCustomDepot(false); setNewUser({ ...newUser, depot: "" }); }}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <select
+                        className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
+                        value={newUser.depot}
+                        onChange={(e) => {
+                          if (e.target.value === "__other__") {
+                            setNewUserCustomDepot(true);
+                            setNewUser({ ...newUser, depot: "" });
+                          } else {
+                            setNewUser({ ...newUser, depot: e.target.value });
+                          }
+                        }}
+                      >
+                        <option value="">Select a depot...</option>
+                        {depotList.map((d) => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                        <option value="__other__">Other (enter manually)...</option>
+                      </select>
+                      <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -625,12 +677,47 @@ export default function UserManagementPage() {
 
                 <div className="grid gap-2">
                   <label className="text-sm font-medium text-slate-700">Assigned Depot</label>
-                  <Input
-                    placeholder="e.g. Birmingham Central"
-                    className="border-slate-200 focus-visible:ring-[#0ea5e9]"
-                    value={editForm.depot}
-                    onChange={(e) => setEditForm({ ...editForm, depot: e.target.value })}
-                  />
+                  {editCustomDepot ? (
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Enter new depot name..."
+                        className="border-slate-200 focus-visible:ring-[#0ea5e9] flex-1"
+                        value={editForm.depot}
+                        onChange={(e) => setEditForm({ ...editForm, depot: e.target.value })}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 px-2.5 text-slate-500 border-slate-200"
+                        onClick={() => { setEditCustomDepot(false); setEditForm({ ...editForm, depot: "" }); }}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <select
+                        className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
+                        value={depotList.includes(editForm.depot) ? editForm.depot : (editForm.depot ? "__other__" : "")}
+                        onChange={(e) => {
+                          if (e.target.value === "__other__") {
+                            setEditCustomDepot(true);
+                            setEditForm({ ...editForm, depot: "" });
+                          } else {
+                            setEditForm({ ...editForm, depot: e.target.value });
+                          }
+                        }}
+                      >
+                        <option value="">Select a depot...</option>
+                        {depotList.map((d) => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                        <option value="__other__">Other (enter manually)...</option>
+                      </select>
+                      <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

@@ -10,6 +10,7 @@ import manufacturersRouter from "./manufacturers";
 import stillagesRouter from "./stillages";
 import cellModelsRouter from "./cell-models";
 import collectionPointsRouter from "./collection-points";
+import depotsRouter from "./depots";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(manufacturersRouter);
 router.use(stillagesRouter);
 router.use(cellModelsRouter);
 router.use(collectionPointsRouter);
+router.use(depotsRouter);
 
 export default router;
