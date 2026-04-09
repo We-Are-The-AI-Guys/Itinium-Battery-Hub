@@ -11,9 +11,7 @@ import {
   Edit,
   X,
   Search,
-  ChevronDown,
   ChevronRight,
-  Mail,
   User,
 } from "lucide-react";
 

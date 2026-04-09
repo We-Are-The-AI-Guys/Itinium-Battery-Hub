@@ -3,7 +3,6 @@ import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Users,
   Shield,
@@ -95,7 +94,7 @@ export default function UserManagementPage() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [usersTotal, setUsersTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [activeFilter, setActiveFilter] = useState("all");
+  const [activeFilter, setActiveFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -128,6 +127,11 @@ export default function UserManagementPage() {
             clientId: data.user.clientId,
             clientName: data.user.clientName,
           });
+          if (data.user.role === "team_leader") {
+            setActiveFilter("depot_user");
+          } else {
+            setActiveFilter("all");
+          }
         }
       })
       .catch(() => {});
