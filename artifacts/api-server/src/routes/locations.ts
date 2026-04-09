@@ -16,7 +16,7 @@ function canAccessClient(req: AuthenticatedRequest, clientId: number): boolean {
 router.get(
   "/clients/:clientId/locations",
   requireAuth,
-  requireRole("head_office_admin", "team_leader", "depot_user"),
+  requireRole("head_office_admin", "team_leader"),
   async (req: AuthenticatedRequest, res) => {
     try {
       const clientId = parseInt(String(req.params.clientId), 10);

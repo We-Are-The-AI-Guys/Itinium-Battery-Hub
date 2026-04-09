@@ -215,6 +215,8 @@ router.post(
             reference,
             clientName,
             depot,
+            clientId: req.user!.clientId || null,
+            locationId: req.user!.locationId || null,
             collectionPoint: collectionPoint || null,
             collectionDate: collectionDate || null,
             tonnage: finalTonnage,

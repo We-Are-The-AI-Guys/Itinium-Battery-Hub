@@ -266,6 +266,10 @@ router.patch(
       }
 
       if (req.user!.role === "team_leader") {
+        if (!req.user!.clientId) {
+          res.status(403).json({ message: "Team leader has no client assigned" });
+          return;
+        }
         const [target] = await db
           .select({ clientId: usersTable.clientId, role: usersTable.role })
           .from(usersTable)
