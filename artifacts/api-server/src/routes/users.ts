@@ -179,6 +179,11 @@ router.post(
         return;
       }
 
+      if (role === "depot_user" && !locationId) {
+        res.status(400).json({ message: "Location is required for Depot User role" });
+        return;
+      }
+
       if (locationId && clientId) {
         const [loc] = await db
           .select({ clientId: locationsTable.clientId })
@@ -306,9 +311,28 @@ router.patch(
         if (parsed.data.clientId !== undefined) updates.clientId = parsed.data.clientId;
         if (parsed.data.locationId !== undefined) updates.locationId = parsed.data.locationId;
 
-        const effectiveClientId = (updates.clientId !== undefined ? updates.clientId : null) as number | null;
-        const effectiveLocationId = (updates.locationId !== undefined ? updates.locationId : null) as number | null;
-        if (effectiveLocationId && effectiveClientId) {
+        const [existingUser] = await db
+          .select({ clientId: usersTable.clientId, locationId: usersTable.locationId })
+          .from(usersTable)
+          .where(eq(usersTable.id, userId));
+
+        if (!existingUser) {
+          res.status(404).json({ message: "User not found" });
+          return;
+        }
+
+        const effectiveClientId = updates.clientId !== undefined
+          ? (updates.clientId as number | null)
+          : existingUser.clientId;
+        const effectiveLocationId = updates.locationId !== undefined
+          ? (updates.locationId as number | null)
+          : existingUser.locationId;
+
+        if (effectiveLocationId) {
+          if (!effectiveClientId) {
+            res.status(400).json({ message: "Cannot assign a location without a client" });
+            return;
+          }
           const [loc] = await db
             .select({ clientId: locationsTable.clientId })
             .from(locationsTable)
