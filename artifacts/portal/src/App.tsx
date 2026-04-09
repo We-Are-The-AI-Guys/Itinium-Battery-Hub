@@ -9,6 +9,8 @@ import AdminDashboardPage from "@/pages/admin-dashboard";
 import DepotFormPage from "@/pages/depot-form";
 import LmePricingPage from "@/pages/lme-pricing";
 import UserManagementPage from "@/pages/user-management";
+import ClientManagementPage from "@/pages/client-management";
+import LocationManagementPage from "@/pages/location-management";
 import SettingsPage from "@/pages/settings";
 import JobListPage from "@/pages/job-list";
 import JobDetailPage from "@/pages/job-detail";
@@ -160,9 +162,9 @@ function AppRouter() {
         </AuthGuard>
       </Route>
       <Route path="/kpi">
-        <AdminGuard>
+        <RoleGuard allowedRoles={["accounts", "head_office_admin"]}>
           <PlaceholderPage title="KPI Reporting" />
-        </AdminGuard>
+        </RoleGuard>
       </Route>
       <Route path="/help">
         <AuthGuard>
@@ -174,8 +176,18 @@ function AppRouter() {
           <LmePricingPage />
         </RoleGuard>
       </Route>
-      <Route path="/users">
+      <Route path="/clients">
         <RoleGuard allowedRoles={["head_office_admin"]}>
+          <ClientManagementPage />
+        </RoleGuard>
+      </Route>
+      <Route path="/locations">
+        <RoleGuard allowedRoles={["team_leader"]}>
+          <LocationManagementPage />
+        </RoleGuard>
+      </Route>
+      <Route path="/users">
+        <RoleGuard allowedRoles={["head_office_admin", "team_leader"]}>
           <UserManagementPage />
         </RoleGuard>
       </Route>

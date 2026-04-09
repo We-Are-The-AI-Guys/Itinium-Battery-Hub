@@ -14,6 +14,8 @@ import {
   Calendar,
   Plus,
   Package,
+  Building2,
+  MapPin,
 } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Input } from "@/components/ui/input";
@@ -24,18 +26,56 @@ interface User {
   fullName: string;
   role: string;
   depot: string | null;
+  clientId: number | null;
+  locationId: number | null;
+  clientName: string | null;
+  locationName: string | null;
 }
 
-const navItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-  { icon: Briefcase, label: "Job Management", path: "/jobs" },
-  { icon: Package, label: "Stillages", path: "/stillages" },
-  { icon: BarChart3, label: "KPI Reporting", path: "/kpi" },
-  { icon: LineChart, label: "LME Pricing", path: "/lme-pricing" },
-  { icon: Users, label: "User Access", path: "/users" },
-];
+interface NavItem {
+  icon: typeof LayoutDashboard;
+  label: string;
+  path: string;
+  roles?: string[];
+}
 
-const secondaryNavItems = [
+function getNavItems(user: User | null): NavItem[] {
+  if (!user) return [];
+  const role = user.role;
+
+  const items: NavItem[] = [];
+
+  if (role === "head_office_admin" || role === "accounts" || role === "team_leader") {
+    items.push({ icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" });
+  }
+
+  if (role === "head_office_admin" || role === "accounts" || role === "team_leader") {
+    items.push({ icon: Briefcase, label: "Job Management", path: "/jobs" });
+  }
+
+  items.push({ icon: Package, label: "Stillages", path: "/stillages" });
+
+  if (role === "head_office_admin" || role === "accounts") {
+    items.push({ icon: BarChart3, label: "KPI Reporting", path: "/kpi" });
+    items.push({ icon: LineChart, label: "LME Pricing", path: "/lme-pricing" });
+  }
+
+  if (role === "head_office_admin") {
+    items.push({ icon: Building2, label: "Clients", path: "/clients" });
+  }
+
+  if (role === "team_leader") {
+    items.push({ icon: MapPin, label: "Locations", path: "/locations" });
+  }
+
+  if (role === "head_office_admin" || role === "team_leader") {
+    items.push({ icon: Users, label: "User Access", path: "/users" });
+  }
+
+  return items;
+}
+
+const secondaryNavItems: NavItem[] = [
   { icon: Plus, label: "New Collection", path: "/collection/new" },
   { icon: Settings, label: "Settings", path: "/settings" },
   { icon: HelpCircle, label: "Help & Support", path: "/help" },
@@ -51,7 +91,13 @@ function getInitials(name: string) {
 }
 
 function getRoleLabel(role: string) {
-  return role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const labels: Record<string, string> = {
+    depot_user: "Depot User",
+    team_leader: "Team Leader",
+    accounts: "Accounts",
+    head_office_admin: "Head Office Admin",
+  };
+  return labels[role] || role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function getCurrentMonth() {
@@ -95,6 +141,8 @@ export function SidebarLayout({
     return location.startsWith(path);
   }
 
+  const navItems = getNavItems(user);
+
   return (
     <div className="flex min-h-screen bg-[#f8fafc] font-sans">
       <aside className="fixed inset-y-0 left-0 w-[260px] bg-gradient-to-b from-[#0a1628] to-[#132744] text-slate-300 flex flex-col z-20">
@@ -107,7 +155,9 @@ export function SidebarLayout({
               style={{ filter: "brightness(0) invert(1)" }}
             />
           </div>
-          <p className="text-xs text-slate-400 font-medium">Admin Portal</p>
+          <p className="text-xs text-slate-400 font-medium">
+            {user?.clientName || "Admin Portal"}
+          </p>
         </div>
 
         <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">

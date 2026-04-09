@@ -49,3 +49,24 @@ The Itinium Battery Portal is built as a monorepo using pnpm workspaces.
 - **Express**: Backend web framework.
 - **bcrypt**: For password hashing.
 - **Drizzle ORM**: For database interaction.
+
+## Frontend Pages
+
+- **Login** (`/login`): Email/password login
+- **Dashboard** (`/`, `/dashboard`): Depot user dashboard / Admin dashboard
+- **Job Management** (`/jobs`, `/jobs/:id`): Job listing and detail views (admin roles)
+- **Stillages** (`/stillages`): Stillage tracking (all authenticated users)
+- **KPI Reporting** (`/kpi`): Placeholder (accounts, head_office_admin only)
+- **LME Pricing** (`/lme-pricing`): LME price management (accounts, head_office_admin)
+- **Clients** (`/clients`): Client CRUD with inline locations and team leaders (head_office_admin only)
+- **Locations** (`/locations`): Location CRUD for team leader's own client (team_leader only)
+- **User Access** (`/users`): User management with client/location selectors (head_office_admin sees all + client/location dropdowns; team_leader sees own client's users, can only manage depot_users)
+- **New Collection** (`/collection/new`): Depot form for battery collection submission
+- **Settings** (`/settings`): Profile and system settings
+
+## Role Hierarchy & Navigation
+
+- **head_office_admin**: Full access — Dashboard, Jobs, Stillages, KPI, LME Pricing, Clients, Users, New Collection, Settings, Help
+- **accounts**: Dashboard, Jobs, Stillages, KPI, LME Pricing, New Collection, Settings, Help
+- **team_leader**: Dashboard, Jobs, Stillages, Locations, Users (depot_user only), New Collection, Settings, Help. Scoped to their assigned client.
+- **depot_user**: Stillages, New Collection, Settings, Help. Scoped to their assigned location.

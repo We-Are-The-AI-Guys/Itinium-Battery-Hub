@@ -25,6 +25,10 @@ interface UserData {
   fullName: string;
   role: string;
   depot: string | null;
+  clientId: number | null;
+  locationId: number | null;
+  clientName: string | null;
+  locationName: string | null;
   isActive: boolean;
   lastActiveAt: string | null;
   createdAt: string;
@@ -37,13 +41,22 @@ interface UserStats {
   adminStaff: number;
 }
 
-const ROLE_FILTERS = [
-  { label: "All", value: "all" },
-  { label: "Depot User", value: "depot_user" },
-  { label: "Team Leader", value: "team_leader" },
-  { label: "Accounts", value: "accounts" },
-  { label: "Head Office", value: "head_office_admin" },
-];
+interface ClientOption {
+  id: number;
+  name: string;
+}
+
+interface LocationOption {
+  id: number;
+  name: string;
+  clientId: number;
+}
+
+interface CurrentUser {
+  role: string;
+  clientId: number | null;
+  clientName: string | null;
+}
 
 function getRoleLabel(role: string) {
   const labels: Record<string, string> = {
@@ -77,6 +90,7 @@ function getInitials(name: string) {
 const USERS_PER_PAGE = 10;
 
 export default function UserManagementPage() {
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [users, setUsers] = useState<UserData[]>([]);
   const [usersTotal, setUsersTotal] = useState(0);
@@ -87,21 +101,53 @@ export default function UserManagementPage() {
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState("");
 
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [locationOptions, setLocationOptions] = useState<LocationOption[]>([]);
+
   const [newUser, setNewUser] = useState({
     fullName: "",
     email: "",
     role: "",
-    depot: "",
+    clientId: "",
+    locationId: "",
   });
 
-  const [depotList, setDepotList] = useState<string[]>([]);
-  const [newUserCustomDepot, setNewUserCustomDepot] = useState(false);
-
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
-  const [editForm, setEditForm] = useState({ fullName: "", role: "", depot: "" });
-  const [editCustomDepot, setEditCustomDepot] = useState(false);
+  const [editForm, setEditForm] = useState({ fullName: "", role: "", clientId: "", locationId: "" });
+  const [editLocationOptions, setEditLocationOptions] = useState<LocationOption[]>([]);
   const [editError, setEditError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.user) {
+          setCurrentUser({
+            role: data.user.role,
+            clientId: data.user.clientId,
+            clientName: data.user.clientName,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const isAdmin = currentUser?.role === "head_office_admin";
+  const isTeamLeader = currentUser?.role === "team_leader";
+
+  const roleFilters = isAdmin
+    ? [
+        { label: "All", value: "all" },
+        { label: "Depot User", value: "depot_user" },
+        { label: "Team Leader", value: "team_leader" },
+        { label: "Accounts", value: "accounts" },
+        { label: "Head Office", value: "head_office_admin" },
+      ]
+    : [
+        { label: "All", value: "all" },
+        { label: "Depot User", value: "depot_user" },
+      ];
 
   const fetchStats = useCallback(async () => {
     try {
@@ -116,9 +162,7 @@ export default function UserManagementPage() {
         limit: String(USERS_PER_PAGE),
         offset: String((page - 1) * USERS_PER_PAGE),
       });
-      if (activeFilter !== "all") {
-        params.set("role", activeFilter);
-      }
+      if (activeFilter !== "all") params.set("role", activeFilter);
       if (searchQuery) params.set("search", searchQuery);
 
       const res = await fetch(`/api/users?${params}`, { credentials: "include" });
@@ -130,19 +174,51 @@ export default function UserManagementPage() {
     } catch {}
   }, [page, activeFilter, searchQuery]);
 
-  const fetchDepots = useCallback(async () => {
+  const fetchClients = useCallback(async () => {
+    if (!isAdmin) return;
     try {
-      const res = await fetch("/api/depots", { credentials: "include" });
+      const res = await fetch("/api/clients", { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
-        setDepotList(data.depots || []);
+        setClients(data.clients.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })));
       }
     } catch {}
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
-  useEffect(() => { fetchDepots(); }, [fetchDepots]);
+  useEffect(() => { fetchClients(); }, [fetchClients]);
+
+  async function fetchLocationsForClient(clientId: number): Promise<LocationOption[]> {
+    try {
+      const res = await fetch(`/api/clients/${clientId}/locations`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        return data.locations.map((l: { id: number; name: string; clientId: number }) => ({
+          id: l.id,
+          name: l.name,
+          clientId: l.clientId,
+        }));
+      }
+    } catch {}
+    return [];
+  }
+
+  useEffect(() => {
+    if (isTeamLeader && currentUser?.clientId) {
+      fetchLocationsForClient(currentUser.clientId).then(setLocationOptions);
+    }
+  }, [isTeamLeader, currentUser?.clientId]);
+
+  async function handleNewUserClientChange(clientIdStr: string) {
+    setNewUser((prev) => ({ ...prev, clientId: clientIdStr, locationId: "" }));
+    if (clientIdStr) {
+      const locs = await fetchLocationsForClient(parseInt(clientIdStr));
+      setLocationOptions(locs);
+    } else {
+      setLocationOptions([]);
+    }
+  }
 
   async function handleCreateUser() {
     setFormError("");
@@ -150,6 +226,31 @@ export default function UserManagementPage() {
       setFormError("Please fill in all required fields");
       return;
     }
+
+    const role = newUser.role;
+    const needsClient = role === "depot_user" || role === "team_leader";
+    const needsLocation = role === "depot_user";
+
+    let clientId: number | null = null;
+    let locationId: number | null = null;
+
+    if (isTeamLeader) {
+      clientId = currentUser?.clientId || null;
+      locationId = newUser.locationId ? parseInt(newUser.locationId) : null;
+    } else if (isAdmin) {
+      clientId = newUser.clientId ? parseInt(newUser.clientId) : null;
+      locationId = newUser.locationId ? parseInt(newUser.locationId) : null;
+    }
+
+    if (needsClient && !clientId) {
+      setFormError("Client is required for this role");
+      return;
+    }
+    if (needsLocation && !locationId) {
+      setFormError("Location is required for Depot User role");
+      return;
+    }
+
     setCreating(true);
     try {
       const res = await fetch("/api/users", {
@@ -160,15 +261,15 @@ export default function UserManagementPage() {
           fullName: newUser.fullName,
           email: newUser.email,
           role: newUser.role,
-          depot: newUser.depot || null,
+          clientId,
+          locationId,
         }),
       });
       if (res.ok) {
         setShowModal(false);
-        setNewUser({ fullName: "", email: "", role: "", depot: "" });
+        setNewUser({ fullName: "", email: "", role: "", clientId: "", locationId: "" });
         fetchUsers();
         fetchStats();
-        fetchDepots();
       } else {
         const data = await res.json();
         setFormError(data.message || "Failed to create user");
@@ -180,12 +281,29 @@ export default function UserManagementPage() {
     }
   }
 
-  function openEditModal(user: UserData) {
+  async function openEditModal(user: UserData) {
     setEditingUser(user);
-    const depotVal = user.depot || "";
-    setEditForm({ fullName: user.fullName, role: user.role, depot: depotVal });
-    setEditCustomDepot(depotVal !== "" && depotList.length > 0 && !depotList.includes(depotVal));
+    const clientIdStr = user.clientId ? String(user.clientId) : "";
+    const locationIdStr = user.locationId ? String(user.locationId) : "";
+    setEditForm({ fullName: user.fullName, role: user.role, clientId: clientIdStr, locationId: locationIdStr });
     setEditError("");
+
+    if (user.clientId) {
+      const locs = await fetchLocationsForClient(user.clientId);
+      setEditLocationOptions(locs);
+    } else {
+      setEditLocationOptions([]);
+    }
+  }
+
+  async function handleEditClientChange(clientIdStr: string) {
+    setEditForm((prev) => ({ ...prev, clientId: clientIdStr, locationId: "" }));
+    if (clientIdStr) {
+      const locs = await fetchLocationsForClient(parseInt(clientIdStr));
+      setEditLocationOptions(locs);
+    } else {
+      setEditLocationOptions([]);
+    }
   }
 
   async function handleEditUser() {
@@ -195,23 +313,43 @@ export default function UserManagementPage() {
       setEditError("Name is required");
       return;
     }
+
+    if (isAdmin) {
+      const role = editForm.role;
+      const needsClient = role === "depot_user" || role === "team_leader";
+      const needsLocation = role === "depot_user";
+      if (needsClient && !editForm.clientId) {
+        setEditError("Client is required for this role");
+        return;
+      }
+      if (needsLocation && !editForm.locationId) {
+        setEditError("Location is required for Depot User role");
+        return;
+      }
+    }
+
     setSaving(true);
     try {
+      const body: Record<string, unknown> = { fullName: editForm.fullName };
+
+      if (isAdmin) {
+        body.role = editForm.role;
+        body.clientId = editForm.clientId ? parseInt(editForm.clientId) : null;
+        body.locationId = editForm.locationId ? parseInt(editForm.locationId) : null;
+      } else if (isTeamLeader) {
+        body.locationId = editForm.locationId ? parseInt(editForm.locationId) : null;
+      }
+
       const res = await fetch(`/api/users/${editingUser.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          fullName: editForm.fullName,
-          role: editForm.role,
-          depot: editForm.depot || null,
-        }),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         setEditingUser(null);
         fetchUsers();
         fetchStats();
-        fetchDepots();
       } else {
         const data = await res.json();
         setEditError(data.message || "Failed to update user");
@@ -238,10 +376,25 @@ export default function UserManagementPage() {
 
   const totalPages = Math.ceil(usersTotal / USERS_PER_PAGE);
 
+  const showClientColumn = isAdmin;
+  const showLocationColumn = true;
+
+  const availableCreateRoles = isTeamLeader
+    ? [{ value: "depot_user", label: "Depot User" }]
+    : [
+        { value: "depot_user", label: "Depot User" },
+        { value: "team_leader", label: "Team Leader" },
+        { value: "accounts", label: "Accounts" },
+        { value: "head_office_admin", label: "Head Office" },
+      ];
+
+  const needsClientForNewUser = newUser.role === "depot_user" || newUser.role === "team_leader";
+  const needsLocationForNewUser = newUser.role === "depot_user";
+
   return (
     <SidebarLayout
       title="User Management"
-      subtitle="Manage team members, roles, and access permissions"
+      subtitle={isTeamLeader ? `Manage users for ${currentUser?.clientName || "your client"}` : "Manage team members, roles, and access permissions"}
     >
       <div className="space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -296,11 +449,12 @@ export default function UserManagementPage() {
 
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="px-6 py-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h3 className="text-lg font-bold text-[#0f2744]">All Users</h3>
-
+            <h3 className="text-lg font-bold text-[#0f2744]">
+              {isTeamLeader ? "Team Users" : "All Users"}
+            </h3>
             <div className="flex items-center gap-4">
               <div className="flex flex-wrap bg-slate-100 p-1 rounded-lg">
-                {ROLE_FILTERS.map((filter) => (
+                {roleFilters.map((filter) => (
                   <button
                     key={filter.value}
                     onClick={() => { setActiveFilter(filter.value); setPage(1); }}
@@ -329,7 +483,7 @@ export default function UserManagementPage() {
             </div>
             <Button
               className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-none shadow-sm"
-              onClick={() => { setShowModal(true); setFormError(""); setNewUserCustomDepot(false); }}
+              onClick={() => { setShowModal(true); setFormError(""); }}
             >
               <Plus className="w-4 h-4 mr-2" />
               Add New User
@@ -342,7 +496,8 @@ export default function UserManagementPage() {
                 <tr>
                   <th className="px-6 py-4 font-semibold">User</th>
                   <th className="px-6 py-4 font-semibold">Role</th>
-                  <th className="px-6 py-4 font-semibold">Depot/Location</th>
+                  {showClientColumn && <th className="px-6 py-4 font-semibold">Client</th>}
+                  {showLocationColumn && <th className="px-6 py-4 font-semibold">Location</th>}
                   <th className="px-6 py-4 font-semibold">Status</th>
                   <th className="px-6 py-4 font-semibold">Last Active</th>
                   <th className="px-6 py-4 font-semibold text-right">Actions</th>
@@ -368,14 +523,16 @@ export default function UserManagementPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <Badge
-                          variant="outline"
-                          className={`font-medium shadow-none ${roleStyle.badge}`}
-                        >
+                        <Badge variant="outline" className={`font-medium shadow-none ${roleStyle.badge}`}>
                           {getRoleLabel(user.role)}
                         </Badge>
                       </td>
-                      <td className="px-6 py-4 text-slate-600">{user.depot || "Head Office"}</td>
+                      {showClientColumn && (
+                        <td className="px-6 py-4 text-slate-600">{user.clientName || "Head Office"}</td>
+                      )}
+                      {showLocationColumn && (
+                        <td className="px-6 py-4 text-slate-600">{user.locationName || user.depot || "-"}</td>
+                      )}
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1.5">
                           <span className={`w-2 h-2 rounded-full ${user.isActive ? "bg-green-500" : "bg-slate-400"}`}></span>
@@ -390,30 +547,34 @@ export default function UserManagementPage() {
                           : new Date(user.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-3">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 px-2.5 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-[#0f2744] transition-colors"
-                            onClick={() => openEditModal(user)}
-                          >
-                            <Edit className="w-3.5 h-3.5 mr-1" />
-                            Edit
-                          </Button>
-                          <button
-                            className={`text-xs font-medium hover:underline ${user.isActive ? "text-red-600 hover:text-red-700" : "text-green-600 hover:text-green-700"}`}
-                            onClick={() => handleToggleActive(user)}
-                          >
-                            {user.isActive ? "Deactivate" : "Activate"}
-                          </button>
-                        </div>
+                        {(isAdmin || (isTeamLeader && user.role === "depot_user")) ? (
+                          <div className="flex items-center justify-end gap-3">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2.5 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-[#0f2744] transition-colors"
+                              onClick={() => openEditModal(user)}
+                            >
+                              <Edit className="w-3.5 h-3.5 mr-1" />
+                              Edit
+                            </Button>
+                            <button
+                              className={`text-xs font-medium hover:underline ${user.isActive ? "text-red-600 hover:text-red-700" : "text-green-600 hover:text-green-700"}`}
+                              onClick={() => handleToggleActive(user)}
+                            >
+                              {user.isActive ? "Deactivate" : "Activate"}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400">-</span>
+                        )}
                       </td>
                     </tr>
                   );
                 })}
                 {users.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                    <td colSpan={showClientColumn ? 7 : 6} className="px-6 py-12 text-center text-slate-500">
                       No users found
                     </td>
                   </tr>
@@ -427,13 +588,7 @@ export default function UserManagementPage() {
               Showing <span className="font-medium text-slate-900">{users.length > 0 ? (page - 1) * USERS_PER_PAGE + 1 : 0}-{Math.min(page * USERS_PER_PAGE, usersTotal)}</span> of <span className="font-medium text-slate-900">{usersTotal}</span> users
             </span>
             <div className="flex gap-1">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 disabled:opacity-50"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
+              <Button variant="outline" size="icon" className="h-8 w-8 disabled:opacity-50" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
                 <ChevronLeft className="w-4 h-4" />
               </Button>
               {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map((p) => (
@@ -441,23 +596,13 @@ export default function UserManagementPage() {
                   key={p}
                   variant="outline"
                   size="sm"
-                  className={`h-8 w-8 ${
-                    p === page
-                      ? "bg-[#0ea5e9] text-white border-transparent hover:bg-[#0284c7] hover:text-white"
-                      : "text-slate-600"
-                  }`}
+                  className={`h-8 w-8 ${p === page ? "bg-[#0ea5e9] text-white border-transparent hover:bg-[#0284c7] hover:text-white" : "text-slate-600"}`}
                   onClick={() => setPage(p)}
                 >
                   {p}
                 </Button>
               ))}
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-8 w-8 disabled:opacity-50"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
+              <Button variant="outline" size="icon" className="h-8 w-8 disabled:opacity-50" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
                 <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
@@ -473,19 +618,14 @@ export default function UserManagementPage() {
                 <UserPlus className="w-5 h-5 text-[#0ea5e9]" />
                 Add New User
               </h3>
-              <button
-                onClick={() => setShowModal(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
-              >
+              <button onClick={() => setShowModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="p-6 space-y-5">
               {formError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
-                  {formError}
-                </div>
+                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{formError}</div>
               )}
 
               <div className="space-y-4">
@@ -519,105 +659,68 @@ export default function UserManagementPage() {
                       onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
                     >
                       <option value="" disabled>Select a role...</option>
-                      <option value="depot_user">Depot User</option>
-                      <option value="team_leader">Team Leader</option>
-                      <option value="accounts">Accounts</option>
-                      <option value="head_office_admin">Head Office</option>
+                      {availableCreateRoles.map((r) => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
                     </select>
                     <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
                 </div>
 
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-slate-700">
-                    Assigned Depot
-                    <span className="text-xs text-slate-500 font-normal ml-2">(Required for Depot User and Team Leader roles)</span>
-                  </label>
-                  {newUserCustomDepot ? (
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Enter new depot name..."
-                        className="border-slate-200 focus-visible:ring-[#0ea5e9] flex-1"
-                        value={newUser.depot}
-                        onChange={(e) => setNewUser({ ...newUser, depot: e.target.value })}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-9 px-2.5 text-slate-500 border-slate-200"
-                        onClick={() => { setNewUserCustomDepot(false); setNewUser({ ...newUser, depot: "" }); }}
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  ) : (
+                {isAdmin && needsClientForNewUser && (
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-slate-700">
+                      Client <span className="text-red-500">*</span>
+                    </label>
                     <div className="relative">
                       <select
                         className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
-                        value={newUser.depot}
-                        onChange={(e) => {
-                          if (e.target.value === "__other__") {
-                            setNewUserCustomDepot(true);
-                            setNewUser({ ...newUser, depot: "" });
-                          } else {
-                            setNewUser({ ...newUser, depot: e.target.value });
-                          }
-                        }}
+                        value={newUser.clientId}
+                        onChange={(e) => handleNewUserClientChange(e.target.value)}
                       >
-                        <option value="">Select a depot...</option>
-                        {depotList.map((d) => (
-                          <option key={d} value={d}>{d}</option>
+                        <option value="">Select a client...</option>
+                        {clients.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
-                        <option value="__other__">Other (enter manually)...</option>
                       </select>
                       <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
-                  )}
-                </div>
-              </div>
+                  </div>
+                )}
 
-              <div className="pt-2 space-y-3">
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="2fa" className="border-slate-300 data-[state=checked]:bg-[#0ea5e9] data-[state=checked]:border-[#0ea5e9]" />
-                  <label
-                    htmlFor="2fa"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-slate-700"
-                  >
-                    Enable Two-Factor Authentication (2FA)
-                  </label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="welcome-email" defaultChecked className="border-slate-300 data-[state=checked]:bg-[#0ea5e9] data-[state=checked]:border-[#0ea5e9]" />
-                  <label
-                    htmlFor="welcome-email"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-slate-700"
-                  >
-                    Send welcome email with login credentials
-                  </label>
-                </div>
+                {needsLocationForNewUser && (
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-slate-700">
+                      Location <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <select
+                        className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
+                        value={newUser.locationId}
+                        onChange={(e) => setNewUser({ ...newUser, locationId: e.target.value })}
+                      >
+                        <option value="">Select a location...</option>
+                        {locationOptions.map((l) => (
+                          <option key={l.id} value={l.id}>{l.name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setShowModal(false)}
-                className="border-slate-200 text-slate-700 hover:bg-slate-100"
-              >
-                Cancel
-              </Button>
-              <Button
-                className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-none shadow-sm"
-                onClick={handleCreateUser}
-                disabled={creating}
-              >
+              <Button variant="outline" onClick={() => setShowModal(false)} className="border-slate-200 text-slate-700 hover:bg-slate-100">Cancel</Button>
+              <Button className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-none shadow-sm" onClick={handleCreateUser} disabled={creating}>
                 {creating ? "Creating..." : "Create User"}
               </Button>
             </div>
           </div>
         </div>
       )}
+
       {editingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-[2px]">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-[500px] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -626,19 +729,14 @@ export default function UserManagementPage() {
                 <Edit className="w-5 h-5 text-[#0ea5e9]" />
                 Edit User
               </h3>
-              <button
-                onClick={() => setEditingUser(null)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
-              >
+              <button onClick={() => setEditingUser(null)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="p-6 space-y-5">
               {editError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
-                  {editError}
-                </div>
+                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{editError}</div>
               )}
 
               <div className="space-y-4">
@@ -660,83 +758,89 @@ export default function UserManagementPage() {
                   />
                 </div>
 
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-slate-700">Role</label>
-                  <div className="relative">
-                    <select
-                      className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
-                      value={editForm.role}
-                      onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
-                    >
-                      <option value="depot_user">Depot User</option>
-                      <option value="team_leader">Team Leader</option>
-                      <option value="accounts">Accounts</option>
-                      <option value="head_office_admin">Head Office</option>
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
-                </div>
-
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-slate-700">Assigned Depot</label>
-                  {editCustomDepot ? (
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Enter new depot name..."
-                        className="border-slate-200 focus-visible:ring-[#0ea5e9] flex-1"
-                        value={editForm.depot}
-                        onChange={(e) => setEditForm({ ...editForm, depot: e.target.value })}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-9 px-2.5 text-slate-500 border-slate-200"
-                        onClick={() => { setEditCustomDepot(false); setEditForm({ ...editForm, depot: "" }); }}
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </Button>
+                {isAdmin && (
+                  <>
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium text-slate-700">Role</label>
+                      <div className="relative">
+                        <select
+                          className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
+                          value={editForm.role}
+                          onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                        >
+                          <option value="depot_user">Depot User</option>
+                          <option value="team_leader">Team Leader</option>
+                          <option value="accounts">Accounts</option>
+                          <option value="head_office_admin">Head Office</option>
+                        </select>
+                        <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
                     </div>
-                  ) : (
+
+                    {(editForm.role === "depot_user" || editForm.role === "team_leader") && (
+                      <div className="grid gap-2">
+                        <label className="text-sm font-medium text-slate-700">Client</label>
+                        <div className="relative">
+                          <select
+                            className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
+                            value={editForm.clientId}
+                            onChange={(e) => handleEditClientChange(e.target.value)}
+                          >
+                            <option value="">Select a client...</option>
+                            {clients.map((c) => (
+                              <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
+                      </div>
+                    )}
+
+                    {editForm.role === "depot_user" && editForm.clientId && (
+                      <div className="grid gap-2">
+                        <label className="text-sm font-medium text-slate-700">Location</label>
+                        <div className="relative">
+                          <select
+                            className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
+                            value={editForm.locationId}
+                            onChange={(e) => setEditForm({ ...editForm, locationId: e.target.value })}
+                          >
+                            <option value="">Select a location...</option>
+                            {editLocationOptions.map((l) => (
+                              <option key={l.id} value={l.id}>{l.name}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {isTeamLeader && (
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-slate-700">Location</label>
                     <div className="relative">
                       <select
                         className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
-                        value={depotList.includes(editForm.depot) ? editForm.depot : (editForm.depot ? "__other__" : "")}
-                        onChange={(e) => {
-                          if (e.target.value === "__other__") {
-                            setEditCustomDepot(true);
-                            setEditForm({ ...editForm, depot: "" });
-                          } else {
-                            setEditForm({ ...editForm, depot: e.target.value });
-                          }
-                        }}
+                        value={editForm.locationId}
+                        onChange={(e) => setEditForm({ ...editForm, locationId: e.target.value })}
                       >
-                        <option value="">Select a depot...</option>
-                        {depotList.map((d) => (
-                          <option key={d} value={d}>{d}</option>
+                        <option value="">Select a location...</option>
+                        {locationOptions.map((l) => (
+                          <option key={l.id} value={l.id}>{l.name}</option>
                         ))}
-                        <option value="__other__">Other (enter manually)...</option>
                       </select>
                       <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setEditingUser(null)}
-                className="border-slate-200 text-slate-700 hover:bg-slate-100"
-              >
-                Cancel
-              </Button>
-              <Button
-                className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-none shadow-sm"
-                onClick={handleEditUser}
-                disabled={saving}
-              >
+              <Button variant="outline" onClick={() => setEditingUser(null)} className="border-slate-200 text-slate-700 hover:bg-slate-100">Cancel</Button>
+              <Button className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-none shadow-sm" onClick={handleEditUser} disabled={saving}>
                 {saving ? "Saving..." : "Save Changes"}
               </Button>
             </div>
