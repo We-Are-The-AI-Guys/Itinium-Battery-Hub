@@ -101,16 +101,6 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="relative z-10 mt-auto pt-16 border-t border-white/10">
-          <p className="text-sm text-slate-400 uppercase tracking-wider font-semibold mb-6">
-            Trusted by leading UK recycling operations
-          </p>
-          <div className="flex gap-8 opacity-60 grayscale">
-            <div className="flex items-center gap-2 font-bold text-xl"><div className="w-6 h-6 rounded-full bg-white" />EcoRecycle</div>
-            <div className="flex items-center gap-2 font-bold text-xl"><div className="w-6 h-6 rounded bg-white" />BritBatt</div>
-            <div className="flex items-center gap-2 font-bold text-xl"><div className="w-0 h-0 border-l-[12px] border-r-[12px] border-b-[20px] border-l-transparent border-r-transparent border-b-white" />EnviroLogix</div>
-          </div>
-        </div>
       </div>
 
       <div className="flex-1 flex flex-col justify-center items-center p-6 sm:p-12 relative overflow-hidden">
