@@ -305,6 +305,19 @@ router.patch(
       if (req.user!.role === "head_office_admin") {
         if (parsed.data.clientId !== undefined) updates.clientId = parsed.data.clientId;
         if (parsed.data.locationId !== undefined) updates.locationId = parsed.data.locationId;
+
+        const effectiveClientId = (updates.clientId !== undefined ? updates.clientId : null) as number | null;
+        const effectiveLocationId = (updates.locationId !== undefined ? updates.locationId : null) as number | null;
+        if (effectiveLocationId && effectiveClientId) {
+          const [loc] = await db
+            .select({ clientId: locationsTable.clientId })
+            .from(locationsTable)
+            .where(eq(locationsTable.id, effectiveLocationId));
+          if (!loc || loc.clientId !== effectiveClientId) {
+            res.status(400).json({ message: "Location does not belong to the specified client" });
+            return;
+          }
+        }
       }
 
       if (parsed.data.locationId !== undefined && req.user!.role === "team_leader") {

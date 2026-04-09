@@ -12,6 +12,7 @@ export const locationsTable = pgTable("locations", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_locations_client_id").on(table.clientId),
+  index("idx_locations_client_name").on(table.clientId, table.name),
 ]);
 
 export const insertLocationSchema = createInsertSchema(locationsTable).omit({ id: true, createdAt: true });

@@ -28,6 +28,7 @@ async function seed() {
     )
   `);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_locations_client_id ON locations(client_id)`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_locations_client_name ON locations(client_id, name)`);
   await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id)`);
   await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS location_id INTEGER REFERENCES locations(id)`);
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id)`);
