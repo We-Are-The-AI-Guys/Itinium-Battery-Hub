@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { usersTable, sessionsTable } from "@workspace/db/schema";
+import { usersTable, sessionsTable, clientsTable, locationsTable } from "@workspace/db/schema";
 import { eq, lt } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -58,6 +58,17 @@ router.post("/auth/login", async (req, res) => {
       path: "/",
     });
 
+    let clientName: string | null = null;
+    let locationName: string | null = null;
+    if (user.clientId) {
+      const [client] = await db.select({ name: clientsTable.name }).from(clientsTable).where(eq(clientsTable.id, user.clientId));
+      if (client) clientName = client.name;
+    }
+    if (user.locationId) {
+      const [location] = await db.select({ name: locationsTable.name }).from(locationsTable).where(eq(locationsTable.id, user.locationId));
+      if (location) locationName = location.name;
+    }
+
     res.json({
       user: {
         id: user.id,
@@ -65,6 +76,10 @@ router.post("/auth/login", async (req, res) => {
         fullName: user.fullName,
         role: user.role,
         depot: user.depot,
+        clientId: user.clientId,
+        locationId: user.locationId,
+        clientName,
+        locationName,
       },
     });
   } catch (error) {
@@ -106,6 +121,17 @@ router.get("/auth/me", async (req, res) => {
       return;
     }
 
+    let clientName: string | null = null;
+    let locationName: string | null = null;
+    if (user.clientId) {
+      const [client] = await db.select({ name: clientsTable.name }).from(clientsTable).where(eq(clientsTable.id, user.clientId));
+      if (client) clientName = client.name;
+    }
+    if (user.locationId) {
+      const [location] = await db.select({ name: locationsTable.name }).from(locationsTable).where(eq(locationsTable.id, user.locationId));
+      if (location) locationName = location.name;
+    }
+
     res.json({
       user: {
         id: user.id,
@@ -113,6 +139,10 @@ router.get("/auth/me", async (req, res) => {
         fullName: user.fullName,
         role: user.role,
         depot: user.depot,
+        clientId: user.clientId,
+        locationId: user.locationId,
+        clientName,
+        locationName,
         createdAt: user.createdAt,
       },
     });

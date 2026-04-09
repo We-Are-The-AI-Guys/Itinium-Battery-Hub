@@ -1,6 +1,8 @@
-import { pgTable, serial, integer, text, timestamp, varchar, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, varchar, boolean, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { clientsTable } from "./clients";
+import { locationsTable } from "./locations";
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -9,6 +11,8 @@ export const usersTable = pgTable("users", {
   fullName: varchar("full_name", { length: 255 }).notNull(),
   role: varchar("role", { length: 50 }).notNull().default("depot_user"),
   depot: varchar("depot", { length: 255 }),
+  clientId: integer("client_id").references(() => clientsTable.id),
+  locationId: integer("location_id").references(() => locationsTable.id),
   isActive: boolean("is_active").notNull().default(true),
   lastActiveAt: timestamp("last_active_at"),
   notificationPreferences: jsonb("notification_preferences").default({

@@ -1,206 +1,51 @@
 # Itinium Battery Portal
 
-A bespoke web-based client portal for battery collection management, replacing manual Excel/email workflows.
+## Overview
 
-## Architecture
+The Itinium Battery Portal is a web-based client portal designed to streamline the management of battery collection, replacing traditional manual workflows involving Excel spreadsheets and emails. It serves as a comprehensive system for clients to submit battery collection requests and for Itinium staff to manage these requests, track logistics, and handle financial aspects. The project aims to enhance efficiency, accuracy, and transparency in the battery collection process for both clients and Itinium.
 
-- **Frontend**: React + Vite + Tailwind CSS v4 (artifacts/portal)
-- **Backend**: Express v5 API server (artifacts/api-server)
-- **Database**: PostgreSQL with Drizzle ORM (lib/db)
-- **Monorepo**: pnpm workspace
+## User Preferences
 
-## Design System
+- The agent should prioritize critical tasks, such as bug fixes or security vulnerabilities, over new feature development.
+- The agent should always provide a clear explanation of the changes made and the reasoning behind them.
+- Before implementing any major changes or new features, the agent should propose the plan and await confirmation.
+- The agent should maintain a clean and readable codebase, adhering to established coding standards and best practices.
+- The agent should focus on delivering incremental changes and seek feedback regularly to ensure alignment with project goals.
+- Do not make changes to the `lib/db/src/data/cell-models.ts` file.
 
-- **Primary**: Navy #0f2744 (HSL 213 64% 16%)
-- **Accent**: Teal #0ea5e9 (HSL 199 89% 48%)
-- **Background**: Slate #f8fafc
-- **Font**: Inter
+## System Architecture
 
-## Authentication
+The Itinium Battery Portal is built as a monorepo using pnpm workspaces.
 
-Custom email/password auth with bcrypt password hashing and cookie-based sessions (NOT Replit Auth).
+### Frontend
+- **Framework**: React with Vite for fast development.
+- **Styling**: Tailwind CSS v4 for utility-first styling.
+- **UI/UX**: The design system uses a primary Navy (`#0f2744`) and accent Teal (`#0ea5e9`) color scheme with Inter font. The layout features a reusable sidebar for admin views.
 
-- `POST /api/auth/login` — validates credentials, creates session, sets httpOnly cookie; stores user-agent and IP
-- `GET /api/auth/me` — returns current user from session token
-- `POST /api/auth/logout` — deletes session, clears cookie
-- Sessions expire after 7 days, expired sessions cleaned hourly
-- `requireAuth` middleware extracts user from session cookie, enforces isActive
-- `requireRole(...)` middleware for role-based access control
+### Backend
+- **API Server**: Express v5.
+- **Authentication**: Custom email/password authentication using bcrypt for password hashing and cookie-based sessions. It includes role-based access control (`requireRole` middleware) and session management with expiration.
 
-## Database Schema
+### Database
+- **Type**: PostgreSQL.
+- **ORM**: Drizzle ORM.
+- **Schema**: Key entities include `clients`, `locations`, `users` (with roles: `depot_user`, `team_leader`, `accounts`, `head_office_admin`), `sessions`, `jobs` (tracking collection details, financial data, and status), `job_batteries` (detailed battery information per job, including estimated weights, serials, and admin fields), `cell_models` (pre-seeded static data for battery types), `battery_weight_reference` (for weight lookups), `lme_prices` (for lead metal exchange rates), `stillage_movements` (for tracking container logistics), and `system_settings`.
 
-### users
-- id, email (unique), password_hash, full_name, role, depot, is_active (boolean), last_active_at, notification_preferences (JSONB), created_at
-- Roles: depot_user, team_leader, accounts, head_office_admin
+### Core Features
+- **Job Management**: Creation of battery collection jobs by depot users, detailed tracking of battery items, and administrative/financial completion.
+- **User Management**: Comprehensive user management with role-based access control for different levels of system interaction.
+- **Client & Location Management**: Administration of client organizations and their associated collection locations.
+- **LME Pricing**: Manual input and historical tracking of Lead Metal Exchange prices used for job valuation.
+- **Stillage Tracking**: Management of stillage container movements for logistical operations.
+- **Dashboard & Reporting**: Summary statistics and job listings for administrative oversight.
+- **Settings**: User profile, password, notification preferences, and system-wide settings management.
 
-### sessions
-- id, user_id (FK → users), token (unique), user_agent, ip_address, expires_at, created_at
+## External Dependencies
 
-### jobs
-- id, reference (unique), client_name, depot, collection_point, collection_date, submitted_at, tonnage (decimal), status (pending/approved/completed/flagged)
-- Financial: invoice_status (pending_invoice/invoiced/paid), lme_rate_used, calculated_value
-- Admin/Master Job Log: cbl_lme_value, cbl_lme_percent, cbl_lme_price, transport_cost, customer_invoice_value, customer_invoice_no, cbl_waste_advice_note_no, cbl_date, total_invoice_value, gross_profit, itinium_invoice_no
-- notes, submitted_by_id (FK → users), created_at
-- Indexes: status, submitted_at, composite (status, submitted_at)
-
-### job_batteries
-- id, job_id (FK → jobs, cascade delete), pallet_number, asset_number, battery_serial, manufacture, cell_type (cell model name e.g. "5 PzS 775" or legacy PZB/PZS/PZV/Blocs/Other), voltage (dropdown: 12V/24V/36V/48V/80V), loose_cells_qty (integer), estimated_weight_kg (decimal), notes
-- Admin fields: receipt_confirmed (boolean), pb_content_kg (decimal), value_gbp (decimal), admin_notes (text)
-- Loose cells: is_loose_cells (boolean, default false) — hides voltage, shows cell qty, weight becomes required manual entry
-- Serial flag: serial_flag_reason (varchar 100, nullable) — stores reason when serial is unknown/damaged ("Unknown serial", "Damaged — unreadable", "N/A (no serial fitted)")
-- Row photo: row_photo (text, nullable) — per-row photo URL (blob URL for now, storage backend TBD)
-- pallet_number is auto-generated server-side as PLT-XXXXX using PostgreSQL sequence `pallet_number_seq`
-- estimated_weight_kg auto-populated from cell_models table (weight_per_cell × voltage/2) or battery_weight_reference fallback
-
-### cell_models
-- id, manufacturer (varchar 100, not null, default 'Unknown'), model_name, cell_family, cell_height_mm, cells_count, weight_per_cell_kg, created_at
-- Composite unique index on (manufacturer, model_name) — one canonical entry per manufacturer+model pair
-- 2,412 unique entries from the Cell_types spreadsheet (25 height-variant duplicates consolidated), across 9 manufacturers: TAB, Espex, EnerSys / Hawker, Exide / GNB, Midac, Eternity / Juice, Triathlon / Sunlight, Velaris / Ecobat / EDrive, Hoppecke
-- Weight formula: total_weight = weight_per_cell_kg × (voltage / 2)
-- Seeded from lib/db/src/data/cell-models.ts (static data parsed from spreadsheet)
-- API: GET/POST /api/cell-models?manufacturer=X, GET /api/cell-models/lookup, PATCH/DELETE /api/cell-models/:id
-- Depot form filters cell model dropdown by selected manufacturer for accuracy
-
-### battery_weight_reference
-- id, cell_type (varchar), voltage (varchar, nullable), weight_kg (decimal), created_at
-- Unique constraint: partial indexes for (cell_type, voltage) WHERE voltage IS NOT NULL and (cell_type) WHERE voltage IS NULL
-- Used to auto-populate estimated_weight_kg on depot form when cell type + voltage selected
-- Blocs type: per-unit weight × loose cells qty; Other: 0 kg by default
-- Managed via Settings > Battery Weights tab (admin only)
-
-### lme_prices
-- id, price_date, usd_price (decimal), exchange_rate (decimal), gbp_price (decimal), source (manual/api), created_at
-
-### stillage_movements
-- id, depot (varchar), movement_date (date), collected (integer), dropped_off (integer), notes, created_by_id (FK → users), created_at
-- Tracks stillage container movements (metal cages for transporting batteries) per depot
-- Current count = SUM(collected) - SUM(dropped_off) per depot
-- Indexes: depot, movement_date
-
-### system_settings
-- id, company_name, invoice_prefix, data_retention_days, auto_fetch_lme (boolean), updated_at
-
-## Demo Accounts (all password: password123)
-
-| Email | Role | Name |
-|-------|------|------|
-| depot@itinium.co.uk | depot_user | Dave Mitchell |
-| team@itinium.co.uk | team_leader | Sarah Cooper |
-| accounts@itinium.co.uk | accounts | Rachel Adams |
-| admin@itinium.co.uk | head_office_admin | Sarah Mitchell |
-
-Additional demo users: Alex Johnson, Tom Whitaker, James Patel, Emma Clarke, David Osei, Priya Sharma, Mark Thompson, Lisa Chen
-
-## API Endpoints
-
-### Auth
-- `POST /api/auth/login` — login with email/password
-- `GET /api/auth/me` — current user profile
-- `POST /api/auth/logout` — end session
-
-### Jobs
-- `GET /api/jobs?status=X&invoiceStatus=X&search=X&limit=10&offset=0` — list jobs (requires role: team_leader/accounts/head_office_admin)
-- `GET /api/jobs/:id` — job detail with battery line items (admin only: team_leader/accounts/head_office_admin)
-- `POST /api/jobs` — create job with battery items array (requires auth)
-- `PATCH /api/jobs/:id/admin` — update admin/financial fields on a job (admin only)
-- `PATCH /api/jobs/:id/status` — update job status (admin only)
-- `PATCH /api/jobs/:id/batteries/:batteryId/admin` — update per-battery admin fields (admin only)
-
-### Dashboard (requires auth + role: team_leader/accounts/head_office_admin)
-- `GET /api/dashboard/stats` — summary metrics (pendingJobs, monthlyTonnage, totalInvoiceValue, flaggedExceptions)
-
-### LME Pricing (requires auth + role: accounts/head_office_admin)
-- `GET /api/lme/current` — latest LME price entry
-- `POST /api/lme/update` — save manual price override (usdPrice, exchangeRate → auto-calculates gbpPrice)
-- `GET /api/lme/history?limit=20&offset=0` — price history with pagination
-
-### Users (requires auth + role: head_office_admin)
-- `GET /api/users?role=X&search=X&limit=10&offset=0` — list users with role filtering, search, and pagination
-- `POST /api/users` — create new user (bcrypt password hash, random temp password)
-- `PATCH /api/users/:id` — update user (fullName, role, depot, isActive)
-- `GET /api/users/stats` — user count by role (total, depotUsers, teamLeaders, adminStaff)
-
-### Settings (requires auth)
-- `PATCH /api/settings/profile` — update own fullName and depot
-- `POST /api/settings/password` — change password (validates current password)
-- `GET /api/settings/notifications` — read notification preferences
-- `PATCH /api/settings/notifications` — update notification preferences
-- `GET /api/settings/sessions` — list active sessions (browser, masked IP, dates)
-- `DELETE /api/settings/sessions/:id` — revoke specific session
-- `DELETE /api/settings/sessions` — revoke all sessions except current
-- `GET /api/settings/system` — read system settings (head_office_admin only)
-- `PATCH /api/settings/system` — update system settings (head_office_admin only)
-
-### Weight Reference (requires auth; write routes require head_office_admin)
-- `GET /api/weight-reference` — list all weight references
-- `GET /api/weight-reference/lookup?cellType=X&voltage=X` — lookup single weight
-- `POST /api/weight-reference` — create weight reference entry
-- `PATCH /api/weight-reference/:id` — update weight (weightKg)
-- `DELETE /api/weight-reference/:id` — delete weight reference
-
-### Stillages (requires auth; depot users scoped to own depot; null-depot non-admins get 403)
-- `GET /api/stillages?depot=X` — list movements + summary (admin sees all, depot users see own depot only)
-- `GET /api/stillages/summary` — current counts per depot (admin sees all, depot users see own)
-- `POST /api/stillages` — log movement (depot users forced to own depot, admin can pick any)
-
-## Pages & Routes
-
-| Route | Page | Description |
-|-------|------|-------------|
-| `/login` | `login.tsx` | Split-panel login with Itinium branding |
-| `/` | `dashboard.tsx` | Depot user dashboard; admin roles redirect to /dashboard |
-| `/dashboard` | `admin-dashboard.tsx` | Admin dashboard with sidebar, KPI cards, jobs table |
-| `/lme-pricing` | `lme-pricing.tsx` | LME Pricing & Accounts — manual price input, job value table, export cards |
-| `/users` | `user-management.tsx` | User Management — stats, user table with role filters, Add New User modal |
-| `/settings` | `settings.tsx` | Settings — Profile, Notifications, Security, System (admin-only) tabs |
-| `/jobs` | `job-list.tsx` | Job list with search, filters, pagination — click to review |
-| `/jobs/:id` | `job-detail.tsx` | Job detail: read-only depot data + admin financial/completion form |
-| `/kpi` | `placeholder.tsx` | KPI Reporting (placeholder) |
-| `/stillages` | `stillages.tsx` | Stillage container tracking — depot summary, movement history, log form |
-| `/collection/new` | `depot-form.tsx` | Redundant Battery Collection Note form (multi-row battery items, matches spreadsheet) |
-
-## Route Guards
-
-- `AuthGuard` — requires authenticated session
-- `AdminGuard` — requires auth + role in [team_leader, accounts, head_office_admin]
-- `RoleGuard` — requires auth + specific role(s)
-- `/lme-pricing` uses RoleGuard [accounts, head_office_admin]
-- `/users` uses RoleGuard [head_office_admin]
-- `/settings` uses AuthGuard (all authenticated users; System tab hidden for non-admin)
-
-## Shared Components
-
-- `sidebar-layout.tsx` — Reusable sidebar layout with dark navy sidebar, nav items, user info, header bar. Used by admin dashboard, LME Pricing, User Management, Settings pages.
-
-## Key Files
-
-- `artifacts/portal/src/components/sidebar-layout.tsx` — Shared sidebar layout component
-- `artifacts/portal/src/pages/admin-dashboard.tsx` — Admin dashboard with metrics + jobs table
-- `artifacts/portal/src/pages/lme-pricing.tsx` — LME Pricing & Accounts page
-- `artifacts/portal/src/pages/user-management.tsx` — User Management page
-- `artifacts/portal/src/pages/settings.tsx` — Settings page with 5 tabs (Profile, Notifications, Security, Battery Weights, System)
-- `artifacts/portal/src/pages/login.tsx` — Login page with split-panel design
-- `artifacts/portal/src/pages/dashboard.tsx` — Depot user dashboard
-- `artifacts/portal/src/pages/depot-form.tsx` — Depot submission form
-- `artifacts/portal/src/pages/job-list.tsx` — Admin job list with search/filter/pagination
-- `artifacts/portal/src/pages/job-detail.tsx` — Job detail with admin financial completion form
-- `artifacts/portal/src/App.tsx` — Routing with AuthGuard/AdminGuard/RoleGuard/GuestGuard
-- `artifacts/api-server/src/routes/auth.ts` — Auth API routes (stores user-agent/IP on login)
-- `artifacts/api-server/src/routes/jobs.ts` — Jobs API routes with dashboard stats
-- `artifacts/api-server/src/routes/lme.ts` — LME pricing API routes
-- `artifacts/api-server/src/routes/users.ts` — User management API routes
-- `artifacts/api-server/src/routes/settings.ts` — Settings API routes (profile, password, notifications, sessions, system)
-- `artifacts/api-server/src/routes/weight-reference.ts` — Battery weight reference CRUD API
-- `artifacts/api-server/src/middlewares/auth.ts` — requireAuth + requireRole middleware
-- `lib/db/src/schema/users.ts` — Users, sessions, and system_settings schemas
-- `lib/db/src/schema/jobs.ts` — Jobs + job_batteries schemas with relations
-- `lib/db/src/schema/lme-prices.ts` — LME prices schema
-- `artifacts/portal/src/pages/stillages.tsx` — Stillage tracking page
-- `artifacts/api-server/src/routes/stillages.ts` — Stillage API routes
-- `lib/db/src/schema/stillages.ts` — Stillage movements schema
-- `scripts/seed.ts` — Database seeder (12 users + 18 demo jobs + 5 LME prices + system settings + 14 stillage movements)
-
-## Mockups
-
-UI mockups designed in mockup-sandbox canvas:
-- Login Page, Depot Submission Form, Admin Dashboard, LME Pricing & Accounts, User Management
+- **PostgreSQL**: Primary database for all application data.
+- **Vite**: Frontend build tool.
+- **React**: Frontend library.
+- **Tailwind CSS**: CSS framework.
+- **Express**: Backend web framework.
+- **bcrypt**: For password hashing.
+- **Drizzle ORM**: For database interaction.

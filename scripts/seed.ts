@@ -1,35 +1,132 @@
 import { db } from "@workspace/db";
-import { usersTable, systemSettingsTable, batteryWeightReferenceTable, cellModelsTable, collectionPointsTable, lmePricesTable } from "@workspace/db/schema";
-import { sql } from "drizzle-orm";
+import { usersTable, systemSettingsTable, batteryWeightReferenceTable, cellModelsTable, collectionPointsTable, lmePricesTable, clientsTable, locationsTable } from "@workspace/db/schema";
+import { sql, eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { CELL_MODEL_DATA } from "@workspace/db/data/cell-models";
 
 async function seed() {
   const password = await bcrypt.hash("password123", 10);
 
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS clients (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL UNIQUE,
+      contact_name VARCHAR(255),
+      contact_email VARCHAR(255),
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS locations (
+      id SERIAL PRIMARY KEY,
+      client_id INTEGER NOT NULL REFERENCES clients(id),
+      name VARCHAR(255) NOT NULL,
+      address VARCHAR(500),
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL
+    )
+  `);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_locations_client_id ON locations(client_id)`);
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id)`);
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS location_id INTEGER REFERENCES locations(id)`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id)`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS location_id INTEGER REFERENCES locations(id)`);
+
+  const sampleClients = [
+    { name: "Greenfield Logistics", contactName: "Alex Johnson", contactEmail: "alex.j@greenfield.co.uk" },
+    { name: "MetroWaste Solutions", contactName: "Tom Whitaker", contactEmail: "t.whitaker@metrowaste.co.uk" },
+    { name: "EcoCollect Ltd", contactName: "James Patel", contactEmail: "j.patel@ecocollect.co.uk" },
+  ];
+
+  const clientIds: Record<string, number> = {};
+  for (const c of sampleClients) {
+    const [inserted] = await db
+      .insert(clientsTable)
+      .values(c)
+      .onConflictDoNothing()
+      .returning({ id: clientsTable.id });
+    if (inserted) {
+      clientIds[c.name] = inserted.id;
+    } else {
+      const [existing] = await db.select({ id: clientsTable.id }).from(clientsTable).where(eq(clientsTable.name, c.name));
+      if (existing) clientIds[c.name] = existing.id;
+    }
+  }
+  console.log(`Seeded ${Object.keys(clientIds).length} clients`);
+
+  const sampleLocations = [
+    { clientName: "Greenfield Logistics", name: "Birmingham Central", address: "Unit 5, Aston Industrial Park, Birmingham B6 7EY" },
+    { clientName: "Greenfield Logistics", name: "Bristol South", address: "Western Approach Distribution Park, Severn Beach, Bristol BS35 4GG" },
+    { clientName: "Greenfield Logistics", name: "London Depot", address: "Crossways Business Park, Dartford DA2 6QE" },
+    { clientName: "MetroWaste Solutions", name: "Manchester North", address: "Trafford Park, Manchester M17 1WA" },
+    { clientName: "MetroWaste Solutions", name: "Sheffield East", address: "Moulton Park Industrial Estate, Sheffield S9 1WA" },
+    { clientName: "EcoCollect Ltd", name: "Leeds Hub", address: "Wakefield Europort, Normanton WF6 1ZB" },
+    { clientName: "EcoCollect Ltd", name: "Reading Central", address: "Green Park, Reading RG2 6GP" },
+  ];
+
+  const locationIds: Record<string, number> = {};
+  for (const loc of sampleLocations) {
+    const cId = clientIds[loc.clientName];
+    if (!cId) continue;
+    const existing = await db.select({ id: locationsTable.id }).from(locationsTable)
+      .where(sql`${locationsTable.clientId} = ${cId} AND ${locationsTable.name} = ${loc.name}`);
+    if (existing.length > 0) {
+      locationIds[loc.name] = existing[0].id;
+    } else {
+      const [inserted] = await db.insert(locationsTable).values({
+        clientId: cId,
+        name: loc.name,
+        address: loc.address,
+      }).returning({ id: locationsTable.id });
+      if (inserted) locationIds[loc.name] = inserted.id;
+    }
+  }
+  console.log(`Seeded ${Object.keys(locationIds).length} locations`);
+
   const users = [
-    { email: "depot@itinium.co.uk", fullName: "Dave Mitchell", role: "depot_user", depot: "Birmingham Central" },
-    { email: "team@itinium.co.uk", fullName: "Sarah Cooper", role: "team_leader", depot: "Birmingham Central" },
-    { email: "accounts@itinium.co.uk", fullName: "Rachel Adams", role: "accounts", depot: null },
-    { email: "admin@itinium.co.uk", fullName: "Sarah Mitchell", role: "head_office_admin", depot: null },
-    { email: "alex.j@greenfield.co.uk", fullName: "Alex Johnson", role: "depot_user", depot: "Birmingham Central" },
-    { email: "t.whitaker@metrowaste.co.uk", fullName: "Tom Whitaker", role: "team_leader", depot: "Manchester North" },
-    { email: "j.patel@ecocollect.co.uk", fullName: "James Patel", role: "depot_user", depot: "Leeds Hub" },
-    { email: "e.clarke@cleanpower.co.uk", fullName: "Emma Clarke", role: "depot_user", depot: "Bristol South" },
-    { email: "d.osei@thamesbatt.co.uk", fullName: "David Osei", role: "team_leader", depot: "Reading Central" },
-    { email: "p.sharma@nationalgrid.co.uk", fullName: "Priya Sharma", role: "depot_user", depot: "London Depot" },
-    { email: "m.thompson@northernenergy.co.uk", fullName: "Mark Thompson", role: "depot_user", depot: "Sheffield East" },
-    { email: "l.chen@itinium.co.uk", fullName: "Lisa Chen", role: "accounts", depot: null },
+    { email: "admin@itinium.co.uk", fullName: "Sarah Mitchell", role: "head_office_admin", depot: null, clientId: null, locationId: null },
+    { email: "accounts@itinium.co.uk", fullName: "Rachel Adams", role: "accounts", depot: null, clientId: null, locationId: null },
+    { email: "l.chen@itinium.co.uk", fullName: "Lisa Chen", role: "accounts", depot: null, clientId: null, locationId: null },
+    { email: "team@itinium.co.uk", fullName: "Sarah Cooper", role: "team_leader", depot: "Birmingham Central", clientName: "Greenfield Logistics", locationName: null },
+    { email: "t.whitaker@metrowaste.co.uk", fullName: "Tom Whitaker", role: "team_leader", depot: "Manchester North", clientName: "MetroWaste Solutions", locationName: null },
+    { email: "d.osei@thamesbatt.co.uk", fullName: "David Osei", role: "team_leader", depot: "Reading Central", clientName: "EcoCollect Ltd", locationName: null },
+    { email: "depot@itinium.co.uk", fullName: "Dave Mitchell", role: "depot_user", depot: "Birmingham Central", clientName: "Greenfield Logistics", locationName: "Birmingham Central" },
+    { email: "alex.j@greenfield.co.uk", fullName: "Alex Johnson", role: "depot_user", depot: "Birmingham Central", clientName: "Greenfield Logistics", locationName: "Birmingham Central" },
+    { email: "e.clarke@cleanpower.co.uk", fullName: "Emma Clarke", role: "depot_user", depot: "Bristol South", clientName: "Greenfield Logistics", locationName: "Bristol South" },
+    { email: "p.sharma@nationalgrid.co.uk", fullName: "Priya Sharma", role: "depot_user", depot: "London Depot", clientName: "Greenfield Logistics", locationName: "London Depot" },
+    { email: "j.patel@ecocollect.co.uk", fullName: "James Patel", role: "depot_user", depot: "Leeds Hub", clientName: "EcoCollect Ltd", locationName: "Leeds Hub" },
+    { email: "m.thompson@northernenergy.co.uk", fullName: "Mark Thompson", role: "depot_user", depot: "Sheffield East", clientName: "MetroWaste Solutions", locationName: "Sheffield East" },
   ];
 
   for (const u of users) {
-    await db
-      .insert(usersTable)
-      .values({ ...u, passwordHash: password })
-      .onConflictDoNothing();
+    const clientName = "clientName" in u ? (u as Record<string, unknown>).clientName as string | null : null;
+    const locationName = "locationName" in u ? (u as Record<string, unknown>).locationName as string | null : null;
+    const cId = clientName ? clientIds[clientName] || null : null;
+    const lId = locationName ? locationIds[locationName] || null : null;
+
+    const [existing] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, u.email));
+    if (existing) {
+      await db.update(usersTable).set({
+        clientId: cId,
+        locationId: lId,
+        depot: u.depot,
+        role: u.role,
+      }).where(eq(usersTable.id, existing.id));
+    } else {
+      await db.insert(usersTable).values({
+        email: u.email,
+        fullName: u.fullName,
+        role: u.role,
+        depot: u.depot,
+        clientId: cId,
+        locationId: lId,
+        passwordHash: password,
+      });
+    }
   }
 
-  console.log("Seeded 12 demo users (password: password123)");
+  console.log("Seeded 12 demo users with client/location assignments (password: password123)");
 
   await db.insert(systemSettingsTable).values({
     singletonKey: "default",

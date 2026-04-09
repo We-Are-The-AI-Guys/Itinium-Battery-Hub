@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
 import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db/schema";
+import { usersTable, clientsTable, locationsTable } from "@workspace/db/schema";
 import { eq, sql, and, ilike, or } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
@@ -12,18 +12,30 @@ const router: IRouter = Router();
 router.get(
   "/users/stats",
   requireAuth,
-  requireRole("head_office_admin"),
-  async (_req, res) => {
+  requireRole("head_office_admin", "team_leader"),
+  async (req: AuthenticatedRequest, res) => {
     try {
-      const [stats] = await db
-        .select({
-          total: sql<number>`count(*)::int`,
-          depotUsers: sql<number>`count(*) filter (where ${usersTable.role} = 'depot_user')::int`,
-          teamLeaders: sql<number>`count(*) filter (where ${usersTable.role} = 'team_leader')::int`,
-          adminStaff: sql<number>`count(*) filter (where ${usersTable.role} in ('accounts', 'head_office_admin'))::int`,
-        })
-        .from(usersTable);
+      const isTeamLeader = req.user!.role === "team_leader";
+      if (isTeamLeader && !req.user!.clientId) {
+        res.status(403).json({ message: "Team leader has no client assigned" });
+        return;
+      }
+      const clientFilter = isTeamLeader
+        ? sql`AND client_id = ${req.user!.clientId}`
+        : sql``;
 
+      const result = await db.execute(sql`
+        SELECT
+          count(*)::int as total,
+          count(*) filter (where role = 'depot_user')::int as "depotUsers",
+          count(*) filter (where role = 'team_leader')::int as "teamLeaders",
+          count(*) filter (where role in ('accounts', 'head_office_admin'))::int as "adminStaff"
+        FROM users
+        WHERE 1=1 ${clientFilter}
+      `);
+
+      const rows = result.rows as Record<string, unknown>[];
+      const stats = rows?.[0] ?? { total: 0, depotUsers: 0, teamLeaders: 0, adminStaff: 0 };
       res.json(stats);
     } catch (error) {
       console.error("User stats error:", error);
@@ -35,8 +47,8 @@ router.get(
 router.get(
   "/users",
   requireAuth,
-  requireRole("head_office_admin"),
-  async (req, res) => {
+  requireRole("head_office_admin", "team_leader"),
+  async (req: AuthenticatedRequest, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
       const offset = parseInt(req.query.offset as string) || 0;
@@ -44,6 +56,14 @@ router.get(
       const search = req.query.search as string | undefined;
 
       const conditions = [];
+
+      if (req.user!.role === "team_leader") {
+        if (!req.user!.clientId) {
+          res.status(403).json({ message: "Team leader has no client assigned" });
+          return;
+        }
+        conditions.push(eq(usersTable.clientId, req.user!.clientId));
+      }
 
       if (role && role !== "all") {
         conditions.push(eq(usersTable.role, role));
@@ -67,6 +87,8 @@ router.get(
           fullName: usersTable.fullName,
           role: usersTable.role,
           depot: usersTable.depot,
+          clientId: usersTable.clientId,
+          locationId: usersTable.locationId,
           isActive: usersTable.isActive,
           lastActiveAt: usersTable.lastActiveAt,
           createdAt: usersTable.createdAt,
@@ -82,7 +104,22 @@ router.get(
         .from(usersTable)
         .where(where);
 
-      res.json({ users, total: count });
+      const enrichedUsers = [];
+      for (const u of users) {
+        let clientName: string | null = null;
+        let locationName: string | null = null;
+        if (u.clientId) {
+          const [c] = await db.select({ name: clientsTable.name }).from(clientsTable).where(eq(clientsTable.id, u.clientId));
+          if (c) clientName = c.name;
+        }
+        if (u.locationId) {
+          const [l] = await db.select({ name: locationsTable.name }).from(locationsTable).where(eq(locationsTable.id, u.locationId));
+          if (l) locationName = l.name;
+        }
+        enrichedUsers.push({ ...u, clientName, locationName });
+      }
+
+      res.json({ users: enrichedUsers, total: count });
     } catch (error) {
       console.error("Users list error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -95,14 +132,16 @@ const createUserSchema = z.object({
   email: z.string().email(),
   role: z.enum(["depot_user", "team_leader", "accounts", "head_office_admin"]),
   depot: z.string().nullable().optional(),
+  clientId: z.number().nullable().optional(),
+  locationId: z.number().nullable().optional(),
   password: z.string().min(6).optional(),
 });
 
 router.post(
   "/users",
   requireAuth,
-  requireRole("head_office_admin"),
-  async (req, res) => {
+  requireRole("head_office_admin", "team_leader"),
+  async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = createUserSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -111,10 +150,44 @@ router.post(
       }
 
       const { fullName, email, role, depot, password } = parsed.data;
+      let { clientId, locationId } = parsed.data;
 
-      if ((role === "depot_user" || role === "team_leader") && !depot) {
-        res.status(400).json({ message: "Depot is required for Depot User and Team Leader roles" });
+      if (req.user!.role === "team_leader") {
+        if (role !== "depot_user") {
+          res.status(403).json({ message: "Team leaders can only create depot users" });
+          return;
+        }
+        clientId = req.user!.clientId;
+        if (!clientId) {
+          res.status(400).json({ message: "Team leader has no client assigned" });
+          return;
+        }
+        if (locationId) {
+          const [loc] = await db
+            .select({ clientId: locationsTable.clientId })
+            .from(locationsTable)
+            .where(eq(locationsTable.id, locationId));
+          if (!loc || loc.clientId !== clientId) {
+            res.status(400).json({ message: "Location does not belong to your client" });
+            return;
+          }
+        }
+      }
+
+      if ((role === "depot_user" || role === "team_leader") && !clientId) {
+        res.status(400).json({ message: "Client is required for Depot User and Team Leader roles" });
         return;
+      }
+
+      if (locationId && clientId) {
+        const [loc] = await db
+          .select({ clientId: locationsTable.clientId })
+          .from(locationsTable)
+          .where(eq(locationsTable.id, locationId));
+        if (!loc || loc.clientId !== clientId) {
+          res.status(400).json({ message: "Location does not belong to the specified client" });
+          return;
+        }
       }
 
       const [existing] = await db
@@ -127,6 +200,15 @@ router.post(
         return;
       }
 
+      let locationName: string | null = null;
+      if (locationId) {
+        const [loc] = await db
+          .select({ name: locationsTable.name })
+          .from(locationsTable)
+          .where(eq(locationsTable.id, locationId));
+        if (loc) locationName = loc.name;
+      }
+
       const tempPassword = password || crypto.randomBytes(12).toString("base64url");
       const passwordHash = await bcrypt.hash(tempPassword, 10);
 
@@ -136,7 +218,9 @@ router.post(
           fullName,
           email: email.toLowerCase().trim(),
           role,
-          depot: depot || null,
+          depot: locationName || depot || null,
+          clientId: clientId || null,
+          locationId: locationId || null,
           passwordHash,
           isActive: true,
         })
@@ -146,6 +230,8 @@ router.post(
           fullName: usersTable.fullName,
           role: usersTable.role,
           depot: usersTable.depot,
+          clientId: usersTable.clientId,
+          locationId: usersTable.locationId,
           isActive: usersTable.isActive,
           createdAt: usersTable.createdAt,
         });
@@ -162,13 +248,15 @@ const updateUserSchema = z.object({
   fullName: z.string().min(1).optional(),
   role: z.enum(["depot_user", "team_leader", "accounts", "head_office_admin"]).optional(),
   depot: z.string().nullable().optional(),
+  clientId: z.number().nullable().optional(),
+  locationId: z.number().nullable().optional(),
   isActive: z.boolean().optional(),
 });
 
 router.patch(
   "/users/:id",
   requireAuth,
-  requireRole("head_office_admin"),
+  requireRole("head_office_admin", "team_leader"),
   async (req: AuthenticatedRequest, res) => {
     try {
       const userId = parseInt(req.params.id as string);
@@ -177,9 +265,30 @@ router.patch(
         return;
       }
 
+      if (req.user!.role === "team_leader") {
+        const [target] = await db
+          .select({ clientId: usersTable.clientId, role: usersTable.role })
+          .from(usersTable)
+          .where(eq(usersTable.id, userId));
+
+        if (!target || target.clientId !== req.user!.clientId) {
+          res.status(403).json({ message: "Access denied" });
+          return;
+        }
+        if (target.role !== "depot_user") {
+          res.status(403).json({ message: "Team leaders can only edit depot users" });
+          return;
+        }
+      }
+
       const parsed = updateUserSchema.safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({ message: "Invalid update data", errors: parsed.error.issues });
+        return;
+      }
+
+      if (req.user!.role === "team_leader" && parsed.data.role && parsed.data.role !== "depot_user") {
+        res.status(403).json({ message: "Team leaders can only assign depot_user role" });
         return;
       }
 
@@ -188,6 +297,28 @@ router.patch(
       if (parsed.data.role !== undefined) updates.role = parsed.data.role;
       if (parsed.data.depot !== undefined) updates.depot = parsed.data.depot;
       if (parsed.data.isActive !== undefined) updates.isActive = parsed.data.isActive;
+
+      if (req.user!.role === "head_office_admin") {
+        if (parsed.data.clientId !== undefined) updates.clientId = parsed.data.clientId;
+        if (parsed.data.locationId !== undefined) updates.locationId = parsed.data.locationId;
+      }
+
+      if (parsed.data.locationId !== undefined && req.user!.role === "team_leader") {
+        if (parsed.data.locationId) {
+          const [loc] = await db
+            .select({ clientId: locationsTable.clientId, name: locationsTable.name })
+            .from(locationsTable)
+            .where(eq(locationsTable.id, parsed.data.locationId));
+          if (!loc || loc.clientId !== req.user!.clientId) {
+            res.status(400).json({ message: "Location does not belong to your client" });
+            return;
+          }
+          updates.locationId = parsed.data.locationId;
+          updates.depot = loc.name;
+        } else {
+          updates.locationId = null;
+        }
+      }
 
       if (Object.keys(updates).length === 0) {
         res.status(400).json({ message: "No fields to update" });
@@ -204,6 +335,8 @@ router.patch(
           fullName: usersTable.fullName,
           role: usersTable.role,
           depot: usersTable.depot,
+          clientId: usersTable.clientId,
+          locationId: usersTable.locationId,
           isActive: usersTable.isActive,
           createdAt: usersTable.createdAt,
         });

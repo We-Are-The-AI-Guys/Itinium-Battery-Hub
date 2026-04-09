@@ -2,6 +2,8 @@ import { pgTable, serial, integer, text, timestamp, varchar, decimal, date, inde
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
+import { locationsTable } from "./locations";
+import { clientsTable } from "./clients";
 import { relations } from "drizzle-orm";
 
 export const jobsTable = pgTable("jobs", {
@@ -9,6 +11,8 @@ export const jobsTable = pgTable("jobs", {
   reference: varchar("reference", { length: 50 }).notNull().unique(),
   clientName: varchar("client_name", { length: 255 }).notNull(),
   depot: varchar("depot", { length: 255 }).notNull(),
+  clientId: integer("client_id").references(() => clientsTable.id),
+  locationId: integer("location_id").references(() => locationsTable.id),
   collectionPoint: varchar("collection_point", { length: 255 }),
   collectionDate: date("collection_date"),
   submittedAt: timestamp("submitted_at").defaultNow().notNull(),

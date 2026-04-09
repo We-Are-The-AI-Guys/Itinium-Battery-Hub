@@ -1,3 +1,5 @@
+export * from "./clients";
+export * from "./locations";
 export * from "./users";
 export * from "./jobs";
 export * from "./lme-prices";

@@ -11,6 +11,8 @@ import stillagesRouter from "./stillages";
 import cellModelsRouter from "./cell-models";
 import collectionPointsRouter from "./collection-points";
 import depotsRouter from "./depots";
+import clientsRouter from "./clients";
+import locationsRouter from "./locations";
 
 const router: IRouter = Router();
 
@@ -26,5 +28,7 @@ router.use(stillagesRouter);
 router.use(cellModelsRouter);
 router.use(collectionPointsRouter);
 router.use(depotsRouter);
+router.use(clientsRouter);
+router.use(locationsRouter);
 
 export default router;
