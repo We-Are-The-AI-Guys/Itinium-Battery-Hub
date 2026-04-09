@@ -334,12 +334,15 @@ router.patch(
             return;
           }
           const [loc] = await db
-            .select({ clientId: locationsTable.clientId })
+            .select({ clientId: locationsTable.clientId, name: locationsTable.name })
             .from(locationsTable)
             .where(eq(locationsTable.id, effectiveLocationId));
           if (!loc || loc.clientId !== effectiveClientId) {
             res.status(400).json({ message: "Location does not belong to the specified client" });
             return;
+          }
+          if (parsed.data.locationId !== undefined) {
+            updates.depot = loc.name;
           }
         }
       }
