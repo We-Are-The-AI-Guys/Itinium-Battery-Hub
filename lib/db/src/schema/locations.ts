@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp, varchar, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, varchar, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { clientsTable } from "./clients";
@@ -12,7 +12,7 @@ export const locationsTable = pgTable("locations", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_locations_client_id").on(table.clientId),
-  index("idx_locations_client_name").on(table.clientId, table.name),
+  uniqueIndex("idx_locations_client_name").on(table.clientId, table.name),
 ]);
 
 export const insertLocationSchema = createInsertSchema(locationsTable).omit({ id: true, createdAt: true });

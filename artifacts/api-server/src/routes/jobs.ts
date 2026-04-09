@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable } from "@workspace/db/schema";
+import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable, locationsTable, clientsTable } from "@workspace/db/schema";
 import { eq, sql, and, count, ilike, or, inArray, desc } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 
@@ -138,8 +138,33 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res) => {
     try {
-      const { depot, collectionPoint, collectionDate, tonnage, tonnageManualOverride, notes, batteries } = req.body;
-      const clientName = req.user!.fullName || "Unknown";
+      const { collectionPoint, collectionDate, tonnage, tonnageManualOverride, notes, batteries } = req.body;
+      let { depot } = req.body;
+
+      let resolvedClientId = req.user!.clientId || null;
+      let resolvedLocationId = req.user!.locationId || null;
+      let clientName = "Unknown";
+
+      if (resolvedClientId) {
+        const [client] = await db
+          .select({ name: clientsTable.name })
+          .from(clientsTable)
+          .where(eq(clientsTable.id, resolvedClientId));
+        if (client) clientName = client.name;
+      } else {
+        clientName = req.user!.fullName || "Unknown";
+      }
+
+      if (resolvedLocationId) {
+        const [location] = await db
+          .select({ name: locationsTable.name, clientId: locationsTable.clientId })
+          .from(locationsTable)
+          .where(eq(locationsTable.id, resolvedLocationId));
+        if (location) {
+          depot = location.name;
+          if (!resolvedClientId) resolvedClientId = location.clientId;
+        }
+      }
 
       if (!depot) {
         res.status(400).json({ message: "Depot is required" });
@@ -215,8 +240,8 @@ router.post(
             reference,
             clientName,
             depot,
-            clientId: req.user!.clientId || null,
-            locationId: req.user!.locationId || null,
+            clientId: resolvedClientId,
+            locationId: resolvedLocationId,
             collectionPoint: collectionPoint || null,
             collectionDate: collectionDate || null,
             tonnage: finalTonnage,
