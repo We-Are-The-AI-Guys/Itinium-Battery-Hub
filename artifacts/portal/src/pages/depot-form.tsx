@@ -86,6 +86,15 @@ interface User {
   fullName: string;
   role: string;
   depot: string | null;
+  clientId: number | null;
+  locationId: number | null;
+  clientName: string | null;
+  locationName: string | null;
+}
+
+interface LocationOption {
+  id: number;
+  name: string;
 }
 
 function createEmptyBattery(): BatteryRow {
@@ -162,12 +171,29 @@ export default function DepotFormPage() {
   const cpInputRef = useRef<HTMLInputElement>(null);
   const cpDropdownRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const [clientLocations, setClientLocations] = useState<LocationOption[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("");
 
   useEffect(() => {
     fetch("/api/auth/me", { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.user) setUser(data.user);
+        if (data?.user) {
+          setUser(data.user);
+          if (data.user.locationId) {
+            setSelectedLocationId(String(data.user.locationId));
+          }
+          if (data.user.clientId && data.user.role === "team_leader") {
+            fetch(`/api/clients/${data.user.clientId}/locations`, { credentials: "include" })
+              .then((r) => (r.ok ? r.json() : null))
+              .then((d) => {
+                if (d?.locations) {
+                  setClientLocations(d.locations.map((l: { id: number; name: string }) => ({ id: l.id, name: l.name })));
+                }
+              })
+              .catch(() => {});
+          }
+        }
       })
       .catch(() => {});
     fetch("/api/manufacturers", { credentials: "include" })
@@ -260,6 +286,14 @@ export default function DepotFormPage() {
     setBatteries((prev) =>
       prev.map((b) => (b.id === battery.id && !b.weightManual ? { ...b, estimatedWeightKg: weight } : b))
     );
+  }
+
+  function getSelectedLocationName(): string {
+    if (selectedLocationId) {
+      const loc = clientLocations.find((l) => String(l.id) === selectedLocationId);
+      if (loc) return loc.name;
+    }
+    return user?.locationName || "";
   }
 
   async function handleLogout() {
@@ -410,7 +444,7 @@ export default function DepotFormPage() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          depot: user?.depot || "Unknown",
+          depot: getSelectedLocationName() || user?.depot || "Unknown",
           collectionPoint: collectionPoint || null,
           collectionDate: null,
           tonnage: currentLoad > 0 ? currentLoad.toFixed(3) : "0.000",
@@ -515,10 +549,10 @@ export default function DepotFormPage() {
         <div className="flex items-center gap-3">
           <div className="hidden sm:flex flex-col items-end">
             <span className="text-sm font-medium text-slate-700">
-              Depot: {user?.depot || "Loading..."}
+              {user?.locationName || user?.depot || "Loading..."}
             </span>
             <span className="text-xs text-slate-500">
-              {user?.fullName || "..."}
+              {user?.clientName ? `${user.fullName} · ${user.clientName}` : user?.fullName || "..."}
             </span>
           </div>
           <div
@@ -624,7 +658,7 @@ export default function DepotFormPage() {
                   Redundant Battery Collection Note
                 </p>
                 <p className="text-sm font-medium text-[#0f2744]">
-                  {user?.depot || "..."} &mdash; {user?.fullName || "..."}
+                  {getSelectedLocationName() || user?.depot || "..."} &mdash; {user?.fullName || "..."}
                 </p>
               </div>
             </div>
@@ -636,6 +670,28 @@ export default function DepotFormPage() {
               Draft
             </span>
           </div>
+
+          {user?.role === "team_leader" && clientLocations.length > 0 && (
+            <div className="space-y-1.5 max-w-xl">
+              <label className="text-sm font-medium text-[#1e293b] flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                Location
+              </label>
+              <div className="relative">
+                <select
+                  className="w-full appearance-none h-11 rounded-md border border-slate-200 bg-slate-50 px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
+                  value={selectedLocationId}
+                  onChange={(e) => setSelectedLocationId(e.target.value)}
+                >
+                  <option value="">Select a location...</option>
+                  {clientLocations.map((l) => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            </div>
+          )}
 
           <div className="space-y-1.5 relative max-w-xl">
             <label className="text-sm font-medium text-[#1e293b] flex items-center gap-1.5">

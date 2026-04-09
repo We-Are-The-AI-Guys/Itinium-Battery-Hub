@@ -9,6 +9,8 @@ interface User {
   email: string;
   fullName: string;
   role: string;
+  clientName: string | null;
+  locationName: string | null;
 }
 
 export default function DashboardPage() {
@@ -67,15 +69,21 @@ export default function DashboardPage() {
 
       <main className="max-w-7xl mx-auto px-6 py-10">
         <h1 className="text-3xl font-bold text-[#1e293b] mb-2" data-testid="text-dashboard-heading">Welcome, {user?.fullName || "User"}</h1>
-        <p className="text-[#64748b] mb-8">You are signed in as <span className="font-medium capitalize">{user?.role.replace(/_/g, " ") || "..."}</span>.</p>
+        <p className="text-[#64748b] mb-8">
+          You are signed in as <span className="font-medium capitalize">{user?.role.replace(/_/g, " ") || "..."}</span>
+          {user?.locationName && <> at <span className="font-medium">{user.locationName}</span></>}
+          {user?.clientName && <> ({user.clientName})</>}
+          .
+        </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <Battery className="w-4 h-4 text-[#0ea5e9]" />
-              <h3 className="text-sm font-medium text-[#64748b]">Your Role</h3>
+              <h3 className="text-sm font-medium text-[#64748b]">Your Location</h3>
             </div>
-            <p className="text-2xl font-bold text-[#0f2744] capitalize">{user?.role.replace(/_/g, " ") || "..."}</p>
+            <p className="text-2xl font-bold text-[#0f2744]">{user?.locationName || "Head Office"}</p>
+            {user?.clientName && <p className="text-sm text-[#64748b] mt-1">{user.clientName}</p>}
           </div>
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
