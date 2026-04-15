@@ -301,12 +301,19 @@ export default function DepotFormPage() {
 
   async function computeAndSetAutoWeight(battery: BatteryRow) {
     if (battery.weightManual) return;
-    if (battery.isLooseCells) return;
     const version = (weightLookupVersion.current[battery.id] || 0) + 1;
     weightLookupVersion.current[battery.id] = version;
 
     let weight = "";
-    if (battery.cellType === "Blocs") {
+    if (battery.isLooseCells) {
+      if (battery.cellType && battery.looseCellsQty) {
+        const perCell = await fetchWeightFromApi(battery.cellType, null);
+        const qty = parseInt(battery.looseCellsQty, 10);
+        if (perCell && !isNaN(qty) && qty > 0) {
+          weight = (parseFloat(perCell) * qty).toFixed(3);
+        }
+      }
+    } else if (battery.cellType === "Blocs") {
       const perBloc = await fetchWeightFromApi("Blocs", null);
       const qty = parseInt(battery.looseCellsQty, 10);
       if (perBloc && !isNaN(qty) && qty > 0) {
@@ -1156,6 +1163,7 @@ export default function DepotFormPage() {
                         checked={battery.isLooseCells}
                         onChange={(e) => {
                           const checked = e.target.checked;
+                          let updatedBattery: BatteryRow | null = null;
                           setBatteries((prev) =>
                             prev.map((b) => {
                               if (b.id !== battery.id) return b;
@@ -1165,11 +1173,14 @@ export default function DepotFormPage() {
                                 voltage: checked ? "" : b.voltage,
                                 customVoltage: checked ? "" : b.customVoltage,
                                 looseCellsQty: checked ? b.looseCellsQty : (b.cellType === "Blocs" ? b.looseCellsQty : ""),
-                                weightManual: checked ? true : b.weightManual,
+                                weightManual: checked ? false : b.weightManual,
+                                estimatedWeightKg: checked ? "" : b.estimatedWeightKg,
                               };
+                              updatedBattery = updated;
                               return updated;
                             })
                           );
+                          if (updatedBattery) computeAndSetAutoWeight(updatedBattery);
                         }}
                         className="h-4 w-4 rounded border-slate-300 text-[#0ea5e9] focus:ring-[#0ea5e9]"
                       />
