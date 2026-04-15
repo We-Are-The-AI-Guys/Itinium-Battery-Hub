@@ -7,7 +7,6 @@ import {
   Eye,
   FileText,
   Filter,
-  Factory,
   AlertCircle,
   MapPin,
 } from "lucide-react";
@@ -92,24 +91,11 @@ export default function JobListPage() {
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [manufacturerFilter, setManufacturerFilter] = useState("");
-  const [manufacturers, setManufacturers] = useState<string[]>([]);
   const [collectionPointFilter, setCollectionPointFilter] = useState("");
   const [collectionPointOptions, setCollectionPointOptions] = useState<CollectionPointOption[]>([]);
   const PAGE_SIZE = 10;
 
   useEffect(() => {
-    // Fetch manufacturers
-    fetch("/api/manufacturers", { credentials: "include" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.manufacturers) {
-          setManufacturers(data.manufacturers.filter((m: string) => m !== "Other"));
-        }
-      })
-      .catch(() => {});
-
-    // Fetch collection points
     fetch("/api/collection-points", { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -123,7 +109,6 @@ export default function JobListPage() {
     if (activeFilter !== "All") params.set("status", activeFilter.toLowerCase());
     if (paymentFilter !== "all") params.set("paymentStatus", paymentFilter);
     if (searchQuery.trim()) params.set("search", searchQuery.trim());
-    if (manufacturerFilter) params.set("manufacturer", manufacturerFilter);
     if (collectionPointFilter) params.set("collectionPoint", collectionPointFilter);
     params.set("limit", String(PAGE_SIZE));
     params.set("offset", String((currentPage - 1) * PAGE_SIZE));
@@ -137,7 +122,7 @@ export default function JobListPage() {
         }
       })
       .catch(() => {});
-  }, [activeFilter, paymentFilter, currentPage, searchQuery, manufacturerFilter, collectionPointFilter]);
+  }, [activeFilter, paymentFilter, currentPage, searchQuery, collectionPointFilter]);
 
   function handleFilterChange(filter: string) {
     setActiveFilter(filter);
@@ -194,31 +179,6 @@ export default function JobListPage() {
                   </button>
                 ))}
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Factory className="w-4 h-4 text-slate-400" />
-              <Select
-                value={manufacturerFilter || "_all"}
-                onValueChange={(val) => {
-                  setManufacturerFilter(val === "_all" ? "" : val);
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger
-                  className="h-8 w-[180px] bg-slate-50 border-slate-200 text-xs focus:ring-[#0ea5e9]"
-                  data-testid="filter-manufacturer"
-                >
-                  <SelectValue placeholder="All manufacturers" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_all">All manufacturers</SelectItem>
-                  {manufacturers.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-slate-500">Payment:</span>
