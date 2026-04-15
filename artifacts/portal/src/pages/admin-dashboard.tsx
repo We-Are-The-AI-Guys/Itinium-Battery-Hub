@@ -243,30 +243,6 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-red-500 p-5 hover:shadow-md transition-shadow relative overflow-hidden">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <p className="text-sm font-medium text-slate-500 mb-1">
-                  Flagged Exceptions
-                </p>
-                <h3 className="text-3xl font-bold text-[#0f2744]">
-                  {stats?.flaggedExceptions ?? "..."}
-                </h3>
-              </div>
-              <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center">
-                <AlertTriangle className="w-5 h-5 text-red-500" />
-              </div>
-            </div>
-            <div className="flex items-center text-sm">
-              <span className="w-2 h-2 rounded-full bg-red-500 mr-2"></span>
-              <span className="text-red-600 font-medium">
-                {stats?.flaggedExceptions
-                  ? `${Math.max(1, Math.floor(stats.flaggedExceptions / 2))} critical`
-                  : "..."}
-              </span>
-            </div>
-          </div>
-
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-sky-500 p-5 hover:shadow-md transition-shadow">
             <div className="flex justify-between items-start mb-4">
               <div>
