@@ -23,6 +23,8 @@ import {
   Search,
   ChevronDown,
   AlertTriangle,
+  Copy,
+  Download,
 } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Button } from "@/components/ui/button";
@@ -62,6 +64,7 @@ interface CellModelOption {
 
 interface BatteryRow {
   id: string;
+  palletNumber: string;
   assetNumber: string;
   batterySerial: string;
   manufacture: string;
@@ -100,6 +103,7 @@ interface LocationOption {
 function createEmptyBattery(): BatteryRow {
   return {
     id: crypto.randomUUID(),
+    palletNumber: "",
     assetNumber: "",
     batterySerial: "",
     manufacture: "",
@@ -117,6 +121,44 @@ function createEmptyBattery(): BatteryRow {
     serialFlagReason: "",
     rowPhoto: "",
   };
+}
+
+const CSV_TEMPLATE_HEADERS = "Pallet Number,Asset No,Battery Serial,Manufacturer,Cell Type,Voltage,Loose Cells Qty,Est Weight Kg,Notes";
+
+function parseCSV(text: string): string[][] {
+  const rows: string[][] = [];
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const cells: string[] = [];
+    let current = "";
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQuotes) {
+        if (ch === '"' && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else if (ch === '"') {
+          inQuotes = false;
+        } else {
+          current += ch;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ',') {
+          cells.push(current.trim());
+          current = "";
+        } else {
+          current += ch;
+        }
+      }
+    }
+    cells.push(current.trim());
+    rows.push(cells);
+  }
+  return rows;
 }
 
 const SPECIAL_TYPES = [
@@ -156,7 +198,6 @@ interface CollectionPointPreset {
 
 export default function DepotFormPage() {
   const [user, setUser] = useState<User | null>(null);
-  const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
   const [collectionPoint, setCollectionPoint] = useState("");
   const [jobNotes, setJobNotes] = useState("");
   const [batteries, setBatteries] = useState<BatteryRow[]>([createEmptyBattery()]);
@@ -301,29 +342,94 @@ export default function DepotFormPage() {
     window.location.href = import.meta.env.BASE_URL;
   }
 
-  function handlePhotoUpload() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/jpeg,image/png";
-    input.multiple = true;
-    input.onchange = (e) => {
-      const files = (e.target as HTMLInputElement).files;
-      if (files) {
-        const newPhotos = Array.from(files).map((file) =>
-          URL.createObjectURL(file)
-        );
-        setUploadedPhotos((prev) => [...prev, ...newPhotos]);
-        toast({
-          title: "Photos attached",
-          description: `${files.length} photo(s) added successfully`,
-        });
-      }
-    };
-    input.click();
+  function cloneBatteryRow(id: string) {
+    setBatteries((prev) => {
+      const source = prev.find((b) => b.id === id);
+      if (!source) return prev;
+      const clone: BatteryRow = {
+        ...source,
+        id: crypto.randomUUID(),
+        assetNumber: "",
+        batterySerial: "",
+        serialFlagged: false,
+        serialFlagReason: "",
+        rowPhoto: "",
+      };
+      const idx = prev.findIndex((b) => b.id === id);
+      const updated = [...prev];
+      updated.splice(idx + 1, 0, clone);
+      return updated;
+    });
   }
 
-  function removePhoto(index: number) {
-    setUploadedPhotos((prev) => prev.filter((_, i) => i !== index));
+  function downloadCsvTemplate() {
+    const blob = new Blob([CSV_TEMPLATE_HEADERS + "\n"], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "battery-import-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleCsvImport(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = reader.result as string;
+        const rows = parseCSV(text);
+        if (rows.length < 2) {
+          toast({ title: "Empty CSV", description: "The CSV file contains no data rows.", variant: "destructive" });
+          return;
+        }
+        const headers = rows[0].map((h) => h.toLowerCase().replace(/[^a-z0-9]/g, ""));
+        const colMap: Record<string, number> = {};
+        const mapping: [string, string[]][] = [
+          ["palletNumber", ["palletnumber", "palletno", "pallet"]],
+          ["assetNumber", ["assetno", "assetnumber", "asset"]],
+          ["batterySerial", ["batteryserial", "batteryserialno", "serial", "serialno"]],
+          ["manufacture", ["manufacturer", "manufacture", "mfr"]],
+          ["cellType", ["celltype", "celltypemodel", "cellmodel", "type"]],
+          ["voltage", ["voltage", "volt", "v"]],
+          ["looseCellsQty", ["loosecellsqty", "loosecells", "cellqty", "qty"]],
+          ["estimatedWeightKg", ["estweightkg", "estimatedweightkg", "weightkg", "weight"]],
+          ["notes", ["notes", "note"]],
+        ];
+        for (const [field, aliases] of mapping) {
+          const idx = headers.findIndex((h) => aliases.includes(h));
+          if (idx !== -1) colMap[field] = idx;
+        }
+        const dataRows = rows.slice(1);
+        const imported: BatteryRow[] = dataRows.map((row) => ({
+          id: crypto.randomUUID(),
+          palletNumber: row[colMap["palletNumber"]] || "",
+          assetNumber: row[colMap["assetNumber"]] || "",
+          batterySerial: row[colMap["batterySerial"]] || "",
+          manufacture: row[colMap["manufacture"]] || "",
+          manufactureCustom: "",
+          cellType: row[colMap["cellType"]] || "",
+          cellModel: "",
+          voltage: row[colMap["voltage"]] || "",
+          customVoltage: "",
+          looseCellsQty: row[colMap["looseCellsQty"]] || "",
+          estimatedWeightKg: row[colMap["estimatedWeightKg"]] || "",
+          weightManual: !!(row[colMap["estimatedWeightKg"]]),
+          notes: row[colMap["notes"]] || "",
+          isLooseCells: !!(row[colMap["looseCellsQty"]] && parseInt(row[colMap["looseCellsQty"]], 10) > 0),
+          serialFlagged: false,
+          serialFlagReason: "",
+          rowPhoto: "",
+        }));
+        setBatteries((prev) => {
+          const hasOnlyEmpty = prev.length === 1 && !prev[0].assetNumber && !prev[0].batterySerial && !prev[0].palletNumber;
+          return hasOnlyEmpty ? imported : [...prev, ...imported];
+        });
+        toast({ title: "CSV imported", description: `${imported.length} battery row(s) added from CSV.` });
+      } catch {
+        toast({ title: "CSV import failed", description: "Could not parse the CSV file. Please check the format.", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
   }
 
   function updateBattery(id: string, field: keyof BatteryRow, value: string) {
@@ -451,6 +557,7 @@ export default function DepotFormPage() {
           tonnageManualOverride: tonnageManual,
           notes: jobNotes || null,
           batteries: batteries.map((b) => ({
+            palletNumber: b.palletNumber || null,
             assetNumber: b.assetNumber || null,
             batterySerial: b.serialFlagged ? (b.serialFlagReason || "Unknown") : (b.batterySerial || null),
             manufacture: b.manufacture === "Other" ? (b.manufactureCustom || "Other") : (b.manufacture || null),
@@ -475,7 +582,6 @@ export default function DepotFormPage() {
         setBatteries([createEmptyBattery()]);
         setCollectionPoint("");
         setJobNotes("");
-        setUploadedPhotos([]);
         setTonnageManual(false);
         setTonnageOverride("");
       } else {
@@ -787,19 +893,43 @@ export default function DepotFormPage() {
                       </span>
                     )}
                   </div>
-                  {batteries.length > 1 && (
+                  <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => removeBatteryRow(battery.id)}
-                      className="text-red-400 hover:text-red-600 transition-colors p-1 rounded hover:bg-red-50"
-                      data-testid={`button-remove-battery-${index}`}
+                      onClick={() => cloneBatteryRow(battery.id)}
+                      className="text-slate-400 hover:text-[#0ea5e9] transition-colors p-1 rounded hover:bg-sky-50"
+                      title="Clone this row"
+                      data-testid={`button-clone-battery-${index}`}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Copy className="w-4 h-4" />
                     </button>
-                  )}
+                    {batteries.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeBatteryRow(battery.id)}
+                        className="text-red-400 hover:text-red-600 transition-colors p-1 rounded hover:bg-red-50"
+                        data-testid={`button-remove-battery-${index}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600">
+                      Pallet No.
+                    </label>
+                    <Input
+                      placeholder="e.g., PLT-001"
+                      className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
+                      value={battery.palletNumber}
+                      onChange={(e) => updateBattery(battery.id, "palletNumber", e.target.value)}
+                      data-testid={`input-pallet-number-${index}`}
+                    />
+                  </div>
+
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-slate-600">
                       Asset No.
@@ -1300,74 +1430,54 @@ export default function DepotFormPage() {
 
         <section
           className="bg-white rounded-xl border border-slate-200 shadow-[0_2px_10px_rgb(0,0,0,0.02)] overflow-hidden"
-          data-testid="section-photo-capture"
+          data-testid="section-csv-upload"
         >
-          <div className="border-l-4 border-[#0ea5e9] bg-slate-50/50 px-5 py-4 border-b border-slate-100 flex items-center gap-2">
-            <Camera className="w-5 h-5 text-[#0ea5e9]" />
-            <h3 className="font-bold text-[#0f2744] text-lg">
-              Photo Capture
-            </h3>
+          <div className="border-l-4 border-[#0ea5e9] bg-slate-50/50 px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Upload className="w-5 h-5 text-[#0ea5e9]" />
+              <h3 className="font-bold text-[#0f2744] text-lg">
+                Import from CSV
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={downloadCsvTemplate}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#0ea5e9] hover:text-[#0284c7] hover:bg-sky-50 rounded-md transition-colors border border-[#0ea5e9]/30"
+              data-testid="button-download-csv-template"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download Template
+            </button>
           </div>
           <div className="p-5">
             <button
               type="button"
-              onClick={handlePhotoUpload}
+              onClick={() => {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.accept = ".csv,text/csv";
+                input.onchange = (e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0];
+                  if (file) handleCsvImport(file);
+                };
+                input.click();
+              }}
               className="w-full flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 hover:border-[#0ea5e9] transition-all group outline-none focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-2"
-              data-testid="button-upload-photo"
+              data-testid="button-upload-csv"
             >
               <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-sm mb-4 group-hover:scale-110 transition-transform">
                 <Upload className="w-6 h-6 text-[#0ea5e9]" />
               </div>
               <p className="text-[#0f2744] font-bold text-lg mb-1">
-                Upload Photo
+                Upload CSV File
               </p>
-              <p className="text-[#0ea5e9] text-sm font-medium mb-3 flex items-center gap-1">
-                <Zap className="w-3.5 h-3.5" /> AI-assisted data extraction
+              <p className="text-slate-500 text-sm mb-1">
+                Import battery items from a spreadsheet
               </p>
-              <p className="text-slate-500 text-xs">
-                Supports JPG, PNG up to 10MB
+              <p className="text-slate-400 text-xs">
+                Download the template above for the correct format
               </p>
             </button>
-
-            {uploadedPhotos.length > 0 && (
-              <div className="mt-5">
-                <p className="text-xs font-medium text-slate-500 mb-3 uppercase tracking-wider">
-                  Attached Photos ({uploadedPhotos.length})
-                </p>
-                <div className="flex gap-3 overflow-x-auto pb-2">
-                  {uploadedPhotos.map((src, index) => (
-                    <div
-                      key={index}
-                      className="relative w-24 h-24 rounded-lg bg-slate-200 border border-slate-300 flex-shrink-0 group overflow-hidden"
-                      data-testid={`photo-thumbnail-${index}`}
-                    >
-                      <img
-                        src={src}
-                        alt={`Uploaded photo ${index + 1}`}
-                        className="absolute inset-0 w-full h-full object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removePhoto(index)}
-                        className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                        data-testid={`button-remove-photo-${index}`}
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={handlePhotoUpload}
-                    className="w-24 h-24 rounded-lg bg-slate-50 border border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:text-[#0ea5e9] hover:bg-sky-50 hover:border-[#0ea5e9] transition-colors flex-shrink-0"
-                    data-testid="button-add-more-photos"
-                  >
-                    <Plus className="w-6 h-6 mb-1" />
-                    <span className="text-xs font-medium">Add</span>
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </section>
 

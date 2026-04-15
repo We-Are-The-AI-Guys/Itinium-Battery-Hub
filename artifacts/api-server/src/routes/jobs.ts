@@ -251,14 +251,6 @@ router.post(
           })
           .returning();
 
-        const batteryCount = batteryInputs.length;
-        const seqResult = await tx.execute(
-          sql`SELECT nextval('pallet_number_seq') AS seq FROM generate_series(1, ${batteryCount})`
-        );
-        const palletNumbers = (seqResult.rows as { seq: string }[]).map(
-          (r) => `PLT-${String(r.seq).padStart(5, "0")}`
-        );
-
         const uniqueCellKeys = [...new Set(
           batteryInputs
             .filter(b => b.manufacture && b.cellType)
@@ -294,7 +286,7 @@ router.post(
           if (isFinite(parsed) && parsed > 0) latestLmeGbpPrice = parsed;
         }
 
-        const batteryRows = batteryInputs.map((b, idx) => {
+        const batteryRows = batteryInputs.map((b) => {
           const pbKey = `${b.manufacture}|${b.cellType}`;
           const pbContentKg = pbLookup.get(pbKey) || null;
           let valueGbp: string | null = null;
@@ -304,7 +296,7 @@ router.post(
           }
           return {
             jobId: job.id,
-            palletNumber: palletNumbers[idx],
+            palletNumber: b.palletNumber || null,
             assetNumber: b.assetNumber || null,
             batterySerial: b.batterySerial || null,
             manufacture: b.manufacture || null,
