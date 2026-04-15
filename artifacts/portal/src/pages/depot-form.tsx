@@ -1163,24 +1163,19 @@ export default function DepotFormPage() {
                         checked={battery.isLooseCells}
                         onChange={(e) => {
                           const checked = e.target.checked;
-                          let updatedBattery: BatteryRow | null = null;
+                          const updatedBattery: BatteryRow = {
+                            ...battery,
+                            isLooseCells: checked,
+                            voltage: checked ? "" : battery.voltage,
+                            customVoltage: checked ? "" : battery.customVoltage,
+                            looseCellsQty: checked ? battery.looseCellsQty : (battery.cellType === "Blocs" ? battery.looseCellsQty : ""),
+                            weightManual: checked ? false : battery.weightManual,
+                            estimatedWeightKg: checked ? "" : battery.estimatedWeightKg,
+                          };
                           setBatteries((prev) =>
-                            prev.map((b) => {
-                              if (b.id !== battery.id) return b;
-                              const updated = {
-                                ...b,
-                                isLooseCells: checked,
-                                voltage: checked ? "" : b.voltage,
-                                customVoltage: checked ? "" : b.customVoltage,
-                                looseCellsQty: checked ? b.looseCellsQty : (b.cellType === "Blocs" ? b.looseCellsQty : ""),
-                                weightManual: checked ? false : b.weightManual,
-                                estimatedWeightKg: checked ? "" : b.estimatedWeightKg,
-                              };
-                              updatedBattery = updated;
-                              return updated;
-                            })
+                            prev.map((b) => (b.id === battery.id ? updatedBattery : b))
                           );
-                          if (updatedBattery) computeAndSetAutoWeight(updatedBattery);
+                          computeAndSetAutoWeight(updatedBattery);
                         }}
                         className="h-4 w-4 rounded border-slate-300 text-[#0ea5e9] focus:ring-[#0ea5e9]"
                       />
