@@ -107,6 +107,7 @@ export default function AdminDashboardPage() {
   const [activeFilter, setActiveFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
   const [totalStillages, setTotalStillages] = useState<number | null>(null);
+  const [dashboardTab, setDashboardTab] = useState<"operational" | "financial">("operational");
 
   useEffect(() => {
     fetch("/api/dashboard/stats", { credentials: "include" })
@@ -160,213 +161,236 @@ export default function AdminDashboardPage() {
       subtitle="Overview of all operations"
       showSearch
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-amber-500 p-5 hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">Total Pending Jobs</p>
-              <h3 className="text-3xl font-bold text-[#0f2744]">
-                {stats?.pendingJobs ?? "..."}
-              </h3>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center">
-              <Clock className="w-5 h-5 text-amber-500" />
-            </div>
-          </div>
-          <div className="flex items-center text-sm">
-            <TrendingUp className="w-4 h-4 text-amber-600 mr-1" />
-            <span className="text-amber-600 font-medium">
-              +{stats?.pendingThisWeek ?? 0} this week
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-teal-500 p-5 hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">
-                Current Tonnage (Monthly)
-              </p>
-              <h3 className="text-3xl font-bold text-[#0f2744]">
-                {stats ? `${stats.monthlyTonnage.toFixed(1)}t` : "..."}
-              </h3>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center">
-              <Scale className="w-5 h-5 text-teal-500" />
-            </div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-slate-500 font-medium">
-                of {tonnageTarget}t target
-              </span>
-              <span className="text-teal-600 font-bold">{tonnagePercent}%</span>
-            </div>
-            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-teal-500 rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, tonnagePercent)}%` }}
-              ></div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-red-500 p-5 hover:shadow-md transition-shadow relative overflow-hidden">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">
-                Flagged Exceptions
-              </p>
-              <h3 className="text-3xl font-bold text-[#0f2744]">
-                {stats?.flaggedExceptions ?? "..."}
-              </h3>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center">
-              <AlertTriangle className="w-5 h-5 text-red-500" />
-            </div>
-          </div>
-          <div className="flex items-center text-sm">
-            <span className="w-2 h-2 rounded-full bg-red-500 mr-2"></span>
-            <span className="text-red-600 font-medium">
-              {stats?.flaggedExceptions
-                ? `${Math.max(1, Math.floor(stats.flaggedExceptions / 2))} critical`
-                : "..."}
-            </span>
-          </div>
-        </div>
+      <div className="flex bg-slate-100 p-1 rounded-lg mb-6 w-fit">
+        {([
+          { key: "operational", label: "Operational" },
+          { key: "financial", label: "Financial" },
+        ] as const).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setDashboardTab(tab.key)}
+            className={`px-5 py-2 text-sm font-medium rounded-md transition-all ${
+              dashboardTab === tab.key
+                ? "bg-white text-[#0f2744] shadow-sm"
+                : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-sky-500 p-5 hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">
-                Stillages In Circulation
-              </p>
-              <h3 className="text-3xl font-bold text-[#0f2744]">
-                {totalStillages !== null ? totalStillages : "..."}
-              </h3>
+      {dashboardTab === "operational" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-amber-500 p-5 hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">Total Pending Jobs</p>
+                <h3 className="text-3xl font-bold text-[#0f2744]">
+                  {stats?.pendingJobs ?? "..."}
+                </h3>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center">
+                <Clock className="w-5 h-5 text-amber-500" />
+              </div>
             </div>
-            <div className="w-10 h-10 rounded-lg bg-sky-50 flex items-center justify-center">
-              <Package className="w-5 h-5 text-sky-500" />
+            <div className="flex items-center text-sm">
+              <TrendingUp className="w-4 h-4 text-amber-600 mr-1" />
+              <span className="text-amber-600 font-medium">
+                +{stats?.pendingThisWeek ?? 0} this week
+              </span>
             </div>
           </div>
-          <div className="flex items-center text-sm">
-            <span className="text-sky-600 font-medium">
-              Across all depots
-            </span>
-          </div>
-        </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-green-500 p-5 hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">
-                Total Invoice Value
-              </p>
-              <h3 className="text-3xl font-bold text-[#0f2744]">
-                {stats ? formatCurrency(stats.totalInvoiceValue) : "..."}
-              </h3>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-teal-500 p-5 hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">
+                  Current Tonnage (Monthly)
+                </p>
+                <h3 className="text-3xl font-bold text-[#0f2744]">
+                  {stats ? `${stats.monthlyTonnage.toFixed(1)}t` : "..."}
+                </h3>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center">
+                <Scale className="w-5 h-5 text-teal-500" />
+              </div>
             </div>
-            <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center">
-              <Receipt className="w-5 h-5 text-green-500" />
-            </div>
-          </div>
-          <div className="flex items-center text-sm">
-            {momPositive ? (
-              <ArrowUpRight className="w-4 h-4 text-green-600 mr-1" />
-            ) : (
-              <ArrowDownRight className="w-4 h-4 text-red-500 mr-1" />
-            )}
-            <span className={`font-medium ${momPositive ? "text-green-600" : "text-red-500"}`}>
-              {momPositive ? "+" : ""}{momChange}% vs last month
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-violet-500 p-5 hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">
-                Avg CBL LME %
-              </p>
-              <h3 className="text-3xl font-bold text-[#0f2744]">
-                {stats ? `${stats.avgCblLmePercent.toFixed(1)}%` : "..."}
-              </h3>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-violet-50 flex items-center justify-center">
-              <Percent className="w-5 h-5 text-violet-500" />
-            </div>
-          </div>
-          <div className="flex items-center text-sm">
-            <span className="text-violet-600 font-medium">
-              Across all priced jobs
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-emerald-500 p-5 hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">
-                Total Gross Profit
-              </p>
-              <h3 className="text-3xl font-bold text-[#0f2744]">
-                {stats ? formatCurrency(stats.totalGrossProfit) : "..."}
-              </h3>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
-              <PoundSterling className="w-5 h-5 text-emerald-500" />
-            </div>
-          </div>
-          <div className="flex items-center text-sm">
-            {stats && stats.completedInvoiceValue > 0 ? (
-              <>
-                {(stats.totalGrossProfit / stats.completedInvoiceValue) * 100 >= 0 ? (
-                  <TrendingUp className="w-4 h-4 text-emerald-600 mr-1" />
-                ) : (
-                  <TrendingDown className="w-4 h-4 text-red-500 mr-1" />
-                )}
-                <span className="text-emerald-600 font-medium">
-                  {((stats.totalGrossProfit / stats.completedInvoiceValue) * 100).toFixed(1)}% margin
+            <div className="flex flex-col gap-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-500 font-medium">
+                  of {tonnageTarget}t target
                 </span>
-              </>
-            ) : (
-              <span className="text-slate-400 font-medium">No data yet</span>
-            )}
+                <span className="text-teal-600 font-bold">{tonnagePercent}%</span>
+              </div>
+              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-teal-500 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(100, tonnagePercent)}%` }}
+                ></div>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-sky-500 p-5 hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">
-                Avg Days to Pay
-              </p>
-              <h3 className="text-3xl font-bold text-[#0f2744]">
-                {stats ? (stats.avgDaysToPay > 0 ? `${stats.avgDaysToPay}` : "—") : "..."}
-              </h3>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-red-500 p-5 hover:shadow-md transition-shadow relative overflow-hidden">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">
+                  Flagged Exceptions
+                </p>
+                <h3 className="text-3xl font-bold text-[#0f2744]">
+                  {stats?.flaggedExceptions ?? "..."}
+                </h3>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-red-500" />
+              </div>
             </div>
-            <div className="w-10 h-10 rounded-lg bg-sky-50 flex items-center justify-center">
-              <CalendarClock className="w-5 h-5 text-sky-500" />
+            <div className="flex items-center text-sm">
+              <span className="w-2 h-2 rounded-full bg-red-500 mr-2"></span>
+              <span className="text-red-600 font-medium">
+                {stats?.flaggedExceptions
+                  ? `${Math.max(1, Math.floor(stats.flaggedExceptions / 2))} critical`
+                  : "..."}
+              </span>
             </div>
           </div>
-          <div className="flex items-center text-sm">
-            {stats && stats.overdueInvoices > 0 ? (
-              <>
-                <AlertTriangle className="w-4 h-4 text-red-500 mr-1" />
-                <span className="text-red-600 font-medium">
-                  {stats.overdueInvoices} overdue
-                </span>
-              </>
-            ) : (
+
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-sky-500 p-5 hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">
+                  Stillages In Circulation
+                </p>
+                <h3 className="text-3xl font-bold text-[#0f2744]">
+                  {totalStillages !== null ? totalStillages : "..."}
+                </h3>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-sky-50 flex items-center justify-center">
+                <Package className="w-5 h-5 text-sky-500" />
+              </div>
+            </div>
+            <div className="flex items-center text-sm">
               <span className="text-sky-600 font-medium">
-                All invoices on track
+                Across all depots
               </span>
-            )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {dashboardTab === "financial" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-green-500 p-5 hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">
+                  Total Invoice Value
+                </p>
+                <h3 className="text-3xl font-bold text-[#0f2744]">
+                  {stats ? formatCurrency(stats.totalInvoiceValue) : "..."}
+                </h3>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center">
+                <Receipt className="w-5 h-5 text-green-500" />
+              </div>
+            </div>
+            <div className="flex items-center text-sm">
+              {momPositive ? (
+                <ArrowUpRight className="w-4 h-4 text-green-600 mr-1" />
+              ) : (
+                <ArrowDownRight className="w-4 h-4 text-red-500 mr-1" />
+              )}
+              <span className={`font-medium ${momPositive ? "text-green-600" : "text-red-500"}`}>
+                {momPositive ? "+" : ""}{momChange}% vs last month
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-violet-500 p-5 hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">
+                  Avg CBL LME %
+                </p>
+                <h3 className="text-3xl font-bold text-[#0f2744]">
+                  {stats ? `${stats.avgCblLmePercent.toFixed(1)}%` : "..."}
+                </h3>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-violet-50 flex items-center justify-center">
+                <Percent className="w-5 h-5 text-violet-500" />
+              </div>
+            </div>
+            <div className="flex items-center text-sm">
+              <span className="text-violet-600 font-medium">
+                Across all priced jobs
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-emerald-500 p-5 hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">
+                  Total Gross Profit
+                </p>
+                <h3 className="text-3xl font-bold text-[#0f2744]">
+                  {stats ? formatCurrency(stats.totalGrossProfit) : "..."}
+                </h3>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
+                <PoundSterling className="w-5 h-5 text-emerald-500" />
+              </div>
+            </div>
+            <div className="flex items-center text-sm">
+              {stats && stats.completedInvoiceValue > 0 ? (
+                <>
+                  {(stats.totalGrossProfit / stats.completedInvoiceValue) * 100 >= 0 ? (
+                    <TrendingUp className="w-4 h-4 text-emerald-600 mr-1" />
+                  ) : (
+                    <TrendingDown className="w-4 h-4 text-red-500 mr-1" />
+                  )}
+                  <span className="text-emerald-600 font-medium">
+                    {((stats.totalGrossProfit / stats.completedInvoiceValue) * 100).toFixed(1)}% margin
+                  </span>
+                </>
+              ) : (
+                <span className="text-slate-400 font-medium">No data yet</span>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-sky-500 p-5 hover:shadow-md transition-shadow">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">
+                  Avg Days to Pay
+                </p>
+                <h3 className="text-3xl font-bold text-[#0f2744]">
+                  {stats ? (stats.avgDaysToPay > 0 ? `${stats.avgDaysToPay}` : "—") : "..."}
+                </h3>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-sky-50 flex items-center justify-center">
+                <CalendarClock className="w-5 h-5 text-sky-500" />
+              </div>
+            </div>
+            <div className="flex items-center text-sm">
+              {stats && stats.overdueInvoices > 0 ? (
+                <>
+                  <AlertTriangle className="w-4 h-4 text-red-500 mr-1" />
+                  <span className="text-red-600 font-medium">
+                    {stats.overdueInvoices} overdue
+                  </span>
+                </>
+              ) : (
+                <span className="text-sky-600 font-medium">
+                  All invoices on track
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="px-6 py-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
