@@ -93,10 +93,21 @@ interface BatteryData {
 }
 
 const statusStyles: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-800 border-amber-200",
-  approved: "bg-teal-100 text-teal-800 border-teal-200",
+  request: "bg-amber-100 text-amber-800 border-amber-200",
+  confirmed: "bg-teal-100 text-teal-800 border-teal-200",
+  received: "bg-blue-100 text-blue-800 border-blue-200",
+  invoice: "bg-violet-100 text-violet-800 border-violet-200",
+  awaiting_invoice: "bg-orange-100 text-orange-800 border-orange-200",
   completed: "bg-green-100 text-green-800 border-green-200",
-  flagged: "bg-red-100 text-red-800 border-red-200",
+};
+
+const statusLabels: Record<string, string> = {
+  request: "Request",
+  confirmed: "Confirmed",
+  received: "Received",
+  invoice: "Invoice",
+  awaiting_invoice: "Awaiting Invoice",
+  completed: "Completed",
 };
 
 function formatDate(dateStr: string | null) {
@@ -389,8 +400,8 @@ export default function JobDetailPage() {
           </button>
 
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className={`font-medium capitalize text-sm px-3 py-1 ${statusStyles[job.status] || ""}`}>
-              {job.status}
+            <Badge variant="outline" className={`font-medium text-sm px-3 py-1 ${statusStyles[job.status] || ""}`}>
+              {statusLabels[job.status] || job.status}
             </Badge>
           </div>
         </div>
@@ -751,14 +762,51 @@ export default function JobDetailPage() {
             <div className="border-t border-slate-200 pt-6">
               <h4 className="font-semibold text-[#0f2744] mb-3">Update Job Status</h4>
               <div className="flex flex-wrap gap-2">
-                {job.status !== "approved" && (
+                {job.status !== "request" && (
+                  <Button
+                    variant="outline"
+                    className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                    onClick={() => updateStatus("request")}
+                  >
+                    Request
+                  </Button>
+                )}
+                {job.status !== "confirmed" && (
                   <Button
                     variant="outline"
                     className="border-teal-300 text-teal-700 hover:bg-teal-50"
-                    onClick={() => updateStatus("approved")}
+                    onClick={() => updateStatus("confirmed")}
                   >
                     <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                    Approve
+                    Confirmed
+                  </Button>
+                )}
+                {job.status !== "received" && (
+                  <Button
+                    variant="outline"
+                    className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                    onClick={() => updateStatus("received")}
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                    Received
+                  </Button>
+                )}
+                {job.status !== "invoice" && (
+                  <Button
+                    variant="outline"
+                    className="border-violet-300 text-violet-700 hover:bg-violet-50"
+                    onClick={() => updateStatus("invoice")}
+                  >
+                    Invoice
+                  </Button>
+                )}
+                {job.status !== "awaiting_invoice" && (
+                  <Button
+                    variant="outline"
+                    className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                    onClick={() => updateStatus("awaiting_invoice")}
+                  >
+                    Awaiting Invoice
                   </Button>
                 )}
                 {job.status !== "completed" && (
@@ -768,26 +816,7 @@ export default function JobDetailPage() {
                     onClick={() => updateStatus("completed")}
                   >
                     <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                    Complete
-                  </Button>
-                )}
-                {job.status !== "flagged" && (
-                  <Button
-                    variant="outline"
-                    className="border-red-300 text-red-700 hover:bg-red-50"
-                    onClick={() => updateStatus("flagged")}
-                  >
-                    <AlertTriangle className="w-4 h-4 mr-1.5" />
-                    Flag Exception
-                  </Button>
-                )}
-                {job.status !== "pending" && (
-                  <Button
-                    variant="outline"
-                    className="border-amber-300 text-amber-700 hover:bg-amber-50"
-                    onClick={() => updateStatus("pending")}
-                  >
-                    Reset to Pending
+                    Completed
                   </Button>
                 )}
               </div>

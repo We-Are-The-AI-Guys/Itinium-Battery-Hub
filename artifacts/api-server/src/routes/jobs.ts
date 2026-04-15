@@ -17,7 +17,7 @@ router.get(
       const offsetNum = Math.max(0, parseInt(offset as string, 10) || 0);
 
       const conditions = [];
-      if (status && status !== "All") {
+      if (status && status !== "All" && status !== "all") {
         conditions.push(eq(jobsTable.status, (status as string).toLowerCase()));
       }
       if (invoiceStatus) {
@@ -245,7 +245,7 @@ router.post(
             collectionPoint: collectionPoint || null,
             collectionDate: collectionDate || null,
             tonnage: finalTonnage,
-            status: "pending",
+            status: "request",
             notes: notes || null,
             submittedById: req.user!.id,
           })
@@ -469,7 +469,7 @@ router.patch(
       }
 
       const { status } = req.body;
-      const validStatuses = ["pending", "approved", "completed", "flagged"];
+      const validStatuses = ["request", "confirmed", "received", "invoice", "awaiting_invoice", "completed"];
       if (!status || !validStatuses.includes(status)) {
         res.status(400).json({ message: "Invalid status. Must be one of: " + validStatuses.join(", ") });
         return;
@@ -595,12 +595,7 @@ router.get(
       const [pendingResult] = await db
         .select({ count: count() })
         .from(jobsTable)
-        .where(eq(jobsTable.status, "pending"));
-
-      const [flaggedResult] = await db
-        .select({ count: count() })
-        .from(jobsTable)
-        .where(eq(jobsTable.status, "flagged"));
+        .where(eq(jobsTable.status, "request"));
 
       const [tonnageResult] = await db
         .select({
@@ -679,7 +674,7 @@ router.get(
         .from(jobsTable)
         .where(
           and(
-            eq(jobsTable.status, "pending"),
+            eq(jobsTable.status, "request"),
             sql`${jobsTable.submittedAt} >= NOW() - INTERVAL '7 days'`,
           )
         );
@@ -698,7 +693,7 @@ router.get(
 
       res.json({
         pendingJobs: pendingResult?.count || 0,
-        flaggedExceptions: flaggedResult?.count || 0,
+        flaggedExceptions: 0,
         monthlyTonnage: parseFloat(tonnageResult?.total || "0"),
         totalInvoiceValue: parseFloat(invoiceAllTime?.total || "0"),
         pendingThisWeek: weekJobsResult?.count || 0,

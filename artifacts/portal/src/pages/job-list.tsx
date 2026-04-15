@@ -46,10 +46,21 @@ interface Pagination {
 }
 
 const statusStyles: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-800 border-amber-200",
-  approved: "bg-teal-100 text-teal-800 border-teal-200",
+  request: "bg-amber-100 text-amber-800 border-amber-200",
+  confirmed: "bg-teal-100 text-teal-800 border-teal-200",
+  received: "bg-blue-100 text-blue-800 border-blue-200",
+  invoice: "bg-violet-100 text-violet-800 border-violet-200",
+  awaiting_invoice: "bg-orange-100 text-orange-800 border-orange-200",
   completed: "bg-green-100 text-green-800 border-green-200",
-  flagged: "bg-red-100 text-red-800 border-red-200",
+};
+
+const statusLabels: Record<string, string> = {
+  request: "Request",
+  confirmed: "Confirmed",
+  received: "Received",
+  invoice: "Invoice",
+  awaiting_invoice: "Awaiting Invoice",
+  completed: "Completed",
 };
 
 function formatDate(dateStr: string | null) {
@@ -87,7 +98,7 @@ export default function JobListPage() {
   const [, setLocation] = useLocation();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
-  const [activeFilter, setActiveFilter] = useState("All");
+  const [activeFilter, setActiveFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -106,7 +117,7 @@ export default function JobListPage() {
 
   useEffect(() => {
     const params = new URLSearchParams();
-    if (activeFilter !== "All") params.set("status", activeFilter.toLowerCase());
+    if (activeFilter !== "all") params.set("status", activeFilter);
     if (paymentFilter !== "all") params.set("paymentStatus", paymentFilter);
     if (searchQuery.trim()) params.set("search", searchQuery.trim());
     if (collectionPointFilter) params.set("collectionPoint", collectionPointFilter);
@@ -163,19 +174,27 @@ export default function JobListPage() {
           <div className="flex flex-wrap items-center gap-4 mt-4">
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-slate-400" />
-              <div className="flex bg-slate-100 p-1 rounded-lg">
-                {["All", "Pending", "Approved", "Completed", "Flagged"].map((filter) => (
+              <div className="flex bg-slate-100 p-1 rounded-lg flex-wrap">
+                {[
+                  { value: "all", label: "All" },
+                  { value: "request", label: "Request" },
+                  { value: "confirmed", label: "Confirmed" },
+                  { value: "received", label: "Received" },
+                  { value: "invoice", label: "Invoice" },
+                  { value: "awaiting_invoice", label: "Awaiting Invoice" },
+                  { value: "completed", label: "Completed" },
+                ].map((filter) => (
                   <button
-                    key={filter}
-                    onClick={() => handleFilterChange(filter)}
+                    key={filter.value}
+                    onClick={() => handleFilterChange(filter.value)}
                     className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                      activeFilter === filter
+                      activeFilter === filter.value
                         ? "bg-white text-[#0f2744] shadow-sm"
                         : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                     }`}
-                    data-testid={`filter-${filter.toLowerCase()}`}
+                    data-testid={`filter-${filter.value}`}
                   >
-                    {filter}
+                    {filter.label}
                   </button>
                 ))}
               </div>
@@ -279,9 +298,9 @@ export default function JobListPage() {
                   <td className="px-6 py-4">
                     <Badge
                       variant="outline"
-                      className={`font-medium capitalize ${statusStyles[job.status] || ""}`}
+                      className={`font-medium ${statusStyles[job.status] || ""}`}
                     >
-                      {job.status}
+                      {statusLabels[job.status] || job.status}
                     </Badge>
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">

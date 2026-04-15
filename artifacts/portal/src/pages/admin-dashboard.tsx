@@ -56,10 +56,21 @@ interface Pagination {
 }
 
 const statusStyles: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-800 border-amber-200",
-  approved: "bg-teal-100 text-teal-800 border-teal-200",
+  request: "bg-amber-100 text-amber-800 border-amber-200",
+  confirmed: "bg-teal-100 text-teal-800 border-teal-200",
+  received: "bg-blue-100 text-blue-800 border-blue-200",
+  invoice: "bg-violet-100 text-violet-800 border-violet-200",
+  awaiting_invoice: "bg-orange-100 text-orange-800 border-orange-200",
   completed: "bg-green-100 text-green-800 border-green-200",
-  flagged: "bg-red-100 text-red-800 border-red-200",
+};
+
+const statusLabels: Record<string, string> = {
+  request: "Request",
+  confirmed: "Confirmed",
+  received: "Received",
+  invoice: "Invoice",
+  awaiting_invoice: "Awaiting Invoice",
+  completed: "Completed",
 };
 
 const invoiceStatusStyles: Record<string, string> = {
@@ -397,18 +408,26 @@ export default function AdminDashboardPage() {
           <h3 className="text-lg font-bold text-[#0f2744]">Recent Jobs</h3>
 
           <div className="flex items-center gap-4">
-            <div className="flex bg-slate-100 p-1 rounded-lg">
-              {["All", "Pending", "Approved", "Completed"].map((filter) => (
+            <div className="flex bg-slate-100 p-1 rounded-lg flex-wrap">
+              {[
+                { value: "All", label: "All" },
+                { value: "request", label: "Request" },
+                { value: "confirmed", label: "Confirmed" },
+                { value: "received", label: "Received" },
+                { value: "invoice", label: "Invoice" },
+                { value: "awaiting_invoice", label: "Awaiting Invoice" },
+                { value: "completed", label: "Completed" },
+              ].map((filter) => (
                 <button
-                  key={filter}
-                  onClick={() => handleFilterChange(filter)}
+                  key={filter.value}
+                  onClick={() => handleFilterChange(filter.value)}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                    activeFilter === filter
+                    activeFilter === filter.value
                       ? "bg-white text-[#0f2744] shadow-sm"
                       : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
                   }`}
                 >
-                  {filter}
+                  {filter.label}
                 </button>
               ))}
             </div>
@@ -467,11 +486,11 @@ export default function AdminDashboardPage() {
                   <td className="px-6 py-4">
                     <Badge
                       variant="outline"
-                      className={`font-medium capitalize ${
+                      className={`font-medium ${
                         statusStyles[job.status] || ""
                       }`}
                     >
-                      {job.status}
+                      {statusLabels[job.status] || job.status}
                     </Badge>
                   </td>
                   <td className="px-6 py-4">

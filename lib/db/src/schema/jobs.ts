@@ -17,7 +17,7 @@ export const jobsTable = pgTable("jobs", {
   collectionDate: date("collection_date"),
   submittedAt: timestamp("submitted_at").defaultNow().notNull(),
   tonnage: decimal("tonnage", { precision: 10, scale: 3 }).notNull(),
-  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  status: varchar("status", { length: 50 }).notNull().default("request"),
   notes: text("notes"),
   invoiceStatus: varchar("invoice_status", { length: 50 }).default("pending_invoice"),
   lmeRateUsed: decimal("lme_rate_used", { precision: 12, scale: 2 }),
