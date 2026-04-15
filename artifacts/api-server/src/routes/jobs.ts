@@ -120,6 +120,7 @@ router.get(
 );
 
 interface BatteryInput {
+  palletNumber?: string | null;
   assetNumber?: string | null;
   batterySerial?: string | null;
   manufacture?: string | null;

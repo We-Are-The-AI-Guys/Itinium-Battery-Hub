@@ -399,6 +399,17 @@ export default function DepotFormPage() {
           const idx = headers.findIndex((h) => aliases.includes(h));
           if (idx !== -1) colMap[field] = idx;
         }
+        const requiredFields = ["batterySerial", "assetNumber"];
+        const missingRequired = requiredFields.filter((f) => !(f in colMap));
+        if (missingRequired.length > 0) {
+          toast({
+            title: "Missing required columns",
+            description: `CSV is missing required columns. Please use the template to ensure correct headers.`,
+            variant: "destructive",
+          });
+          return;
+        }
+
         const dataRows = rows.slice(1);
         const imported: BatteryRow[] = dataRows.map((row) => ({
           id: crypto.randomUUID(),
