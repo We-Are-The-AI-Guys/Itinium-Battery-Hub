@@ -1462,7 +1462,7 @@ function CellModelCombobox({
     if (!search.trim()) return manufacturerModels.slice(0, 50);
     const q = search.toLowerCase().replace(/\s+/g, "");
     return manufacturerModels
-      .filter((m) => m.modelName.toLowerCase().replace(/\s+/g, "").includes(q) || m.cellFamily.toLowerCase().includes(q))
+      .filter((m) => m.modelName.toLowerCase().replace(/\s+/g, "").startsWith(q) || m.cellFamily.toLowerCase().includes(q))
       .slice(0, 50);
   }, [manufacturerModels, search]);
 
@@ -1554,7 +1554,6 @@ function CellModelCombobox({
                       }}
                     >
                       <span>{m.modelName}</span>
-                      <span className="text-[10px] text-slate-400 ml-2">{m.weightPerCellKg} kg/cell &middot; {m.cellHeightMm}mm</span>
                     </button>
                   ))}
                 </div>
