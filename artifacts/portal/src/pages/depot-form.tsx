@@ -1279,7 +1279,7 @@ export default function DepotFormPage() {
                     {battery.estimatedWeightKg && !battery.weightManual && (
                       <p className="text-[10px] text-emerald-600">Auto-populated from reference</p>
                     )}
-                    {battery.weightManual && battery.cellType && !battery.isLooseCells && (
+                    {battery.weightManual && battery.cellType && (
                       <button
                         type="button"
                         className="text-[10px] text-[#0ea5e9] hover:underline"
