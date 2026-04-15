@@ -7,6 +7,11 @@ import { CELL_MODEL_DATA } from "@workspace/db/data/cell-models";
 async function seed() {
   const password = await bcrypt.hash("password123", 10);
 
+  await db.execute(sql`UPDATE jobs SET status = 'request' WHERE status = 'pending'`);
+  await db.execute(sql`UPDATE jobs SET status = 'confirmed' WHERE status = 'approved'`);
+  await db.execute(sql`UPDATE jobs SET status = 'request' WHERE status = 'flagged'`);
+  await db.execute(sql`ALTER TABLE jobs ALTER COLUMN status SET DEFAULT 'request'`);
+
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS clients (
       id SERIAL PRIMARY KEY,
