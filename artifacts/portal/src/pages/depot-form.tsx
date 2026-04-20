@@ -486,7 +486,7 @@ export default function DepotFormPage() {
           if (!b.manufacture.trim()) missing.push("Manufacturer");
           if (cellModelApplies && !b.cellModel.trim()) missing.push("Cell Model");
           if (voltageApplies && !b.voltage.trim()) missing.push("Voltage");
-          if (missing.length > 0) issues.push({ rowNum: i + 1, missing });
+          if (missing.length > 0) issues.push({ rowNum: i + 2, missing });
         });
 
         if (issues.length > 0) {
@@ -559,8 +559,11 @@ export default function DepotFormPage() {
         ) {
           newB.cellModelFlagReason = "";
         }
-        if ((field === "voltage" || field === "customVoltage") && value.trim()) {
-          newB.voltageFlagReason = "";
+        if (field === "voltage" || field === "customVoltage") {
+          const effectiveVoltage = newB.voltage === "Other" ? newB.customVoltage : newB.voltage;
+          if (effectiveVoltage.trim()) {
+            newB.voltageFlagReason = "";
+          }
         }
         return newB;
       });
