@@ -915,32 +915,13 @@ export default function DepotFormPage() {
           />
         </div>
         <div className="flex items-center gap-3">
-          <div className="hidden sm:flex flex-col items-end">
-            <span className="text-sm font-medium text-slate-700">
-              {user
-                ? (getSelectedLocationName() ||
-                    user.locationName ||
-                    user.depot ||
-                    (user.role === "head_office_admin" || user.role === "accounts"
-                      ? "Admin — pick a depot"
-                      : user.clientName || "—"))
-                : "Loading..."}
-            </span>
-            <span className="text-xs text-slate-500">
-              {user?.clientName ? `${user.fullName} · ${user.clientName}` : user?.fullName || "..."}
-            </span>
-          </div>
-          <div
-            className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-[#0f2744] font-medium text-sm cursor-pointer"
+          <span
+            className="text-sm font-medium text-slate-700 cursor-pointer"
             onClick={handleLogout}
             data-testid="button-header-logout"
           >
-            {user?.fullName
-              ?.split(" ")
-              .map((n) => n[0])
-              .join("")
-              .toUpperCase() || ".."}
-          </div>
+            {user?.fullName || "Loading..."}
+          </span>
         </div>
       </header>
 
