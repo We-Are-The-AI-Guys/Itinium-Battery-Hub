@@ -50,6 +50,14 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
 interface CellModelOption {
@@ -80,6 +88,9 @@ interface BatteryRow {
   isLooseCells: boolean;
   serialFlagged: boolean;
   serialFlagReason: string;
+  manufacturerFlagReason: string;
+  cellModelFlagReason: string;
+  voltageFlagReason: string;
   rowPhoto: string;
 }
 
@@ -119,11 +130,16 @@ function createEmptyBattery(): BatteryRow {
     isLooseCells: false,
     serialFlagged: false,
     serialFlagReason: "",
+    manufacturerFlagReason: "",
+    cellModelFlagReason: "",
+    voltageFlagReason: "",
     rowPhoto: "",
   };
 }
 
-const CSV_TEMPLATE_HEADERS = "Pallet Number,Asset No,Battery Serial,Manufacturer,Cell Type,Voltage,Loose Cells Qty,Est Weight Kg,Notes";
+const CSV_TEMPLATE_HEADERS = "Pallet Number,Asset No,Battery Serial,Manufacturer,Cell Type,Cell Model,Voltage,Loose Cells Qty,Est Weight Kg,Notes";
+
+const CSV_FLAG_REASON = "Missing from CSV import";
 
 function parseCSV(text: string): string[][] {
   const rows: string[][] = [];
@@ -201,6 +217,7 @@ export default function DepotFormPage() {
   const [collectionPoint, setCollectionPoint] = useState("");
   const [jobNotes, setJobNotes] = useState("");
   const [batteries, setBatteries] = useState<BatteryRow[]>([createEmptyBattery()]);
+  const [pendingCsvImport, setPendingCsvImport] = useState<{ rows: BatteryRow[]; issues: { rowNum: number; missing: string[] }[] } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [tonnageOverride, setTonnageOverride] = useState("");
   const [tonnageManual, setTonnageManual] = useState(false);
@@ -409,7 +426,8 @@ export default function DepotFormPage() {
           ["assetNumber", ["assetno", "assetnumber", "asset"]],
           ["batterySerial", ["batteryserial", "batteryserialno", "serial", "serialno"]],
           ["manufacture", ["manufacturer", "manufacture", "mfr"]],
-          ["cellType", ["celltype", "celltypemodel", "cellmodel", "type"]],
+          ["cellType", ["celltype", "celltypefamily", "type", "cellfamily"]],
+          ["cellModel", ["cellmodel", "model", "cellmodelname"]],
           ["voltage", ["voltage", "volt", "v"]],
           ["looseCellsQty", ["loosecellsqty", "loosecells", "cellqty", "qty"]],
           ["estimatedWeightKg", ["estweightkg", "estimatedweightkg", "weightkg", "weight"]],
@@ -430,37 +448,81 @@ export default function DepotFormPage() {
           return;
         }
 
-        const dataRows = rows.slice(1);
-        const imported: BatteryRow[] = dataRows.map((row) => ({
-          id: crypto.randomUUID(),
-          palletNumber: row[colMap["palletNumber"]] || "",
-          assetNumber: row[colMap["assetNumber"]] || "",
-          batterySerial: row[colMap["batterySerial"]] || "",
-          manufacture: row[colMap["manufacture"]] || "",
-          manufactureCustom: "",
-          cellType: row[colMap["cellType"]] || "",
-          cellModel: "",
-          voltage: row[colMap["voltage"]] || "",
-          customVoltage: "",
-          looseCellsQty: row[colMap["looseCellsQty"]] || "",
-          estimatedWeightKg: row[colMap["estimatedWeightKg"]] || "",
-          weightManual: !!(row[colMap["estimatedWeightKg"]]),
-          notes: row[colMap["notes"]] || "",
-          isLooseCells: !!(row[colMap["looseCellsQty"]] && parseInt(row[colMap["looseCellsQty"]], 10) > 0),
-          serialFlagged: false,
-          serialFlagReason: "",
-          rowPhoto: "",
-        }));
-        setBatteries((prev) => {
-          const hasOnlyEmpty = prev.length === 1 && !prev[0].assetNumber && !prev[0].batterySerial && !prev[0].palletNumber;
-          return hasOnlyEmpty ? imported : [...prev, ...imported];
+        const dataRows = rows.slice(1).filter((row) => row.some((cell) => cell && cell.trim()));
+        const imported: BatteryRow[] = dataRows.map((row) => {
+          const looseQty = colMap["looseCellsQty"] !== undefined ? row[colMap["looseCellsQty"]] || "" : "";
+          return {
+            id: crypto.randomUUID(),
+            palletNumber: row[colMap["palletNumber"]] || "",
+            assetNumber: row[colMap["assetNumber"]] || "",
+            batterySerial: row[colMap["batterySerial"]] || "",
+            manufacture: colMap["manufacture"] !== undefined ? row[colMap["manufacture"]] || "" : "",
+            manufactureCustom: "",
+            cellType: colMap["cellType"] !== undefined ? row[colMap["cellType"]] || "" : "",
+            cellModel: colMap["cellModel"] !== undefined ? row[colMap["cellModel"]] || "" : "",
+            voltage: colMap["voltage"] !== undefined ? row[colMap["voltage"]] || "" : "",
+            customVoltage: "",
+            looseCellsQty: looseQty,
+            estimatedWeightKg: colMap["estimatedWeightKg"] !== undefined ? row[colMap["estimatedWeightKg"]] || "" : "",
+            weightManual: !!(colMap["estimatedWeightKg"] !== undefined && row[colMap["estimatedWeightKg"]]),
+            notes: colMap["notes"] !== undefined ? row[colMap["notes"]] || "" : "",
+            isLooseCells: !!(looseQty && parseInt(looseQty, 10) > 0),
+            serialFlagged: false,
+            serialFlagReason: "",
+            manufacturerFlagReason: "",
+            cellModelFlagReason: "",
+            voltageFlagReason: "",
+            rowPhoto: "",
+          };
         });
-        toast({ title: "CSV imported", description: `${imported.length} battery row(s) added from CSV.` });
+
+        // Detect rows missing the three critical fields (manufacturer, cell
+        // model/type, voltage). Loose-cells rows do not need a voltage.
+        const issues: { rowNum: number; missing: string[] }[] = [];
+        imported.forEach((b, i) => {
+          const missing: string[] = [];
+          const voltageApplies = !b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other";
+          if (!b.manufacture.trim()) missing.push("Manufacturer");
+          if (!b.cellType.trim() && !b.cellModel.trim()) missing.push("Cell Model");
+          if (voltageApplies && !b.voltage.trim()) missing.push("Voltage");
+          if (missing.length > 0) issues.push({ rowNum: i + 1, missing });
+        });
+
+        if (issues.length > 0) {
+          setPendingCsvImport({ rows: imported, issues });
+          return;
+        }
+
+        commitCsvImport(imported);
       } catch {
         toast({ title: "CSV import failed", description: "Could not parse the CSV file. Please check the format.", variant: "destructive" });
       }
     };
     reader.readAsText(file);
+  }
+
+  function commitCsvImport(rows: BatteryRow[], applyFlags = false) {
+    const finalRows = applyFlags
+      ? rows.map((b) => ({
+          ...b,
+          manufacturerFlagReason: !b.manufacture.trim() ? CSV_FLAG_REASON : b.manufacturerFlagReason,
+          cellModelFlagReason: (!b.cellType.trim() && !b.cellModel.trim()) ? CSV_FLAG_REASON : b.cellModelFlagReason,
+          voltageFlagReason: (!b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other" && !b.voltage.trim()) ? CSV_FLAG_REASON : b.voltageFlagReason,
+        }))
+      : rows;
+    setBatteries((prev) => {
+      const hasOnlyEmpty = prev.length === 1 && !prev[0].assetNumber && !prev[0].batterySerial && !prev[0].palletNumber;
+      return hasOnlyEmpty ? finalRows : [...prev, ...finalRows];
+    });
+    const flaggedCount = applyFlags
+      ? finalRows.filter((b) => b.manufacturerFlagReason || b.cellModelFlagReason || b.voltageFlagReason).length
+      : 0;
+    toast({
+      title: "CSV imported",
+      description: flaggedCount > 0
+        ? `${finalRows.length} row(s) added — ${flaggedCount} flagged for Itinium review.`
+        : `${finalRows.length} battery row(s) added from CSV.`,
+    });
   }
 
   function updateBattery(id: string, field: keyof BatteryRow, value: string) {
@@ -485,6 +547,16 @@ export default function DepotFormPage() {
           if (model) {
             newB.cellType = model.cellFamily;
           }
+        }
+        // Auto-clear CSV-import flags as soon as the user fills in a value
+        if (field === "manufacture" && value.trim()) {
+          newB.manufacturerFlagReason = "";
+        }
+        if ((field === "cellType" || field === "cellModel") && (newB.cellType.trim() || newB.cellModel.trim())) {
+          newB.cellModelFlagReason = "";
+        }
+        if ((field === "voltage" || field === "customVoltage") && value.trim()) {
+          newB.voltageFlagReason = "";
         }
         return newB;
       });
@@ -598,6 +670,9 @@ export default function DepotFormPage() {
             estimatedWeightKg: b.estimatedWeightKg || null,
             isLooseCells: b.isLooseCells,
             serialFlagReason: b.serialFlagged ? (b.serialFlagReason || null) : null,
+            manufacturerFlagReason: b.manufacturerFlagReason || null,
+            cellModelFlagReason: b.cellModelFlagReason || null,
+            voltageFlagReason: b.isLooseCells ? null : (b.voltageFlagReason || null),
             rowPhoto: b.rowPhoto || null,
             notes: b.notes || null,
           })),
@@ -901,10 +976,12 @@ export default function DepotFormPage() {
           </div>
 
           <div className="divide-y divide-slate-100">
-            {batteries.map((battery, index) => (
+            {batteries.map((battery, index) => {
+              const hasAnyFlag = battery.serialFlagged || !!battery.manufacturerFlagReason || !!battery.cellModelFlagReason || !!battery.voltageFlagReason;
+              return (
               <div
                 key={battery.id}
-                className={`p-5 bg-white hover:bg-slate-50/30 transition-colors ${battery.serialFlagged ? "border-l-4 border-l-amber-400" : ""}`}
+                className={`p-5 bg-white hover:bg-slate-50/30 transition-colors ${hasAnyFlag ? "border-l-4 border-l-amber-400" : ""}`}
                 data-testid={`battery-row-${index}`}
               >
                 <div className="flex items-center justify-between mb-4">
@@ -912,7 +989,7 @@ export default function DepotFormPage() {
                     <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                       Battery #{index + 1}
                     </span>
-                    {battery.serialFlagged && (
+                    {hasAnyFlag && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
                         <AlertTriangle className="w-3 h-3" />
                         Needs Review
@@ -1136,6 +1213,12 @@ export default function DepotFormPage() {
                         data-testid={`input-manufacture-custom-${index}`}
                       />
                     )}
+                    {battery.manufacturerFlagReason && (
+                      <p className="text-[10px] text-amber-600 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        Flagged — missing from CSV. Fill in to clear.
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
@@ -1153,7 +1236,13 @@ export default function DepotFormPage() {
                           setBatteries((prev) =>
                             prev.map((b) =>
                               b.id === battery.id
-                                ? { ...b, cellType: val, cellModel: "" }
+                                ? {
+                                    ...b,
+                                    cellType: val,
+                                    cellModel: "",
+                                    cellModelFlagReason: val.trim() ? "" : b.cellModelFlagReason,
+                                    voltageFlagReason: (val === "Blocs" || val === "Other") ? "" : b.voltageFlagReason,
+                                  }
                                 : b
                             )
                           );
@@ -1165,6 +1254,12 @@ export default function DepotFormPage() {
                     {battery.cellModel && (
                       <p className="text-[10px] text-emerald-600">
                         Cell model selected &mdash; weight = {(() => { const effMfr = battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture; return (cellModels.find(m => m.modelName === battery.cellModel && (!effMfr || m.manufacturer === effMfr)) || cellModels.find(m => m.modelName === battery.cellModel))?.weightPerCellKg || "?"; })()} kg/cell
+                      </p>
+                    )}
+                    {battery.cellModelFlagReason && (
+                      <p className="text-[10px] text-amber-600 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        Flagged — missing from CSV. Fill in to clear.
                       </p>
                     )}
                   </div>
@@ -1184,6 +1279,7 @@ export default function DepotFormPage() {
                             looseCellsQty: checked ? battery.looseCellsQty : (battery.cellType === "Blocs" ? battery.looseCellsQty : ""),
                             weightManual: checked ? false : battery.weightManual,
                             estimatedWeightKg: checked ? "" : battery.estimatedWeightKg,
+                            voltageFlagReason: checked ? "" : battery.voltageFlagReason,
                           };
                           setBatteries((prev) =>
                             prev.map((b) => (b.id === battery.id ? updatedBattery : b))
@@ -1238,6 +1334,14 @@ export default function DepotFormPage() {
                             onChange={(e) => updateBattery(battery.id, "customVoltage", e.target.value)}
                             data-testid={`input-custom-voltage-${index}`}
                           />
+                        </div>
+                      )}
+                      {battery.voltageFlagReason && (
+                        <div className="sm:col-span-2 lg:col-span-2">
+                          <p className="text-[10px] text-amber-600 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            Voltage flagged — missing from CSV. Fill in to clear.
+                          </p>
                         </div>
                       )}
                     </>
@@ -1388,7 +1492,8 @@ export default function DepotFormPage() {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="px-5 py-3 bg-slate-50 border-t border-slate-100">
@@ -1562,6 +1667,76 @@ export default function DepotFormPage() {
           </Button>
         </div>
       </footer>
+
+      <Dialog
+        open={!!pendingCsvImport}
+        onOpenChange={(open) => { if (!open) setPendingCsvImport(null); }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#0f2744]">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              CSV rows missing critical fields
+            </DialogTitle>
+            <DialogDescription>
+              {pendingCsvImport && (
+                <>
+                  {pendingCsvImport.issues.length} of {pendingCsvImport.rows.length} row(s) in your CSV are missing
+                  one or more of the fields Itinium needs to price this collection
+                  (Manufacturer, Cell Model, Voltage). You can either go back and
+                  fix the CSV, or import anyway — the affected rows will be flagged
+                  for the Itinium team to review.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {pendingCsvImport && (
+            <div className="max-h-72 overflow-y-auto border border-amber-200 rounded-md bg-amber-50/40">
+              <table className="w-full text-sm">
+                <thead className="bg-amber-100/60 text-xs text-amber-900 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold">CSV Row</th>
+                    <th className="px-3 py-2 text-left font-semibold">Missing fields</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-amber-100">
+                  {pendingCsvImport.issues.map((issue) => (
+                    <tr key={issue.rowNum}>
+                      <td className="px-3 py-2 text-amber-900 font-mono text-xs">#{issue.rowNum}</td>
+                      <td className="px-3 py-2 text-amber-800">{issue.missing.join(", ")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingCsvImport(null)}
+              data-testid="button-csv-validation-cancel"
+            >
+              Cancel — fix CSV
+            </Button>
+            <Button
+              type="button"
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+              onClick={() => {
+                if (pendingCsvImport) {
+                  commitCsvImport(pendingCsvImport.rows, true);
+                  setPendingCsvImport(null);
+                }
+              }}
+              data-testid="button-csv-validation-override"
+            >
+              Import anyway and flag for review
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

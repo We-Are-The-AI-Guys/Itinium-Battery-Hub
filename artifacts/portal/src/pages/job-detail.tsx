@@ -89,6 +89,9 @@ interface BatteryData {
   estimatedWeightKg: string | null;
   isLooseCells: boolean | null;
   serialFlagReason: string | null;
+  manufacturerFlagReason: string | null;
+  cellModelFlagReason: string | null;
+  voltageFlagReason: string | null;
   rowPhoto: string | null;
 }
 
@@ -474,8 +477,10 @@ export default function JobDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {batteries.map((b, i) => (
-                      <tr key={b.id} className={`${b.serialFlagReason ? "bg-amber-50/60 border-l-4 border-l-amber-400" : (i % 2 === 0 ? "bg-white" : "bg-slate-50/30")}`}>
+                    {batteries.map((b, i) => {
+                      const hasAnyFlag = !!(b.serialFlagReason || b.manufacturerFlagReason || b.cellModelFlagReason || b.voltageFlagReason);
+                      return (
+                      <tr key={b.id} className={`${hasAnyFlag ? "bg-amber-50/60 border-l-4 border-l-amber-400" : (i % 2 === 0 ? "bg-white" : "bg-slate-50/30")}`}>
                         <td className="px-3 py-2.5 text-slate-500">{i + 1}</td>
                         <td className="px-3 py-2.5 text-slate-700">{b.palletNumber || "—"}</td>
                         <td className="px-3 py-2.5 text-slate-700">{b.assetNumber || "—"}</td>
@@ -492,13 +497,24 @@ export default function JobDetailPage() {
                         <td className="px-3 py-2.5 text-slate-700">{b.voltage || "—"}</td>
                         <td className="px-3 py-2.5 text-slate-700">{b.looseCellsQty ?? "—"}</td>
                         <td className="px-3 py-2.5">
-                          {b.serialFlagReason ? (
+                          {hasAnyFlag ? (
                             <div className="flex flex-col gap-1">
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200 w-fit">
                                 <AlertTriangle className="w-3 h-3" />
                                 Needs Review
                               </span>
-                              <span className="text-[10px] text-amber-700">{b.serialFlagReason}</span>
+                              {b.serialFlagReason && (
+                                <span className="text-[10px] text-amber-700"><span className="font-semibold">Serial:</span> {b.serialFlagReason}</span>
+                              )}
+                              {b.manufacturerFlagReason && (
+                                <span className="text-[10px] text-amber-700"><span className="font-semibold">Manufacturer:</span> {b.manufacturerFlagReason}</span>
+                              )}
+                              {b.cellModelFlagReason && (
+                                <span className="text-[10px] text-amber-700"><span className="font-semibold">Cell Model:</span> {b.cellModelFlagReason}</span>
+                              )}
+                              {b.voltageFlagReason && (
+                                <span className="text-[10px] text-amber-700"><span className="font-semibold">Voltage:</span> {b.voltageFlagReason}</span>
+                              )}
                               {b.rowPhoto && (
                                 <a href={b.rowPhoto} target="_blank" rel="noreferrer" className="text-[10px] text-[#0ea5e9] hover:underline">View Photo</a>
                               )}
@@ -507,7 +523,8 @@ export default function JobDetailPage() {
                         </td>
                         <td className="px-3 py-2.5 text-slate-500 max-w-[200px] truncate">{b.notes || "—"}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

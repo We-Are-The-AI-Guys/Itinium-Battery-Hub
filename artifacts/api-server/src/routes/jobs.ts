@@ -131,6 +131,9 @@ interface BatteryInput {
   notes?: string | null;
   isLooseCells?: boolean;
   serialFlagReason?: string | null;
+  manufacturerFlagReason?: string | null;
+  cellModelFlagReason?: string | null;
+  voltageFlagReason?: string | null;
   rowPhoto?: string | null;
 }
 
@@ -307,6 +310,9 @@ router.post(
             estimatedWeightKg: sanitizeWeight(b.estimatedWeightKg),
             isLooseCells: b.isLooseCells || false,
             serialFlagReason: b.serialFlagReason || null,
+            manufacturerFlagReason: b.manufacturerFlagReason || null,
+            cellModelFlagReason: b.cellModelFlagReason || null,
+            voltageFlagReason: b.voltageFlagReason || null,
             rowPhoto: b.rowPhoto || null,
             notes: b.notes || null,
             pbContentKg,
