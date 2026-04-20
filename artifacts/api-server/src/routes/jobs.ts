@@ -3,6 +3,10 @@ import { db } from "@workspace/db";
 import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable, locationsTable, clientsTable } from "@workspace/db/schema";
 import { eq, sql, and, count, ilike, or, inArray, desc } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
+import { MANUFACTURERS } from "./manufacturers";
+
+const CSV_FLAG_REASON = "Missing from CSV import";
+const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
 
 const router: IRouter = Router();
 
@@ -233,6 +237,45 @@ router.post(
         }
       }
 
+      const knownManufacturers = new Set(
+        MANUFACTURERS.filter((m) => m.toLowerCase() !== "other").map((m) => m.toLowerCase())
+      );
+      const allCellModels = await db
+        .select({
+          manufacturer: cellModelsTable.manufacturer,
+          modelName: cellModelsTable.modelName,
+          pbContentKgPerCell: cellModelsTable.pbContentKgPerCell,
+          cellsCount: cellModelsTable.cellsCount,
+        })
+        .from(cellModelsTable);
+
+      for (const b of batteryInputs) {
+        const mfrStr = (b.manufacture || "").trim();
+        const cellTypeStr = (b.cellType || "").trim();
+        const cellModelApplies = cellTypeStr !== "Blocs" && cellTypeStr !== "Other";
+
+        if (!b.manufacturerFlagReason) {
+          if (!mfrStr) {
+            b.manufacturerFlagReason = CSV_FLAG_REASON;
+          } else if (!knownManufacturers.has(mfrStr.toLowerCase())) {
+            b.manufacturerFlagReason = CSV_UNKNOWN_FLAG_REASON;
+          }
+        }
+
+        if (!b.cellModelFlagReason && cellModelApplies) {
+          if (!cellTypeStr) {
+            b.cellModelFlagReason = CSV_FLAG_REASON;
+          } else if (allCellModels.length > 0) {
+            const matches = allCellModels.some(
+              (m) =>
+                m.modelName.toLowerCase() === cellTypeStr.toLowerCase() &&
+                (!mfrStr || m.manufacturer.toLowerCase() === mfrStr.toLowerCase())
+            );
+            if (!matches) b.cellModelFlagReason = CSV_UNKNOWN_FLAG_REASON;
+          }
+        }
+      }
+
       const result = await db.transaction(async (tx) => {
         const jobCount = await tx.select({ count: count() }).from(jobsTable);
         const nextNum = (jobCount[0]?.count || 0) + 1;
@@ -262,15 +305,7 @@ router.post(
         )];
         const pbLookup = new Map<string, string>();
         if (uniqueCellKeys.length > 0) {
-          const cellModels = await tx
-            .select({
-              manufacturer: cellModelsTable.manufacturer,
-              modelName: cellModelsTable.modelName,
-              pbContentKgPerCell: cellModelsTable.pbContentKgPerCell,
-              cellsCount: cellModelsTable.cellsCount,
-            })
-            .from(cellModelsTable);
-          for (const cm of cellModels) {
+          for (const cm of allCellModels) {
             if (cm.pbContentKgPerCell != null) {
               const key = `${cm.manufacturer}|${cm.modelName}`;
               const totalPb = parseFloat(cm.pbContentKgPerCell) * cm.cellsCount;

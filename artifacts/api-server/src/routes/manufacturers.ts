@@ -2,7 +2,7 @@ import { Router } from "express";
 
 const router = Router();
 
-const MANUFACTURERS = [
+export const MANUFACTURERS = [
   "EnerSys / Hawker",
   "Espex",
   "Eternity / Juice",
