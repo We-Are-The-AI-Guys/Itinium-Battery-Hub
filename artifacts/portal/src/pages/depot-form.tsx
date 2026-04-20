@@ -142,6 +142,43 @@ const CSV_TEMPLATE_HEADERS = "Pallet Number,Asset No,Battery Serial,Manufacturer
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
 
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp: number[] = new Array(n + 1);
+  for (let j = 0; j <= n; j++) dp[j] = j;
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      dp[j] = a.charCodeAt(i - 1) === b.charCodeAt(j - 1)
+        ? prev
+        : 1 + Math.min(prev, dp[j], dp[j - 1]);
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+
+function findClosestMatch(value: string, candidates: string[], minSimilarity = 0.6): string | null {
+  const v = value.trim().toLowerCase();
+  if (!v) return null;
+  let best: { candidate: string; sim: number } | null = null;
+  for (const c of candidates) {
+    const cl = c.toLowerCase();
+    if (cl === v) return null;
+    const dist = levenshtein(v, cl);
+    const maxLen = Math.max(v.length, cl.length);
+    if (maxLen === 0) continue;
+    const sim = 1 - dist / maxLen;
+    if (!best || sim > best.sim) best = { candidate: c, sim };
+  }
+  return best && best.sim >= minSimilarity ? best.candidate : null;
+}
+
 function parseCSV(text: string): string[][] {
   const rows: string[][] = [];
   const lines = text.split(/\r?\n/);
@@ -218,7 +255,18 @@ export default function DepotFormPage() {
   const [collectionPoint, setCollectionPoint] = useState("");
   const [jobNotes, setJobNotes] = useState("");
   const [batteries, setBatteries] = useState<BatteryRow[]>([createEmptyBattery()]);
-  const [pendingCsvImport, setPendingCsvImport] = useState<{ rows: BatteryRow[]; issues: { rowNum: number; missing: string[] }[] } | null>(null);
+  const [pendingCsvImport, setPendingCsvImport] = useState<{
+    rows: BatteryRow[];
+    issues: {
+      rowNum: number;
+      rowId: string;
+      fields: {
+        label: string;
+        target?: "manufacture" | "cellModel";
+        suggestion?: string;
+      }[];
+    }[];
+  } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [tonnageOverride, setTonnageOverride] = useState("");
   const [tonnageManual, setTonnageManual] = useState(false);
@@ -477,42 +525,7 @@ export default function DepotFormPage() {
           };
         });
 
-        // Detect rows missing the three critical fields (manufacturer, cell
-        // model/type, voltage). Loose-cells rows do not need a voltage.
-        // Also detect rows whose manufacturer or cell model is non-empty but
-        // does not match Itinium's known lists (e.g. typo'd "Hoppick").
-        const knownManufacturers = new Set(
-          manufacturers.filter((m) => m.toLowerCase() !== "other").map((m) => m.toLowerCase())
-        );
-        const issues: { rowNum: number; missing: string[] }[] = [];
-        imported.forEach((b, i) => {
-          const missing: string[] = [];
-          const cellModelApplies = b.cellType !== "Blocs" && b.cellType !== "Other";
-          const voltageApplies = !b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other";
-          if (!b.manufacture.trim()) {
-            missing.push("Manufacturer");
-          } else if (manufacturers.length > 0 && !knownManufacturers.has(b.manufacture.trim().toLowerCase())) {
-            missing.push(`Unknown manufacturer "${b.manufacture.trim()}"`);
-          }
-          if (cellModelApplies && !b.cellModel.trim()) {
-            missing.push("Cell Model");
-          } else if (cellModelApplies && b.cellModel.trim() && cellModels.length > 0) {
-            const mfr = b.manufacture.trim();
-            const modelMatches = cellModels.some((m) =>
-              m.modelName.toLowerCase() === b.cellModel.trim().toLowerCase() &&
-              (!mfr || m.manufacturer.toLowerCase() === mfr.toLowerCase())
-            );
-            if (!modelMatches) {
-              missing.push(
-                mfr
-                  ? `Unknown cell model "${b.cellModel.trim()}" for ${mfr}`
-                  : `Unknown cell model "${b.cellModel.trim()}"`
-              );
-            }
-          }
-          if (voltageApplies && !b.voltage.trim()) missing.push("Voltage");
-          if (missing.length > 0) issues.push({ rowNum: i + 2, missing });
-        });
+        const issues = validateImportRows(imported);
 
         if (issues.length > 0) {
           setPendingCsvImport({ rows: imported, issues });
@@ -525,6 +538,91 @@ export default function DepotFormPage() {
       }
     };
     reader.readAsText(file);
+  }
+
+  function validateImportRows(rows: BatteryRow[]) {
+    const knownManufacturers = manufacturers.filter((m) => m.toLowerCase() !== "other");
+    const knownManufacturersLower = new Set(knownManufacturers.map((m) => m.toLowerCase()));
+    const issues: {
+      rowNum: number;
+      rowId: string;
+      fields: { label: string; target?: "manufacture" | "cellModel"; suggestion?: string }[];
+    }[] = [];
+    rows.forEach((b, i) => {
+      const fields: { label: string; target?: "manufacture" | "cellModel"; suggestion?: string }[] = [];
+      const cellModelApplies = b.cellType !== "Blocs" && b.cellType !== "Other";
+      const voltageApplies = !b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other";
+      if (!b.manufacture.trim()) {
+        fields.push({ label: "Manufacturer" });
+      } else if (knownManufacturers.length > 0 && !knownManufacturersLower.has(b.manufacture.trim().toLowerCase())) {
+        fields.push({
+          label: `Unknown manufacturer "${b.manufacture.trim()}"`,
+          target: "manufacture",
+          suggestion: findClosestMatch(b.manufacture, knownManufacturers) ?? undefined,
+        });
+      }
+      if (cellModelApplies && !b.cellModel.trim()) {
+        fields.push({ label: "Cell Model" });
+      } else if (cellModelApplies && b.cellModel.trim() && cellModels.length > 0) {
+        const mfr = b.manufacture.trim();
+        const modelMatches = cellModels.some(
+          (m) =>
+            m.modelName.toLowerCase() === b.cellModel.trim().toLowerCase() &&
+            (!mfr || m.manufacturer.toLowerCase() === mfr.toLowerCase())
+        );
+        if (!modelMatches) {
+          const candidatePool = mfr
+            ? cellModels.filter((m) => m.manufacturer.toLowerCase() === mfr.toLowerCase())
+            : cellModels;
+          const candidates = Array.from(new Set(candidatePool.map((m) => m.modelName)));
+          const suggestion =
+            findClosestMatch(b.cellModel, candidates) ??
+            (mfr ? findClosestMatch(b.cellModel, Array.from(new Set(cellModels.map((m) => m.modelName)))) ?? undefined : undefined);
+          fields.push({
+            label: mfr
+              ? `Unknown cell model "${b.cellModel.trim()}" for ${mfr}`
+              : `Unknown cell model "${b.cellModel.trim()}"`,
+            target: "cellModel",
+            suggestion: suggestion ?? undefined,
+          });
+        }
+      }
+      if (voltageApplies && !b.voltage.trim()) fields.push({ label: "Voltage" });
+      if (fields.length > 0) issues.push({ rowNum: i + 2, rowId: b.id, fields });
+    });
+    return issues;
+  }
+
+  function applyCsvSuggestion(rowId: string, target: "manufacture" | "cellModel", value: string) {
+    setPendingCsvImport((prev) => {
+      if (!prev) return prev;
+      const updatedRows = prev.rows.map((r) => {
+        if (r.id !== rowId) return r;
+        if (target === "manufacture") {
+          return { ...r, manufacture: value, manufactureCustom: "" };
+        }
+        const mfr = r.manufacture.trim();
+        const matchedModel =
+          (mfr
+            ? cellModels.find(
+                (m) => m.modelName === value && m.manufacturer.toLowerCase() === mfr.toLowerCase()
+              )
+            : undefined) ?? cellModels.find((m) => m.modelName === value);
+        return {
+          ...r,
+          cellModel: value,
+          cellType: matchedModel ? matchedModel.cellFamily : r.cellType,
+        };
+      });
+      const updatedIssues = validateImportRows(updatedRows);
+      if (updatedIssues.length === 0) {
+        setTimeout(() => {
+          commitCsvImport(updatedRows);
+          setPendingCsvImport(null);
+        }, 0);
+      }
+      return { rows: updatedRows, issues: updatedIssues };
+    });
   }
 
   function commitCsvImport(rows: BatteryRow[], applyFlags = false) {
@@ -1279,10 +1377,30 @@ export default function DepotFormPage() {
                       />
                     )}
                     {battery.manufacturerFlagReason && (
-                      <p className="text-[10px] text-amber-600 flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3" />
-                        Flagged — missing from CSV. Fill in to clear.
-                      </p>
+                      <div className="space-y-1">
+                        <p className="text-[10px] text-amber-600 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          {battery.manufacturerFlagReason === CSV_UNKNOWN_FLAG_REASON
+                            ? `Flagged — "${battery.manufacture}" is not in Itinium's known list.`
+                            : "Flagged — missing from CSV. Fill in to clear."}
+                        </p>
+                        {(() => {
+                          if (battery.manufacturerFlagReason !== CSV_UNKNOWN_FLAG_REASON) return null;
+                          const knownMfrs = manufacturers.filter((m) => m.toLowerCase() !== "other");
+                          const suggestion = findClosestMatch(battery.manufacture, knownMfrs);
+                          if (!suggestion) return null;
+                          return (
+                            <button
+                              type="button"
+                              className="text-[10px] font-medium text-[#0ea5e9] hover:text-[#0284c7] hover:underline"
+                              onClick={() => updateBattery(battery.id, "manufacture", suggestion)}
+                              data-testid={`button-mfr-suggestion-${index}`}
+                            >
+                              Did you mean: {suggestion}?
+                            </button>
+                          );
+                        })()}
+                      </div>
                     )}
                   </div>
 
@@ -1322,10 +1440,40 @@ export default function DepotFormPage() {
                       </p>
                     )}
                     {battery.cellModelFlagReason && (
-                      <p className="text-[10px] text-amber-600 flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3" />
-                        Flagged — missing from CSV. Fill in to clear.
-                      </p>
+                      <div className="space-y-1">
+                        <p className="text-[10px] text-amber-600 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          {battery.cellModelFlagReason === CSV_UNKNOWN_FLAG_REASON
+                            ? `Flagged — "${battery.cellModel}" is not in Itinium's known list.`
+                            : "Flagged — missing from CSV. Fill in to clear."}
+                        </p>
+                        {(() => {
+                          if (battery.cellModelFlagReason !== CSV_UNKNOWN_FLAG_REASON) return null;
+                          const effMfr = battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture;
+                          const scoped = effMfr
+                            ? cellModels.filter((m) => m.manufacturer.toLowerCase() === effMfr.toLowerCase())
+                            : cellModels;
+                          const candidates = Array.from(new Set(scoped.map((m) => m.modelName)));
+                          let suggestion = findClosestMatch(battery.cellModel, candidates);
+                          if (!suggestion && effMfr) {
+                            suggestion = findClosestMatch(
+                              battery.cellModel,
+                              Array.from(new Set(cellModels.map((m) => m.modelName)))
+                            );
+                          }
+                          if (!suggestion) return null;
+                          return (
+                            <button
+                              type="button"
+                              className="text-[10px] font-medium text-[#0ea5e9] hover:text-[#0284c7] hover:underline"
+                              onClick={() => updateBattery(battery.id, "cellModel", suggestion!)}
+                              data-testid={`button-cellmodel-suggestion-${index}`}
+                            >
+                              Did you mean: {suggestion}?
+                            </button>
+                          );
+                        })()}
+                      </div>
                     )}
                   </div>
 
@@ -1741,16 +1889,16 @@ export default function DepotFormPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-[#0f2744]">
               <AlertTriangle className="w-5 h-5 text-amber-500" />
-              CSV rows missing critical fields
+              CSV rows need attention
             </DialogTitle>
             <DialogDescription>
               {pendingCsvImport && (
                 <>
                   {pendingCsvImport.issues.length} of {pendingCsvImport.rows.length} row(s) in your CSV are missing
-                  one or more of the fields Itinium needs to price this collection
-                  (Manufacturer, Cell Model, Voltage). You can either go back and
-                  fix the CSV, or import anyway — the affected rows will be flagged
-                  for the Itinium team to review.
+                  or have unknown values for fields Itinium needs to price this
+                  collection (Manufacturer, Cell Model, Voltage). Apply a suggested
+                  match where shown, go back and fix the CSV, or import anyway —
+                  affected rows will be flagged for the Itinium team to review.
                 </>
               )}
             </DialogDescription>
@@ -1762,14 +1910,32 @@ export default function DepotFormPage() {
                 <thead className="bg-amber-100/60 text-xs text-amber-900 sticky top-0">
                   <tr>
                     <th className="px-3 py-2 text-left font-semibold">CSV Row</th>
-                    <th className="px-3 py-2 text-left font-semibold">Missing fields</th>
+                    <th className="px-3 py-2 text-left font-semibold">Missing or unknown fields</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-amber-100">
                   {pendingCsvImport.issues.map((issue) => (
                     <tr key={issue.rowNum}>
-                      <td className="px-3 py-2 text-amber-900 font-mono text-xs">#{issue.rowNum}</td>
-                      <td className="px-3 py-2 text-amber-800">{issue.missing.join(", ")}</td>
+                      <td className="px-3 py-2 text-amber-900 font-mono text-xs align-top">#{issue.rowNum}</td>
+                      <td className="px-3 py-2 text-amber-800">
+                        <ul className="space-y-1">
+                          {issue.fields.map((f, idx) => (
+                            <li key={idx} className="flex flex-wrap items-center gap-2">
+                              <span>{f.label}</span>
+                              {f.target && f.suggestion && (
+                                <button
+                                  type="button"
+                                  className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0ea5e9] hover:text-[#0284c7] hover:underline"
+                                  onClick={() => applyCsvSuggestion(issue.rowId, f.target!, f.suggestion!)}
+                                  data-testid={`button-csv-suggestion-${issue.rowNum}-${f.target}`}
+                                >
+                                  Did you mean: {f.suggestion}?
+                                </button>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
