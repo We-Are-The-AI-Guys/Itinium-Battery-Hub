@@ -481,7 +481,9 @@ export default function DepotFormPage() {
         // model/type, voltage). Loose-cells rows do not need a voltage.
         // Also detect rows whose manufacturer or cell model is non-empty but
         // does not match Itinium's known lists (e.g. typo'd "Hoppick").
-        const knownManufacturers = new Set(manufacturers.map((m) => m.toLowerCase()));
+        const knownManufacturers = new Set(
+          manufacturers.filter((m) => m.toLowerCase() !== "other").map((m) => m.toLowerCase())
+        );
         const issues: { rowNum: number; missing: string[] }[] = [];
         imported.forEach((b, i) => {
           const missing: string[] = [];
@@ -526,7 +528,9 @@ export default function DepotFormPage() {
   }
 
   function commitCsvImport(rows: BatteryRow[], applyFlags = false) {
-    const knownManufacturers = new Set(manufacturers.map((m) => m.toLowerCase()));
+    const knownManufacturers = new Set(
+      manufacturers.filter((m) => m.toLowerCase() !== "other").map((m) => m.toLowerCase())
+    );
     const finalRows = applyFlags
       ? rows.map((b) => {
           const cellModelApplies = b.cellType !== "Blocs" && b.cellType !== "Other";
