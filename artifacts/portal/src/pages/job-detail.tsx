@@ -93,6 +93,9 @@ interface BatteryData {
   cellModelFlagReason: string | null;
   voltageFlagReason: string | null;
   rowPhoto: string | null;
+  resolvedById: number | null;
+  resolvedAt: string | null;
+  resolvedByName: string | null;
 }
 
 const statusStyles: Record<string, string> = {
@@ -918,7 +921,16 @@ function CollectionBatteryRow({
           </span>
         )}
       </td>
-      <td className="px-3 py-2.5 text-slate-500 max-w-[200px] truncate">{battery.notes || "—"}</td>
+      <td className="px-3 py-2.5 text-slate-500 max-w-[200px] truncate">
+        <div className="flex flex-col gap-0.5">
+          <span className="truncate">{battery.notes || "—"}</span>
+          {battery.resolvedByName && battery.resolvedAt && (
+            <span className="text-[10px] text-slate-400" title={new Date(battery.resolvedAt).toLocaleString("en-GB")}>
+              Resolved by {battery.resolvedByName} on {formatDate(battery.resolvedAt)}
+            </span>
+          )}
+        </div>
+      </td>
     </tr>
   );
 }

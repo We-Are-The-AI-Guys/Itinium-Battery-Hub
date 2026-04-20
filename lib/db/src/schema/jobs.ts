@@ -67,6 +67,8 @@ export const jobBatteriesTable = pgTable("job_batteries", {
   voltageFlagReason: varchar("voltage_flag_reason", { length: 100 }),
   rowPhoto: text("row_photo"),
   adminNotes: text("admin_notes"),
+  resolvedById: integer("resolved_by_id").references(() => usersTable.id),
+  resolvedAt: timestamp("resolved_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_job_batteries_job_id").on(table.jobId),

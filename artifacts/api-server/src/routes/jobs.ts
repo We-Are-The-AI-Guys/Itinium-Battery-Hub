@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable, locationsTable, clientsTable } from "@workspace/db/schema";
+import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable, locationsTable, clientsTable, usersTable } from "@workspace/db/schema";
 import { eq, sql, and, count, ilike, or, inArray, desc } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { MANUFACTURERS } from "./manufacturers";
@@ -110,10 +110,25 @@ router.get(
         return;
       }
 
-      const batteries = await db
+      const batteryRows = await db
         .select()
         .from(jobBatteriesTable)
         .where(eq(jobBatteriesTable.jobId, jobId));
+
+      const resolverIds = [...new Set(batteryRows.map(b => b.resolvedById).filter((v): v is number => v != null))];
+      const resolverMap = new Map<number, string>();
+      if (resolverIds.length > 0) {
+        const resolvers = await db
+          .select({ id: usersTable.id, fullName: usersTable.fullName })
+          .from(usersTable)
+          .where(inArray(usersTable.id, resolverIds));
+        for (const r of resolvers) resolverMap.set(r.id, r.fullName);
+      }
+
+      const batteries = batteryRows.map(b => ({
+        ...b,
+        resolvedByName: b.resolvedById != null ? (resolverMap.get(b.resolvedById) || null) : null,
+      }));
 
       res.json({ job, batteries });
     } catch (error) {
@@ -551,35 +566,63 @@ router.patch(
         return s === "" ? null : s;
       };
 
-      const updates: Record<string, string | boolean | null> = {};
+      const updates: Record<string, string | boolean | number | Date | null> = {};
       if (receiptConfirmed !== undefined) updates.receiptConfirmed = receiptConfirmed === true || receiptConfirmed === "true";
       if (pbContentKg !== undefined) updates.pbContentKg = toDecimal(pbContentKg);
       if (valueGbp !== undefined) updates.valueGbp = toDecimal(valueGbp);
       if (adminNotes !== undefined) updates.adminNotes = adminNotes !== null && adminNotes !== undefined && adminNotes !== "" ? String(adminNotes) : null;
 
+      const [existing] = await db
+        .select()
+        .from(jobBatteriesTable)
+        .where(and(eq(jobBatteriesTable.id, batteryId), eq(jobBatteriesTable.jobId, jobId)));
+      if (!existing) {
+        res.status(404).json({ message: "Battery not found" });
+        return;
+      }
+
+      let clearedAnyFlag = false;
       if (batterySerial !== undefined) {
         const v = toTrimmedStr(batterySerial);
         updates.batterySerial = v;
-        if (v !== null) updates.serialFlagReason = null;
+        if (v !== null) {
+          updates.serialFlagReason = null;
+          if (existing.serialFlagReason) clearedAnyFlag = true;
+        }
       }
       if (clearSerialFlag === true || clearSerialFlag === "true") {
         updates.serialFlagReason = null;
+        if (existing.serialFlagReason) clearedAnyFlag = true;
       }
 
       if (manufacture !== undefined) {
         const v = toTrimmedStr(manufacture);
         updates.manufacture = v;
-        if (v !== null) updates.manufacturerFlagReason = null;
+        if (v !== null) {
+          updates.manufacturerFlagReason = null;
+          if (existing.manufacturerFlagReason) clearedAnyFlag = true;
+        }
       }
       if (cellType !== undefined) {
         const v = toTrimmedStr(cellType);
         updates.cellType = v;
-        if (v !== null) updates.cellModelFlagReason = null;
+        if (v !== null) {
+          updates.cellModelFlagReason = null;
+          if (existing.cellModelFlagReason) clearedAnyFlag = true;
+        }
       }
       if (voltage !== undefined) {
         const v = toTrimmedStr(voltage);
         updates.voltage = v;
-        if (v !== null) updates.voltageFlagReason = null;
+        if (v !== null) {
+          updates.voltageFlagReason = null;
+          if (existing.voltageFlagReason) clearedAnyFlag = true;
+        }
+      }
+
+      if (clearedAnyFlag) {
+        updates.resolvedById = req.user!.id;
+        updates.resolvedAt = new Date();
       }
 
       if (Object.keys(updates).length === 0) {
@@ -598,7 +641,16 @@ router.patch(
         return;
       }
 
-      res.json({ battery: updated });
+      let resolvedByName: string | null = null;
+      if (updated.resolvedById != null) {
+        const [resolver] = await db
+          .select({ fullName: usersTable.fullName })
+          .from(usersTable)
+          .where(eq(usersTable.id, updated.resolvedById));
+        resolvedByName = resolver?.fullName || null;
+      }
+
+      res.json({ battery: { ...updated, resolvedByName } });
     } catch (error) {
       console.error("Battery admin update error:", error);
       res.status(500).json({ message: "Internal server error" });
