@@ -140,6 +140,7 @@ function createEmptyBattery(): BatteryRow {
 const CSV_TEMPLATE_HEADERS = "Pallet Number,Asset No,Battery Serial,Manufacturer,Cell Type,Cell Model,Voltage,Loose Cells Qty,Est Weight Kg,Notes";
 
 const CSV_FLAG_REASON = "Missing from CSV import";
+const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
 
 function parseCSV(text: string): string[][] {
   const rows: string[][] = [];
@@ -478,13 +479,35 @@ export default function DepotFormPage() {
 
         // Detect rows missing the three critical fields (manufacturer, cell
         // model/type, voltage). Loose-cells rows do not need a voltage.
+        // Also detect rows whose manufacturer or cell model is non-empty but
+        // does not match Itinium's known lists (e.g. typo'd "Hoppick").
+        const knownManufacturers = new Set(manufacturers.map((m) => m.toLowerCase()));
         const issues: { rowNum: number; missing: string[] }[] = [];
         imported.forEach((b, i) => {
           const missing: string[] = [];
           const cellModelApplies = b.cellType !== "Blocs" && b.cellType !== "Other";
           const voltageApplies = !b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other";
-          if (!b.manufacture.trim()) missing.push("Manufacturer");
-          if (cellModelApplies && !b.cellModel.trim()) missing.push("Cell Model");
+          if (!b.manufacture.trim()) {
+            missing.push("Manufacturer");
+          } else if (manufacturers.length > 0 && !knownManufacturers.has(b.manufacture.trim().toLowerCase())) {
+            missing.push(`Unknown manufacturer "${b.manufacture.trim()}"`);
+          }
+          if (cellModelApplies && !b.cellModel.trim()) {
+            missing.push("Cell Model");
+          } else if (cellModelApplies && b.cellModel.trim() && cellModels.length > 0) {
+            const mfr = b.manufacture.trim();
+            const modelMatches = cellModels.some((m) =>
+              m.modelName.toLowerCase() === b.cellModel.trim().toLowerCase() &&
+              (!mfr || m.manufacturer.toLowerCase() === mfr.toLowerCase())
+            );
+            if (!modelMatches) {
+              missing.push(
+                mfr
+                  ? `Unknown cell model "${b.cellModel.trim()}" for ${mfr}`
+                  : `Unknown cell model "${b.cellModel.trim()}"`
+              );
+            }
+          }
           if (voltageApplies && !b.voltage.trim()) missing.push("Voltage");
           if (missing.length > 0) issues.push({ rowNum: i + 2, missing });
         });
@@ -503,13 +526,37 @@ export default function DepotFormPage() {
   }
 
   function commitCsvImport(rows: BatteryRow[], applyFlags = false) {
+    const knownManufacturers = new Set(manufacturers.map((m) => m.toLowerCase()));
     const finalRows = applyFlags
-      ? rows.map((b) => ({
-          ...b,
-          manufacturerFlagReason: !b.manufacture.trim() ? CSV_FLAG_REASON : b.manufacturerFlagReason,
-          cellModelFlagReason: (b.cellType !== "Blocs" && b.cellType !== "Other" && !b.cellModel.trim()) ? CSV_FLAG_REASON : b.cellModelFlagReason,
-          voltageFlagReason: (!b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other" && !b.voltage.trim()) ? CSV_FLAG_REASON : b.voltageFlagReason,
-        }))
+      ? rows.map((b) => {
+          const cellModelApplies = b.cellType !== "Blocs" && b.cellType !== "Other";
+          const voltageApplies = !b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other";
+          let manufacturerFlagReason = b.manufacturerFlagReason;
+          if (!b.manufacture.trim()) {
+            manufacturerFlagReason = CSV_FLAG_REASON;
+          } else if (manufacturers.length > 0 && !knownManufacturers.has(b.manufacture.trim().toLowerCase())) {
+            manufacturerFlagReason = CSV_UNKNOWN_FLAG_REASON;
+          }
+          let cellModelFlagReason = b.cellModelFlagReason;
+          if (cellModelApplies && !b.cellModel.trim()) {
+            cellModelFlagReason = CSV_FLAG_REASON;
+          } else if (cellModelApplies && b.cellModel.trim() && cellModels.length > 0) {
+            const mfr = b.manufacture.trim();
+            const modelMatches = cellModels.some((m) =>
+              m.modelName.toLowerCase() === b.cellModel.trim().toLowerCase() &&
+              (!mfr || m.manufacturer.toLowerCase() === mfr.toLowerCase())
+            );
+            if (!modelMatches) cellModelFlagReason = CSV_UNKNOWN_FLAG_REASON;
+          }
+          const voltageFlagReason =
+            voltageApplies && !b.voltage.trim() ? CSV_FLAG_REASON : b.voltageFlagReason;
+          return {
+            ...b,
+            manufacturerFlagReason,
+            cellModelFlagReason,
+            voltageFlagReason,
+          };
+        })
       : rows;
     setBatteries((prev) => {
       const hasOnlyEmpty = prev.length === 1 && !prev[0].assetNumber && !prev[0].batterySerial && !prev[0].palletNumber;
