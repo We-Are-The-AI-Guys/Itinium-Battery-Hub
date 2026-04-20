@@ -9,6 +9,7 @@ import {
   Filter,
   AlertCircle,
   MapPin,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SidebarLayout } from "@/components/sidebar-layout";
+import { useToast } from "@/hooks/use-toast";
 
 interface Job {
   id: number;
@@ -94,8 +96,20 @@ interface CollectionPointOption {
   address: string;
 }
 
+const STATUS_OPTIONS = [
+  { value: "request", label: "Request" },
+  { value: "confirmed", label: "Confirmed" },
+  { value: "received", label: "Received" },
+  { value: "invoice", label: "Invoice" },
+  { value: "awaiting_invoice", label: "Awaiting Invoice" },
+  { value: "completed", label: "Completed" },
+];
+
+const ROLES_CAN_EDIT_STATUS = ["team_leader", "accounts", "head_office_admin"];
+
 export default function JobListPage() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [activeFilter, setActiveFilter] = useState("all");
@@ -104,7 +118,19 @@ export default function JobListPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [collectionPointFilter, setCollectionPointFilter] = useState("");
   const [collectionPointOptions, setCollectionPointOptions] = useState<CollectionPointOption[]>([]);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
   const PAGE_SIZE = 10;
+  const canEditStatus = !!userRole && ROLES_CAN_EDIT_STATUS.includes(userRole);
+
+  useEffect(() => {
+    fetch("/api/auth/me", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.user?.role) setUserRole(data.user.role);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetch("/api/collection-points", { credentials: "include" })
@@ -114,6 +140,34 @@ export default function JobListPage() {
       })
       .catch(() => {});
   }, []);
+
+  async function handleStatusChange(jobId: number, newStatus: string) {
+    const previousJobs = jobs;
+    setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, status: newStatus } : j)));
+    setUpdatingStatusId(jobId);
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) {
+        setJobs(previousJobs);
+        toast({ title: "Error", description: "Failed to update status.", variant: "destructive" });
+      } else {
+        toast({
+          title: "Status updated",
+          description: `Job marked as ${statusLabels[newStatus] || newStatus}.`,
+        });
+      }
+    } catch {
+      setJobs(previousJobs);
+      toast({ title: "Error", description: "Network error.", variant: "destructive" });
+    } finally {
+      setUpdatingStatusId(null);
+    }
+  }
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -295,13 +349,37 @@ export default function JobListPage() {
                   <td className="px-6 py-4 font-medium text-slate-700">
                     {parseFloat(job.tonnage).toFixed(3)}t
                   </td>
-                  <td className="px-6 py-4">
-                    <Badge
-                      variant="outline"
-                      className={`font-medium ${statusStyles[job.status] || ""}`}
-                    >
-                      {statusLabels[job.status] || job.status}
-                    </Badge>
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                    {canEditStatus ? (
+                      <Select
+                        value={job.status}
+                        onValueChange={(val) => handleStatusChange(job.id, val)}
+                        disabled={updatingStatusId === job.id}
+                      >
+                        <SelectTrigger
+                          className={`h-7 w-auto min-w-[8.5rem] gap-1.5 px-2.5 py-0.5 text-xs font-medium rounded-md border [&>svg]:hidden ${statusStyles[job.status] || ""}`}
+                          data-testid={`select-status-${job.id}`}
+                          title="Click to change status"
+                        >
+                          <span className="truncate">{statusLabels[job.status] || job.status}</span>
+                          <ChevronDown className="w-3 h-3 opacity-60" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STATUS_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className={`font-medium ${statusStyles[job.status] || ""}`}
+                      >
+                        {statusLabels[job.status] || job.status}
+                      </Badge>
+                    )}
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">
                     {formatCurrency(job.totalInvoiceValue)}
