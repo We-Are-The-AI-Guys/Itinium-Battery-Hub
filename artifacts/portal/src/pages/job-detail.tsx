@@ -363,6 +363,9 @@ export default function JobDetailPage() {
           prev.map((b) => (b.id === batteryId ? data.battery : b))
         );
         toast({ title: "Saved", description: "Battery details updated." });
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast({ title: "Error", description: err.message || "Failed to update battery.", variant: "destructive" });
       }
     } catch {
       toast({ title: "Error", description: "Failed to update battery.", variant: "destructive" });
@@ -477,54 +480,14 @@ export default function JobDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {batteries.map((b, i) => {
-                      const hasAnyFlag = !!(b.serialFlagReason || b.manufacturerFlagReason || b.cellModelFlagReason || b.voltageFlagReason);
-                      return (
-                      <tr key={b.id} className={`${hasAnyFlag ? "bg-amber-50/60 border-l-4 border-l-amber-400" : (i % 2 === 0 ? "bg-white" : "bg-slate-50/30")}`}>
-                        <td className="px-3 py-2.5 text-slate-500">{i + 1}</td>
-                        <td className="px-3 py-2.5 text-slate-700">{b.palletNumber || "—"}</td>
-                        <td className="px-3 py-2.5 text-slate-700">{b.assetNumber || "—"}</td>
-                        <td className="px-3 py-2.5 font-medium text-[#0f2744]">{b.batterySerial || "—"}</td>
-                        <td className="px-3 py-2.5 text-slate-700">{b.manufacture || "—"}</td>
-                        <td className="px-3 py-2.5">
-                          <div className="flex items-center gap-1.5">
-                            <Badge variant="outline" className="text-xs">{b.cellType || "—"}</Badge>
-                            {b.isLooseCells && (
-                              <Badge variant="outline" className="text-xs bg-sky-50 text-sky-700 border-sky-200">Loose</Badge>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2.5 text-slate-700">{b.voltage || "—"}</td>
-                        <td className="px-3 py-2.5 text-slate-700">{b.looseCellsQty ?? "—"}</td>
-                        <td className="px-3 py-2.5">
-                          {hasAnyFlag ? (
-                            <div className="flex flex-col gap-1">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200 w-fit">
-                                <AlertTriangle className="w-3 h-3" />
-                                Needs Review
-                              </span>
-                              {b.serialFlagReason && (
-                                <span className="text-[10px] text-amber-700"><span className="font-semibold">Serial:</span> {b.serialFlagReason}</span>
-                              )}
-                              {b.manufacturerFlagReason && (
-                                <span className="text-[10px] text-amber-700"><span className="font-semibold">Manufacturer:</span> {b.manufacturerFlagReason}</span>
-                              )}
-                              {b.cellModelFlagReason && (
-                                <span className="text-[10px] text-amber-700"><span className="font-semibold">Cell Model:</span> {b.cellModelFlagReason}</span>
-                              )}
-                              {b.voltageFlagReason && (
-                                <span className="text-[10px] text-amber-700"><span className="font-semibold">Voltage:</span> {b.voltageFlagReason}</span>
-                              )}
-                              {b.rowPhoto && (
-                                <a href={b.rowPhoto} target="_blank" rel="noreferrer" className="text-[10px] text-[#0ea5e9] hover:underline">View Photo</a>
-                              )}
-                            </div>
-                          ) : "—"}
-                        </td>
-                        <td className="px-3 py-2.5 text-slate-500 max-w-[200px] truncate">{b.notes || "—"}</td>
-                      </tr>
-                      );
-                    })}
+                    {batteries.map((b, i) => (
+                      <CollectionBatteryRow
+                        key={b.id}
+                        battery={b}
+                        index={i}
+                        onSaveField={updateBatteryAdmin}
+                      />
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -842,6 +805,184 @@ export default function JobDetailPage() {
         </div>
       </div>
     </SidebarLayout>
+  );
+}
+
+function CollectionBatteryRow({
+  battery,
+  index,
+  onSaveField,
+}: {
+  battery: BatteryData;
+  index: number;
+  onSaveField: (id: number, updates: Record<string, string | boolean | null>) => void;
+}) {
+  const hasAnyFlag = !!(
+    battery.serialFlagReason ||
+    battery.manufacturerFlagReason ||
+    battery.cellModelFlagReason ||
+    battery.voltageFlagReason
+  );
+
+  return (
+    <tr className={`${hasAnyFlag ? "bg-amber-50/60 border-l-4 border-l-amber-400" : (index % 2 === 0 ? "bg-white" : "bg-slate-50/30")}`}>
+      <td className="px-3 py-2.5 text-slate-500">{index + 1}</td>
+      <td className="px-3 py-2.5 text-slate-700">{battery.palletNumber || "—"}</td>
+      <td className="px-3 py-2.5 text-slate-700">{battery.assetNumber || "—"}</td>
+      <td className="px-3 py-2.5 font-medium text-[#0f2744]">{battery.batterySerial || "—"}</td>
+      <td className="px-3 py-2.5 text-slate-700">
+        {battery.manufacturerFlagReason ? (
+          <InlineFlagEdit
+            initialValue={battery.manufacture}
+            placeholder="Manufacturer"
+            onSave={(v) => onSaveField(battery.id, { manufacture: v })}
+          />
+        ) : (
+          battery.manufacture || "—"
+        )}
+      </td>
+      <td className="px-3 py-2.5">
+        {battery.cellModelFlagReason ? (
+          <div className="flex items-center gap-1.5">
+            <InlineFlagEdit
+              initialValue={battery.cellType}
+              placeholder="Cell model"
+              onSave={(v) => onSaveField(battery.id, { cellType: v })}
+            />
+            {battery.isLooseCells && (
+              <Badge variant="outline" className="text-xs bg-sky-50 text-sky-700 border-sky-200">Loose</Badge>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <Badge variant="outline" className="text-xs">{battery.cellType || "—"}</Badge>
+            {battery.isLooseCells && (
+              <Badge variant="outline" className="text-xs bg-sky-50 text-sky-700 border-sky-200">Loose</Badge>
+            )}
+          </div>
+        )}
+      </td>
+      <td className="px-3 py-2.5 text-slate-700">
+        {battery.voltageFlagReason ? (
+          <InlineFlagEdit
+            initialValue={battery.voltage}
+            placeholder="Voltage"
+            onSave={(v) => onSaveField(battery.id, { voltage: v })}
+          />
+        ) : (
+          battery.voltage || "—"
+        )}
+      </td>
+      <td className="px-3 py-2.5 text-slate-700">{battery.looseCellsQty ?? "—"}</td>
+      <td className="px-3 py-2.5">
+        {hasAnyFlag ? (
+          <div className="flex flex-col gap-1">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200 w-fit">
+              <AlertTriangle className="w-3 h-3" />
+              Needs Review
+            </span>
+            {battery.serialFlagReason && (
+              <span className="text-[10px] text-amber-700"><span className="font-semibold">Serial:</span> {battery.serialFlagReason}</span>
+            )}
+            {battery.manufacturerFlagReason && (
+              <span className="text-[10px] text-amber-700"><span className="font-semibold">Manufacturer:</span> {battery.manufacturerFlagReason}</span>
+            )}
+            {battery.cellModelFlagReason && (
+              <span className="text-[10px] text-amber-700"><span className="font-semibold">Cell Model:</span> {battery.cellModelFlagReason}</span>
+            )}
+            {battery.voltageFlagReason && (
+              <span className="text-[10px] text-amber-700"><span className="font-semibold">Voltage:</span> {battery.voltageFlagReason}</span>
+            )}
+            {battery.rowPhoto && (
+              <a href={battery.rowPhoto} target="_blank" rel="noreferrer" className="text-[10px] text-[#0ea5e9] hover:underline">View Photo</a>
+            )}
+          </div>
+        ) : (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-50 text-green-700 border border-green-200 w-fit">
+            <CheckCircle2 className="w-3 h-3" />
+            Resolved
+          </span>
+        )}
+      </td>
+      <td className="px-3 py-2.5 text-slate-500 max-w-[200px] truncate">{battery.notes || "—"}</td>
+    </tr>
+  );
+}
+
+function InlineFlagEdit({
+  initialValue,
+  placeholder,
+  onSave,
+}: {
+  initialValue: string | null;
+  placeholder: string;
+  onSave: (value: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(initialValue || "");
+
+  useEffect(() => {
+    setValue(initialValue || "");
+  }, [initialValue]);
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-dashed border-amber-300 bg-white text-[11px] text-amber-800 hover:bg-amber-50"
+        title={`Click to set ${placeholder.toLowerCase()}`}
+      >
+        {initialValue || `Set ${placeholder.toLowerCase()}`}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && value.trim()) {
+            onSave(value.trim());
+            setEditing(false);
+          } else if (e.key === "Escape") {
+            setValue(initialValue || "");
+            setEditing(false);
+          }
+        }}
+        placeholder={placeholder}
+        className="h-7 w-28 text-xs bg-white"
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-7 px-2 text-[11px]"
+        disabled={!value.trim()}
+        onClick={() => {
+          if (!value.trim()) return;
+          onSave(value.trim());
+          setEditing(false);
+        }}
+      >
+        Save
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2 text-[11px] text-slate-500"
+        onClick={() => {
+          setValue(initialValue || "");
+          setEditing(false);
+        }}
+      >
+        Cancel
+      </Button>
+    </div>
   );
 }
 

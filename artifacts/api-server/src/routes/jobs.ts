@@ -506,16 +506,37 @@ router.patch(
         return;
       }
 
-      const { receiptConfirmed, pbContentKg, valueGbp, adminNotes } = req.body;
+      const { receiptConfirmed, pbContentKg, valueGbp, adminNotes, manufacture, cellType, voltage } = req.body;
 
       const toDecimal = (v: unknown): string | null =>
         v !== undefined && v !== null && v !== "" ? String(v) : null;
+      const toTrimmedStr = (v: unknown): string | null => {
+        if (v === null || v === undefined) return null;
+        const s = String(v).trim();
+        return s === "" ? null : s;
+      };
 
       const updates: Record<string, string | boolean | null> = {};
       if (receiptConfirmed !== undefined) updates.receiptConfirmed = receiptConfirmed === true || receiptConfirmed === "true";
       if (pbContentKg !== undefined) updates.pbContentKg = toDecimal(pbContentKg);
       if (valueGbp !== undefined) updates.valueGbp = toDecimal(valueGbp);
       if (adminNotes !== undefined) updates.adminNotes = adminNotes !== null && adminNotes !== undefined && adminNotes !== "" ? String(adminNotes) : null;
+
+      if (manufacture !== undefined) {
+        const v = toTrimmedStr(manufacture);
+        updates.manufacture = v;
+        if (v !== null) updates.manufacturerFlagReason = null;
+      }
+      if (cellType !== undefined) {
+        const v = toTrimmedStr(cellType);
+        updates.cellType = v;
+        if (v !== null) updates.cellModelFlagReason = null;
+      }
+      if (voltage !== undefined) {
+        const v = toTrimmedStr(voltage);
+        updates.voltage = v;
+        if (v !== null) updates.voltageFlagReason = null;
+      }
 
       if (Object.keys(updates).length === 0) {
         res.status(400).json({ message: "No fields to update" });
