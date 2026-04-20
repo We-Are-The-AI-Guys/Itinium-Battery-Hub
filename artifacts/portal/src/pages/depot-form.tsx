@@ -553,7 +553,10 @@ export default function DepotFormPage() {
         if (field === "manufacture" && value.trim()) {
           newB.manufacturerFlagReason = "";
         }
-        if ((field === "cellType" || field === "cellModel") && (newB.cellType.trim() || newB.cellModel.trim())) {
+        if (
+          (field === "cellType" || field === "cellModel") &&
+          (newB.cellModel.trim() || newB.cellType === "Blocs" || newB.cellType === "Other")
+        ) {
           newB.cellModelFlagReason = "";
         }
         if ((field === "voltage" || field === "customVoltage") && value.trim()) {
@@ -1241,7 +1244,7 @@ export default function DepotFormPage() {
                                     ...b,
                                     cellType: val,
                                     cellModel: "",
-                                    cellModelFlagReason: val.trim() ? "" : b.cellModelFlagReason,
+                                    cellModelFlagReason: (val === "Blocs" || val === "Other") ? "" : b.cellModelFlagReason,
                                     voltageFlagReason: (val === "Blocs" || val === "Other") ? "" : b.voltageFlagReason,
                                   }
                                 : b
