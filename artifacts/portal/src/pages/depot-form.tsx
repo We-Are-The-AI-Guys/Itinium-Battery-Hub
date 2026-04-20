@@ -992,7 +992,7 @@ export default function DepotFormPage() {
           </div>
           <div className="flex justify-between mt-2">
             <p className="text-xs text-slate-500">
-              Min: {targetMin}t
+              Minimum 10 Ton, without carriage charge
             </p>
             <p className="text-xs text-slate-500">
               Max: {maxCapacity}t
