@@ -307,10 +307,23 @@ export default function DepotFormPage() {
     let weight = "";
     if (battery.isLooseCells) {
       if (battery.cellType && battery.looseCellsQty) {
-        const perCell = await fetchWeightFromApi(battery.cellType, null);
         const qty = parseInt(battery.looseCellsQty, 10);
-        if (perCell && !isNaN(qty) && qty > 0) {
-          weight = (parseFloat(perCell) * qty).toFixed(3);
+        if (!isNaN(qty) && qty > 0) {
+          let perCell = "";
+          if (battery.cellType === "Blocs" || battery.cellType === "Other") {
+            perCell = await fetchWeightFromApi(battery.cellType, null);
+          } else {
+            // PZS/PZB/PZV references are keyed by voltage; derive per-cell
+            // weight by dividing any reference entry by its cell count
+            // (each cell = 2V, so a 12V battery contains 6 cells, etc).
+            const ref = await fetchWeightFromApi(battery.cellType, "12V");
+            if (ref) {
+              perCell = (parseFloat(ref) / 6).toFixed(3);
+            }
+          }
+          if (perCell) {
+            weight = (parseFloat(perCell) * qty).toFixed(3);
+          }
         }
       }
     } else if (battery.cellType === "Blocs") {
