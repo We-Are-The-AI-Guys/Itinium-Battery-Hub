@@ -1014,7 +1014,7 @@ export default function DepotFormPage() {
                   Redundant Battery Collection Note
                 </p>
                 <p className="text-sm font-medium text-[#0f2744]">
-                  {getSelectedLocationName() || user?.depot || "..."} &mdash; {user?.fullName || "..."}
+                  {[getSelectedLocationName() || user?.depot, user?.fullName].filter(Boolean).join(" — ")}
                 </p>
               </div>
             </div>
