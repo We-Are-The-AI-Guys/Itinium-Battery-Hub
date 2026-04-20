@@ -481,9 +481,10 @@ export default function DepotFormPage() {
         const issues: { rowNum: number; missing: string[] }[] = [];
         imported.forEach((b, i) => {
           const missing: string[] = [];
+          const cellModelApplies = b.cellType !== "Blocs" && b.cellType !== "Other";
           const voltageApplies = !b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other";
           if (!b.manufacture.trim()) missing.push("Manufacturer");
-          if (!b.cellType.trim() && !b.cellModel.trim()) missing.push("Cell Model");
+          if (cellModelApplies && !b.cellModel.trim()) missing.push("Cell Model");
           if (voltageApplies && !b.voltage.trim()) missing.push("Voltage");
           if (missing.length > 0) issues.push({ rowNum: i + 1, missing });
         });
@@ -506,7 +507,7 @@ export default function DepotFormPage() {
       ? rows.map((b) => ({
           ...b,
           manufacturerFlagReason: !b.manufacture.trim() ? CSV_FLAG_REASON : b.manufacturerFlagReason,
-          cellModelFlagReason: (!b.cellType.trim() && !b.cellModel.trim()) ? CSV_FLAG_REASON : b.cellModelFlagReason,
+          cellModelFlagReason: (b.cellType !== "Blocs" && b.cellType !== "Other" && !b.cellModel.trim()) ? CSV_FLAG_REASON : b.cellModelFlagReason,
           voltageFlagReason: (!b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other" && !b.voltage.trim()) ? CSV_FLAG_REASON : b.voltageFlagReason,
         }))
       : rows;
