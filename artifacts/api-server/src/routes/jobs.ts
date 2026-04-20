@@ -541,7 +541,7 @@ router.patch(
         return;
       }
 
-      const { receiptConfirmed, pbContentKg, valueGbp, adminNotes, manufacture, cellType, voltage } = req.body;
+      const { receiptConfirmed, pbContentKg, valueGbp, adminNotes, manufacture, cellType, voltage, batterySerial, clearSerialFlag } = req.body;
 
       const toDecimal = (v: unknown): string | null =>
         v !== undefined && v !== null && v !== "" ? String(v) : null;
@@ -556,6 +556,15 @@ router.patch(
       if (pbContentKg !== undefined) updates.pbContentKg = toDecimal(pbContentKg);
       if (valueGbp !== undefined) updates.valueGbp = toDecimal(valueGbp);
       if (adminNotes !== undefined) updates.adminNotes = adminNotes !== null && adminNotes !== undefined && adminNotes !== "" ? String(adminNotes) : null;
+
+      if (batterySerial !== undefined) {
+        const v = toTrimmedStr(batterySerial);
+        updates.batterySerial = v;
+        if (v !== null) updates.serialFlagReason = null;
+      }
+      if (clearSerialFlag === true || clearSerialFlag === "true") {
+        updates.serialFlagReason = null;
+      }
 
       if (manufacture !== undefined) {
         const v = toTrimmedStr(manufacture);

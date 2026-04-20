@@ -829,7 +829,21 @@ function CollectionBatteryRow({
       <td className="px-3 py-2.5 text-slate-500">{index + 1}</td>
       <td className="px-3 py-2.5 text-slate-700">{battery.palletNumber || "—"}</td>
       <td className="px-3 py-2.5 text-slate-700">{battery.assetNumber || "—"}</td>
-      <td className="px-3 py-2.5 font-medium text-[#0f2744]">{battery.batterySerial || "—"}</td>
+      <td className="px-3 py-2.5 font-medium text-[#0f2744]">
+        {battery.serialFlagReason ? (
+          <InlineFlagEdit
+            initialValue={battery.batterySerial}
+            placeholder="Serial"
+            onSave={(v) => onSaveField(battery.id, { batterySerial: v })}
+            extraAction={{
+              label: "No serial fitted",
+              onClick: () => onSaveField(battery.id, { clearSerialFlag: true }),
+            }}
+          />
+        ) : (
+          battery.batterySerial || "—"
+        )}
+      </td>
       <td className="px-3 py-2.5 text-slate-700">
         {battery.manufacturerFlagReason ? (
           <InlineFlagEdit
@@ -913,10 +927,12 @@ function InlineFlagEdit({
   initialValue,
   placeholder,
   onSave,
+  extraAction,
 }: {
   initialValue: string | null;
   placeholder: string;
   onSave: (value: string) => void;
+  extraAction?: { label: string; onClick: () => void };
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(initialValue || "");
@@ -939,7 +955,7 @@ function InlineFlagEdit({
   }
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1 flex-wrap">
       <Input
         autoFocus
         value={value}
@@ -970,6 +986,21 @@ function InlineFlagEdit({
       >
         Save
       </Button>
+      {extraAction && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-[11px] border-amber-300 text-amber-800 hover:bg-amber-50"
+          onClick={() => {
+            extraAction.onClick();
+            setEditing(false);
+          }}
+          title="Mark as verified with no serial"
+        >
+          {extraAction.label}
+        </Button>
+      )}
       <Button
         type="button"
         variant="ghost"
