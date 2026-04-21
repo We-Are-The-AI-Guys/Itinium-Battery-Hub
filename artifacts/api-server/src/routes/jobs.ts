@@ -1,14 +1,251 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable, locationsTable, clientsTable, usersTable } from "@workspace/db/schema";
-import { eq, sql, and, count, ilike, or, inArray, desc } from "drizzle-orm";
+import { eq, sql, and, count, ilike, or, inArray, desc, asc } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { MANUFACTURERS } from "./manufacturers";
+import ExcelJS from "exceljs";
+import PDFDocument from "pdfkit";
 
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
 
 const router: IRouter = Router();
+
+function buildJobsWhere(query: Record<string, unknown>) {
+  const { status, invoiceStatus, paymentStatus, search, manufacturer, collectionPoint } = query as Record<string, string | undefined>;
+  const conditions = [];
+  if (status && status !== "All" && status !== "all") {
+    conditions.push(eq(jobsTable.status, status.toLowerCase()));
+  }
+  if (invoiceStatus) {
+    conditions.push(eq(jobsTable.invoiceStatus, invoiceStatus));
+  }
+  if (paymentStatus === "overdue") {
+    conditions.push(sql`${jobsTable.dueDate} IS NOT NULL AND ${jobsTable.dueDate} < CURRENT_DATE AND (${jobsTable.datePaid} IS NULL)`);
+  } else if (paymentStatus === "upcoming") {
+    conditions.push(sql`${jobsTable.dueDate} IS NOT NULL AND ${jobsTable.dueDate} >= CURRENT_DATE AND (${jobsTable.datePaid} IS NULL)`);
+  } else if (paymentStatus === "paid") {
+    conditions.push(sql`${jobsTable.datePaid} IS NOT NULL`);
+  }
+  if (collectionPoint) {
+    conditions.push(ilike(jobsTable.collectionPoint, `%${collectionPoint}%`));
+  }
+  if (search) {
+    conditions.push(
+      or(
+        ilike(jobsTable.reference, `%${search}%`),
+        ilike(jobsTable.clientName, `%${search}%`)
+      )!
+    );
+  }
+  if (manufacturer) {
+    const mfrJobIds = db
+      .select({ jobId: jobBatteriesTable.jobId })
+      .from(jobBatteriesTable)
+      .where(ilike(jobBatteriesTable.manufacture, manufacturer));
+    conditions.push(inArray(jobsTable.id, mfrJobIds));
+  }
+  return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
+router.get(
+  "/jobs/export.xlsx",
+  requireAuth,
+  requireRole("accounts", "head_office_admin"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const whereClause = buildJobsWhere(req.query as Record<string, unknown>);
+      const jobs = await db
+        .select()
+        .from(jobsTable)
+        .where(whereClause)
+        .orderBy(desc(jobsTable.submittedAt));
+
+      const wb = new ExcelJS.Workbook();
+      wb.creator = "Itinium Battery Portal";
+      wb.created = new Date();
+      const ws = wb.addWorksheet("Jobs");
+      ws.columns = [
+        { header: "Reference", key: "reference", width: 16 },
+        { header: "Client", key: "client", width: 24 },
+        { header: "Depot", key: "depot", width: 20 },
+        { header: "Collection Date", key: "collectionDate", width: 14 },
+        { header: "Tonnage (t)", key: "tonnage", width: 12 },
+        { header: "LME Rate Used (£/t)", key: "lmeRateUsed", width: 18 },
+        { header: "Calculated Value (£)", key: "calculatedValue", width: 20 },
+        { header: "Customer Invoice No", key: "customerInvoiceNo", width: 20 },
+        { header: "Itinium Invoice No", key: "itiniumInvoiceNo", width: 20 },
+        { header: "Invoice Status", key: "invoiceStatus", width: 18 },
+        { header: "Date Paid", key: "datePaid", width: 14 },
+      ];
+      ws.getRow(1).font = { bold: true };
+      for (const j of jobs) {
+        ws.addRow({
+          reference: j.reference,
+          client: j.clientName,
+          depot: j.depot,
+          collectionDate: j.collectionDate || "",
+          tonnage: j.tonnage ? Number(j.tonnage) : null,
+          lmeRateUsed: j.lmeRateUsed ? Number(j.lmeRateUsed) : null,
+          calculatedValue: j.calculatedValue ? Number(j.calculatedValue) : null,
+          customerInvoiceNo: j.customerInvoiceNo || "",
+          itiniumInvoiceNo: j.itiniumInvoiceNo || "",
+          invoiceStatus: j.invoiceStatus || "",
+          datePaid: j.datePaid || "",
+        });
+      }
+      ws.getColumn("tonnage").numFmt = "0.000";
+      ws.getColumn("lmeRateUsed").numFmt = "£#,##0.00";
+      ws.getColumn("calculatedValue").numFmt = "£#,##0.00";
+
+      const stamp = new Date().toISOString().slice(0, 10);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="jobs-${stamp}.xlsx"`);
+      const buf = await wb.xlsx.writeBuffer();
+      res.send(Buffer.from(buf));
+    } catch (error) {
+      console.error("Jobs xlsx export error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+router.get(
+  "/jobs/invoice-summary.pdf",
+  requireAuth,
+  requireRole("accounts", "head_office_admin"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const monthParam = (req.query.month as string) || "";
+      const today = new Date();
+      let year = today.getUTCFullYear();
+      let month = today.getUTCMonth() + 1;
+      const m = /^(\d{4})-(\d{1,2})$/.exec(monthParam);
+      if (m) {
+        year = parseInt(m[1], 10);
+        month = parseInt(m[2], 10);
+        if (month < 1 || month > 12) {
+          res.status(400).json({ message: "Invalid month" });
+          return;
+        }
+      }
+      const start = `${year}-${String(month).padStart(2, "0")}-01`;
+      const nextMonth = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
+
+      const jobs = await db
+        .select()
+        .from(jobsTable)
+        .where(sql`${jobsTable.collectionDate} >= ${start} AND ${jobsTable.collectionDate} < ${nextMonth}`)
+        .orderBy(asc(jobsTable.clientName), asc(jobsTable.collectionDate));
+
+      const monthLabel = new Date(`${start}T00:00:00Z`).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+      const stamp = `${year}-${String(month).padStart(2, "0")}`;
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="invoice-summary-${stamp}.pdf"`);
+
+      const doc = new PDFDocument({ size: "A4", margin: 40 });
+      doc.pipe(res);
+
+      doc.fontSize(18).fillColor("#0f2744").text("Invoice Summary", { align: "left" });
+      doc.moveDown(0.2);
+      doc.fontSize(11).fillColor("#475569").text(`Month: ${monthLabel}`);
+      doc.fontSize(9).fillColor("#94a3b8").text(`Generated: ${new Date().toLocaleString("en-GB")}`);
+      doc.moveDown(0.8);
+
+      const cols = [
+        { label: "Reference", x: 40, w: 80 },
+        { label: "Collection", x: 120, w: 70 },
+        { label: "Tonnage", x: 190, w: 55, align: "right" as const },
+        { label: "LME Rate", x: 245, w: 65, align: "right" as const },
+        { label: "Value (£)", x: 310, w: 70, align: "right" as const },
+        { label: "Inv. Status", x: 380, w: 75 },
+        { label: "Cust. Inv.", x: 455, w: 100 },
+      ];
+
+      function drawHeader() {
+        const y = doc.y;
+        doc.fontSize(9).fillColor("#0f2744").font("Helvetica-Bold");
+        for (const c of cols) {
+          doc.text(c.label, c.x, y, { width: c.w, align: c.align, lineBreak: false });
+        }
+        doc.font("Helvetica").fillColor("#000");
+        doc.moveDown(0.6);
+        doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor("#cbd5e1").stroke();
+        doc.moveDown(0.3);
+      }
+
+      function ensureRoom() {
+        if (doc.y > 760) {
+          doc.addPage();
+        }
+      }
+
+      const grouped = new Map<string, typeof jobs>();
+      for (const j of jobs) {
+        const k = j.clientName;
+        if (!grouped.has(k)) grouped.set(k, [] as typeof jobs);
+        grouped.get(k)!.push(j);
+      }
+
+      let grandTotal = 0;
+
+      if (jobs.length === 0) {
+        doc.fontSize(11).fillColor("#64748b").text(`No jobs with collection date in ${monthLabel}.`);
+      }
+
+      for (const [client, list] of grouped) {
+        ensureRoom();
+        doc.moveDown(0.4);
+        doc.fontSize(12).fillColor("#0ea5e9").font("Helvetica-Bold").text(client, 40);
+        doc.font("Helvetica").fillColor("#000");
+        doc.moveDown(0.2);
+        drawHeader();
+        let clientTotal = 0;
+        for (const j of list) {
+          ensureRoom();
+          const value = j.calculatedValue ? Number(j.calculatedValue) : 0;
+          clientTotal += value;
+          const y = doc.y;
+          doc.fontSize(9).fillColor("#000");
+          doc.text(j.reference || "", cols[0].x, y, { width: cols[0].w, lineBreak: false });
+          doc.text(j.collectionDate || "", cols[1].x, y, { width: cols[1].w, lineBreak: false });
+          doc.text(j.tonnage ? Number(j.tonnage).toFixed(3) : "—", cols[2].x, y, { width: cols[2].w, align: "right", lineBreak: false });
+          doc.text(j.lmeRateUsed ? `£${Number(j.lmeRateUsed).toFixed(2)}` : "—", cols[3].x, y, { width: cols[3].w, align: "right", lineBreak: false });
+          doc.text(j.calculatedValue ? `£${value.toFixed(2)}` : "—", cols[4].x, y, { width: cols[4].w, align: "right", lineBreak: false });
+          doc.text(j.invoiceStatus || "—", cols[5].x, y, { width: cols[5].w, lineBreak: false });
+          doc.text(j.customerInvoiceNo || "—", cols[6].x, y, { width: cols[6].w, lineBreak: false });
+          doc.moveDown(0.8);
+        }
+        grandTotal += clientTotal;
+        ensureRoom();
+        doc.fontSize(9).fillColor("#0f2744").font("Helvetica-Bold")
+          .text(`Subtotal — ${client}: £${clientTotal.toFixed(2)}`, 40, doc.y, { align: "right", width: 515 });
+        doc.font("Helvetica").fillColor("#000");
+        doc.moveDown(0.4);
+      }
+
+      if (jobs.length > 0) {
+        ensureRoom();
+        doc.moveDown(0.5);
+        doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor("#0f2744").stroke();
+        doc.moveDown(0.4);
+        doc.fontSize(12).fillColor("#0f2744").font("Helvetica-Bold")
+          .text(`Grand Total: £${grandTotal.toFixed(2)}   (${jobs.length} job${jobs.length === 1 ? "" : "s"})`, 40, doc.y, { align: "right", width: 515 });
+      }
+
+      doc.end();
+    } catch (error) {
+      console.error("Invoice summary PDF error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Internal server error" });
+      } else {
+        res.end();
+      }
+    }
+  }
+);
 
 router.get(
   "/jobs",
@@ -16,44 +253,11 @@ router.get(
   requireRole("team_leader", "accounts", "head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
-      const { status, invoiceStatus, paymentStatus, search, manufacturer, collectionPoint, limit = "10", offset = "0" } = req.query;
+      const { limit = "10", offset = "0" } = req.query;
       const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10) || 10));
       const offsetNum = Math.max(0, parseInt(offset as string, 10) || 0);
 
-      const conditions = [];
-      if (status && status !== "All" && status !== "all") {
-        conditions.push(eq(jobsTable.status, (status as string).toLowerCase()));
-      }
-      if (invoiceStatus) {
-        conditions.push(eq(jobsTable.invoiceStatus, invoiceStatus as string));
-      }
-      if (paymentStatus === "overdue") {
-        conditions.push(sql`${jobsTable.dueDate} IS NOT NULL AND ${jobsTable.dueDate} < CURRENT_DATE AND (${jobsTable.datePaid} IS NULL)`);
-      } else if (paymentStatus === "upcoming") {
-        conditions.push(sql`${jobsTable.dueDate} IS NOT NULL AND ${jobsTable.dueDate} >= CURRENT_DATE AND (${jobsTable.datePaid} IS NULL)`);
-      } else if (paymentStatus === "paid") {
-        conditions.push(sql`${jobsTable.datePaid} IS NOT NULL`);
-      }
-      if (collectionPoint) {
-        conditions.push(ilike(jobsTable.collectionPoint, `%${collectionPoint}%`));
-      }
-      if (search) {
-        conditions.push(
-          or(
-            ilike(jobsTable.reference, `%${search}%`),
-            ilike(jobsTable.clientName, `%${search}%`)
-          )!
-        );
-      }
-      if (manufacturer) {
-        const mfrJobIds = db
-          .select({ jobId: jobBatteriesTable.jobId })
-          .from(jobBatteriesTable)
-          .where(ilike(jobBatteriesTable.manufacture, manufacturer as string));
-        conditions.push(inArray(jobsTable.id, mfrJobIds));
-      }
-
-      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const whereClause = buildJobsWhere(req.query as Record<string, unknown>);
 
       const [jobs, [totalResult]] = await Promise.all([
         db

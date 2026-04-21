@@ -119,4 +119,43 @@ router.get(
   }
 );
 
+router.get(
+  "/lme/history.csv",
+  requireAuth,
+  requireRole("accounts", "head_office_admin"),
+  async (_req, res) => {
+    try {
+      const rows = await db
+        .select()
+        .from(lmePricesTable)
+        .orderBy(desc(lmePricesTable.priceDate));
+
+      const escape = (v: string | number | null | undefined) => {
+        const s = v == null ? "" : String(v);
+        return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+
+      const lines = ["Date,USD Price,Exchange Rate,GBP Price,Source"];
+      for (const r of rows) {
+        lines.push([
+          escape(r.priceDate),
+          escape(r.usdPrice),
+          escape(r.exchangeRate),
+          escape(r.gbpPrice),
+          escape(r.source),
+        ].join(","));
+      }
+      const csv = lines.join("\r\n") + "\r\n";
+
+      const stamp = new Date().toISOString().slice(0, 10);
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="lme-price-history-${stamp}.csv"`);
+      res.send(csv);
+    } catch (error) {
+      console.error("LME history CSV error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
 export default router;

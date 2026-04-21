@@ -1,8 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
+import { useLocation } from "wouter";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
 import {
   TrendingUp,
   DollarSign,
@@ -19,6 +21,7 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
+  History,
 } from "lucide-react";
 
 interface LmePrice {
@@ -61,7 +64,41 @@ const filterToStatus: Record<string, string | undefined> = {
   Paid: "paid",
 };
 
+const API_BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+
+function currentMonthValue() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+async function downloadFromApi(url: string, fallbackFilename: string) {
+  const res = await fetch(url, { credentials: "include" });
+  if (!res.ok) {
+    let message = `Download failed (${res.status})`;
+    try {
+      const err = await res.json();
+      if (err?.message) message = err.message;
+    } catch {}
+    throw new Error(message);
+  }
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  const filename = match ? match[1] : fallbackFilename;
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
 export default function LmePricingPage() {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+
   const [currentPrice, setCurrentPrice] = useState<LmePrice | null>(null);
   const [usdPrice, setUsdPrice] = useState("2185.50");
   const [exchangeRate, setExchangeRate] = useState("0.7892");
@@ -74,18 +111,38 @@ export default function LmePricingPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const JOBS_PER_PAGE = 8;
 
+  const [history, setHistory] = useState<LmePrice[]>([]);
+
+  const [downloadingXlsx, setDownloadingXlsx] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [downloadingCsv, setDownloadingCsv] = useState(false);
+  const [pdfMonth, setPdfMonth] = useState(currentMonthValue());
+
   const calculatedGbp = (parseFloat(usdPrice.replace(/,/g, "")) * parseFloat(exchangeRate)).toFixed(2);
+
+  const applyCurrentPrice = useCallback((price: LmePrice | null) => {
+    if (!price) return;
+    setCurrentPrice(price);
+    setUsdPrice(price.usdPrice);
+    setExchangeRate(price.exchangeRate);
+  }, []);
 
   const fetchCurrentPrice = useCallback(async () => {
     try {
-      const res = await fetch("/api/lme/current", { credentials: "include" });
+      const res = await fetch(`${API_BASE}/api/lme/current`, { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
-        if (data.price) {
-          setCurrentPrice(data.price);
-          setUsdPrice(data.price.usdPrice);
-          setExchangeRate(data.price.exchangeRate);
-        }
+        applyCurrentPrice(data.price || null);
+      }
+    } catch {}
+  }, [applyCurrentPrice]);
+
+  const fetchHistory = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/lme/history?limit=10`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data.history || []);
       }
     } catch {}
   }, []);
@@ -100,7 +157,7 @@ export default function LmePricingPage() {
       if (invoiceStatus) params.set("invoiceStatus", invoiceStatus);
       if (searchQuery) params.set("search", searchQuery);
 
-      const res = await fetch(`/api/jobs?${params}`, { credentials: "include" });
+      const res = await fetch(`${API_BASE}/api/jobs?${params}`, { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
         setJobs(data.jobs);
@@ -111,7 +168,8 @@ export default function LmePricingPage() {
 
   useEffect(() => {
     fetchCurrentPrice();
-  }, [fetchCurrentPrice]);
+    fetchHistory();
+  }, [fetchCurrentPrice, fetchHistory]);
 
   useEffect(() => {
     fetchJobs();
@@ -120,24 +178,88 @@ export default function LmePricingPage() {
   async function handleUpdatePrice() {
     setUpdating(true);
     try {
-      const res = await fetch("/api/lme/update", {
+      const res = await fetch(`${API_BASE}/api/lme/update`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ usdPrice: usdPrice.replace(/,/g, ""), exchangeRate }),
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        const data = await res.json();
-        setCurrentPrice(data.price);
+        applyCurrentPrice(data.price);
+        const count = Number(data.backfilledBatteries) || 0;
+        toast({
+          title: "LME price saved",
+          description: `${count} battery row${count === 1 ? "" : "s"} recalculated.`,
+        });
+        fetchHistory();
+        fetchJobs();
+      } else {
+        toast({
+          title: "Failed to save LME price",
+          description: data.message || "Please try again.",
+          variant: "destructive",
+        });
       }
-    } catch {} finally {
+    } catch {
+      toast({ title: "Network error", description: "Could not save LME price.", variant: "destructive" });
+    } finally {
       setUpdating(false);
     }
   }
 
-  function handleResetToApi() {
-    setUsdPrice("2185.50");
-    setExchangeRate("0.7892");
+  async function handleRevertToLastSaved() {
+    try {
+      const res = await fetch(`${API_BASE}/api/lme/current`, { credentials: "include" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.price) {
+        applyCurrentPrice(data.price);
+        toast({ title: "Reverted", description: "Inputs restored to the last saved price." });
+      } else {
+        toast({ title: "No saved price", description: "There is no saved price yet.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Network error", description: "Could not load last saved price.", variant: "destructive" });
+    }
+  }
+
+  async function handleDownloadXlsx() {
+    setDownloadingXlsx(true);
+    try {
+      const params = new URLSearchParams();
+      const invoiceStatus = filterToStatus[activeFilter];
+      if (invoiceStatus) params.set("invoiceStatus", invoiceStatus);
+      if (searchQuery) params.set("search", searchQuery);
+      const qs = params.toString();
+      await downloadFromApi(`${API_BASE}/api/jobs/export.xlsx${qs ? `?${qs}` : ""}`, "jobs.xlsx");
+    } catch (e) {
+      toast({ title: "Excel export failed", description: e instanceof Error ? e.message : "Try again.", variant: "destructive" });
+    } finally {
+      setDownloadingXlsx(false);
+    }
+  }
+
+  async function handleDownloadPdf() {
+    setDownloadingPdf(true);
+    try {
+      const month = pdfMonth || currentMonthValue();
+      await downloadFromApi(`${API_BASE}/api/jobs/invoice-summary.pdf?month=${encodeURIComponent(month)}`, `invoice-summary-${month}.pdf`);
+    } catch (e) {
+      toast({ title: "PDF export failed", description: e instanceof Error ? e.message : "Try again.", variant: "destructive" });
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
+
+  async function handleDownloadCsv() {
+    setDownloadingCsv(true);
+    try {
+      await downloadFromApi(`${API_BASE}/api/lme/history.csv`, "lme-price-history.csv");
+    } catch (e) {
+      toast({ title: "CSV export failed", description: e instanceof Error ? e.message : "Try again.", variant: "destructive" });
+    } finally {
+      setDownloadingCsv(false);
+    }
   }
 
   const totalPages = Math.ceil(jobsTotal / JOBS_PER_PAGE);
@@ -149,6 +271,10 @@ export default function LmePricingPage() {
 
   function formatTonnage(value: string) {
     return `${parseFloat(value).toFixed(1)}t`;
+  }
+
+  function formatHistoryDate(d: string) {
+    return new Date(`${d}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
   }
 
   return (
@@ -218,9 +344,9 @@ export default function LmePricingPage() {
               >
                 {updating ? "Updating..." : "Update Prices"}
               </Button>
-              <Button variant="outline" className="text-slate-600 border-slate-200 hover:bg-slate-50" onClick={handleResetToApi}>
+              <Button variant="outline" className="text-slate-600 border-slate-200 hover:bg-slate-50" onClick={handleRevertToLastSaved}>
                 <RefreshCw className="w-4 h-4 mr-2" />
-                Reset to API Feed
+                Revert to Last Saved
               </Button>
             </div>
           </div>
@@ -298,6 +424,7 @@ export default function LmePricingPage() {
                         <Button
                           size="sm"
                           className="h-8 bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
+                          onClick={() => setLocation(`/jobs/${job.id}`)}
                         >
                           <FileDown className="w-3.5 h-3.5 mr-1.5" />
                           Generate Invoice
@@ -307,6 +434,7 @@ export default function LmePricingPage() {
                           variant="outline"
                           size="sm"
                           className="h-8 text-[#0ea5e9] border-[#0ea5e9]/30 hover:bg-[#0ea5e9] hover:text-white transition-colors"
+                          onClick={() => setLocation(`/jobs/${job.id}`)}
                         >
                           <Eye className="w-3.5 h-3.5 mr-1.5" />
                           View Invoice
@@ -370,6 +498,49 @@ export default function LmePricingPage() {
 
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-200 flex items-center gap-3 border-l-4 border-l-[#0ea5e9]">
+            <History className="w-5 h-5 text-[#0ea5e9]" />
+            <h3 className="text-lg font-bold text-[#0f2744]">LME Price History</h3>
+            <span className="text-sm text-slate-500">Most recent saved prices</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-6 py-3 font-semibold">Date</th>
+                  <th className="px-6 py-3 font-semibold">USD</th>
+                  <th className="px-6 py-3 font-semibold">FX</th>
+                  <th className="px-6 py-3 font-semibold">GBP</th>
+                  <th className="px-6 py-3 font-semibold">Source</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {history.map((h, i) => (
+                  <tr key={h.id} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/30"}>
+                    <td className="px-6 py-3 font-medium text-[#0f2744]">{formatHistoryDate(h.priceDate)}</td>
+                    <td className="px-6 py-3 text-slate-700">${parseFloat(h.usdPrice).toLocaleString("en-GB", { minimumFractionDigits: 2 })}</td>
+                    <td className="px-6 py-3 text-slate-600">{parseFloat(h.exchangeRate).toFixed(4)}</td>
+                    <td className="px-6 py-3 font-medium text-teal-700">£{parseFloat(h.gbpPrice).toLocaleString("en-GB", { minimumFractionDigits: 2 })}</td>
+                    <td className="px-6 py-3">
+                      <Badge variant="outline" className="font-medium bg-slate-50 text-slate-600 border-slate-200 capitalize">
+                        {h.source}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+                {history.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-10 text-center text-slate-500">
+                      No saved LME prices yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-200 flex items-center gap-3 border-l-4 border-l-[#0ea5e9]">
             <FileDown className="w-5 h-5 text-[#0ea5e9]" />
             <h3 className="text-lg font-bold text-[#0f2744]">Export & Reports</h3>
           </div>
@@ -381,10 +552,14 @@ export default function LmePricingPage() {
               </div>
               <h4 className="font-bold text-[#0f2744] mb-2">Accounts Excel File</h4>
               <p className="text-sm text-slate-500 mb-6 flex-1">
-                Full job listing with calculated values for client invoicing
+                Full job listing with calculated values for client invoicing. Uses the filters selected above.
               </p>
-              <Button className="w-full bg-green-600 hover:bg-green-700 text-white border-transparent shadow-sm">
-                Download .xlsx
+              <Button
+                className="w-full bg-green-600 hover:bg-green-700 text-white border-transparent shadow-sm"
+                onClick={handleDownloadXlsx}
+                disabled={downloadingXlsx}
+              >
+                {downloadingXlsx ? "Preparing..." : "Download .xlsx"}
               </Button>
             </div>
 
@@ -393,11 +568,23 @@ export default function LmePricingPage() {
                 <FileText className="w-6 h-6 text-teal-600" />
               </div>
               <h4 className="font-bold text-[#0f2744] mb-2">Invoice Summary PDF</h4>
-              <p className="text-sm text-slate-500 mb-6 flex-1">
-                Monthly invoice summary report for management review
+              <p className="text-sm text-slate-500 mb-4 flex-1">
+                Monthly invoice summary report grouped by client.
               </p>
-              <Button className="w-full bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-transparent shadow-sm">
-                Download .pdf
+              <div className="mb-3">
+                <Input
+                  type="month"
+                  value={pdfMonth}
+                  onChange={(e) => setPdfMonth(e.target.value)}
+                  className="text-sm bg-slate-50 border-slate-200 focus-visible:ring-[#0ea5e9]"
+                />
+              </div>
+              <Button
+                className="w-full bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-transparent shadow-sm"
+                onClick={handleDownloadPdf}
+                disabled={downloadingPdf}
+              >
+                {downloadingPdf ? "Preparing..." : "Download .pdf"}
               </Button>
             </div>
 
@@ -407,10 +594,14 @@ export default function LmePricingPage() {
               </div>
               <h4 className="font-bold text-[#0f2744] mb-2">LME Price History</h4>
               <p className="text-sm text-slate-500 mb-6 flex-1">
-                Historical LME pricing data and exchange rates
+                Historical LME pricing data and exchange rates.
               </p>
-              <Button className="w-full bg-[#0f2744] hover:bg-[#1e3a5f] text-white border-transparent shadow-sm">
-                Download .csv
+              <Button
+                className="w-full bg-[#0f2744] hover:bg-[#1e3a5f] text-white border-transparent shadow-sm"
+                onClick={handleDownloadCsv}
+                disabled={downloadingCsv}
+              >
+                {downloadingCsv ? "Preparing..." : "Download .csv"}
               </Button>
             </div>
           </div>
