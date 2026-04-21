@@ -292,7 +292,7 @@ export default function LmePricingPage() {
             <div className="bg-sky-50 border border-sky-100 rounded-lg p-3 mb-6 flex items-start gap-3">
               <Info className="w-5 h-5 text-sky-500 mt-0.5 shrink-0" />
               <p className="text-sm text-sky-800">
-                Prices are auto-fetched from the LME API. Use manual override when the feed is unavailable.
+                Enter the latest LME lead price and FX rate manually. The values you save here are used for invoice calculations until they are updated.
               </p>
             </div>
 
