@@ -14,6 +14,7 @@ import depotsRouter from "./depots";
 import clientsRouter from "./clients";
 import locationsRouter from "./locations";
 import kpiRouter from "./kpi";
+import supportRouter from "./support";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(collectionPointsRouter);
 router.use(depotsRouter);
 router.use(clientsRouter);
 router.use(locationsRouter);
+router.use(supportRouter);
 
 export default router;

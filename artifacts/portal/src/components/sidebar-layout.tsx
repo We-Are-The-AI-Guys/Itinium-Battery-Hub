@@ -16,9 +16,19 @@ import {
   Package,
   Building2,
   MapPin,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 interface User {
   id: number;
@@ -75,10 +85,9 @@ function getNavItems(user: User | null): NavItem[] {
   return items;
 }
 
-const secondaryNavItems: NavItem[] = [
+const linkNavItems: NavItem[] = [
   { icon: Plus, label: "New Collection", path: "/collection/new" },
   { icon: Settings, label: "Settings", path: "/settings" },
-  { icon: HelpCircle, label: "Help & Support", path: "/help" },
 ];
 
 function getInitials(name: string) {
@@ -104,6 +113,200 @@ function getCurrentMonth() {
   return new Date().toLocaleDateString("en-GB", { month: "short", year: "numeric" });
 }
 
+const ISSUE_TYPES = ["Bug Report", "Feature Request", "Question", "Other"];
+const PRIORITIES = [
+  { value: "P1", label: "P1 — Critical" },
+  { value: "P2", label: "P2 — High" },
+  { value: "P3", label: "P3 — Normal" },
+  { value: "P4", label: "P4 — Low" },
+];
+
+interface SupportModalProps {
+  open: boolean;
+  onClose: () => void;
+  user: User | null;
+}
+
+function SupportModal({ open, onClose, user }: SupportModalProps) {
+  const [issueType, setIssueType] = useState("Bug Report");
+  const [priority, setPriority] = useState("P3");
+  const [title, setTitle] = useState("");
+  const [details, setDetails] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function resetForm() {
+    setIssueType("Bug Report");
+    setPriority("P3");
+    setTitle("");
+    setDetails("");
+    setSubmitting(false);
+    setSubmitted(false);
+    setError(null);
+  }
+
+  function handleClose() {
+    onClose();
+    setTimeout(resetForm, 300);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/support/ticket", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: `[${issueType}] ${title.trim()}`,
+          details,
+          priority,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message || "Something went wrong. Please try again.");
+      } else {
+        setSubmitted(true);
+      }
+    } catch {
+      setError("Could not reach the server. Please check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
+      <DialogContent className="sm:max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle className="text-[#0f2744] flex items-center gap-2">
+            <HelpCircle className="w-5 h-5 text-[#0ea5e9]" />
+            Help & Support
+          </DialogTitle>
+          <DialogDescription>
+            Submit a support ticket and we'll get back to you as soon as possible.
+          </DialogDescription>
+        </DialogHeader>
+
+        {submitted ? (
+          <div className="py-8 flex flex-col items-center gap-4 text-center">
+            <CheckCircle2 className="w-12 h-12 text-emerald-500" />
+            <div>
+              <p className="font-semibold text-[#0f2744] text-base">Ticket submitted!</p>
+              <p className="text-sm text-slate-500 mt-1">
+                We've received your request and will be in touch shortly.
+              </p>
+            </div>
+            <button
+              onClick={handleClose}
+              className="mt-2 px-6 py-2 bg-[#0f2744] text-white text-sm font-medium rounded-md hover:bg-[#1e3a5f] transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-md border border-slate-200">
+              <div>
+                <p className="text-xs text-slate-400 mb-0.5">Name</p>
+                <p className="text-sm font-medium text-slate-700">{user?.fullName || "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 mb-0.5">Email</p>
+                <p className="text-sm font-medium text-slate-700 truncate">{user?.email || "—"}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Issue Type</label>
+                <select
+                  value={issueType}
+                  onChange={(e) => setIssueType(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-md px-3 py-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
+                >
+                  {ISSUE_TYPES.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Priority</label>
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value)}
+                  className="w-full text-sm border border-slate-200 rounded-md px-3 py-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
+                >
+                  {PRIORITIES.map((p) => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Subject <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Brief summary of the issue"
+                required
+                className="w-full text-sm border border-slate-200 rounded-md px-3 py-2 bg-white text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Details</label>
+              <textarea
+                value={details}
+                onChange={(e) => setDetails(e.target.value)}
+                placeholder="Describe the issue or request in more detail..."
+                rows={4}
+                className="w-full text-sm border border-slate-200 rounded-md px-3 py-2 bg-white text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] resize-none"
+              />
+            </div>
+
+            {error && (
+              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                {error}
+              </div>
+            )}
+
+            <DialogFooter className="pt-1">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting || !title.trim()}
+                className="px-5 py-2 text-sm font-medium text-white bg-[#0ea5e9] hover:bg-[#0284c7] rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {submitting && (
+                  <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                )}
+                {submitting ? "Submitting…" : "Submit Ticket"}
+              </button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 interface SidebarLayoutProps {
   children: React.ReactNode;
   title: string;
@@ -121,6 +324,7 @@ export function SidebarLayout({
 }: SidebarLayoutProps) {
   const [user, setUser] = useState<User | null>(null);
   const [location] = useLocation();
+  const [supportOpen, setSupportOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me", { credentials: "include" })
@@ -142,6 +346,12 @@ export function SidebarLayout({
   }
 
   const navItems = getNavItems(user);
+  const navItemStyle = (active: boolean) =>
+    `w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+      active
+        ? "bg-white/10 text-white border-l-4 border-[#0ea5e9]"
+        : "hover:bg-white/5 hover:text-white border-l-4 border-transparent"
+    }`;
 
   return (
     <div className="flex min-h-screen bg-[#f8fafc] font-sans">
@@ -165,11 +375,7 @@ export function SidebarLayout({
             <Link
               key={item.path}
               href={item.path}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                isActive(item.path)
-                  ? "bg-white/10 text-white border-l-4 border-[#0ea5e9]"
-                  : "hover:bg-white/5 hover:text-white border-l-4 border-transparent"
-              }`}
+              className={navItemStyle(isActive(item.path))}
             >
               <item.icon className="w-5 h-5" />
               {item.label}
@@ -178,20 +384,24 @@ export function SidebarLayout({
 
           <div className="my-6 border-t border-white/10 mx-4"></div>
 
-          {secondaryNavItems.map((item) => (
+          {linkNavItems.map((item) => (
             <Link
               key={item.path}
               href={item.path}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                isActive(item.path)
-                  ? "bg-white/10 text-white border-l-4 border-[#0ea5e9]"
-                  : "hover:bg-white/5 hover:text-white border-l-4 border-transparent"
-              }`}
+              className={navItemStyle(isActive(item.path))}
             >
               <item.icon className="w-5 h-5" />
               {item.label}
             </Link>
           ))}
+
+          <button
+            onClick={() => setSupportOpen(true)}
+            className={navItemStyle(false)}
+          >
+            <HelpCircle className="w-5 h-5" />
+            Help & Support
+          </button>
         </nav>
 
         <div className="p-4 border-t border-white/10">
@@ -248,6 +458,12 @@ export function SidebarLayout({
 
         <div className="flex-1 overflow-auto p-8">{children}</div>
       </main>
+
+      <SupportModal
+        open={supportOpen}
+        onClose={() => setSupportOpen(false)}
+        user={user}
+      />
     </div>
   );
 }
