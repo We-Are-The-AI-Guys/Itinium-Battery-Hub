@@ -16,10 +16,13 @@ const loginRateLimiter = rateLimit({
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
-  handler: (_req, res, _next, options) => {
-    const retryAfterMins = Math.ceil(options.windowMs / 1000 / 60);
+  handler: (req, res, _next, options) => {
+    const rl = (req as unknown as { rateLimit?: { resetTime?: Date } }).rateLimit;
+    const resetTime = rl?.resetTime instanceof Date ? rl.resetTime.getTime() : Date.now() + options.windowMs;
+    const remainingMs = Math.max(0, resetTime - Date.now());
+    const retryAfterMins = Math.max(1, Math.ceil(remainingMs / 1000 / 60));
     res.status(429).json({
-      message: `Too many failed login attempts — please try again in ${retryAfterMins} minutes.`,
+      message: `Too many failed login attempts — please try again in ${retryAfterMins} minute${retryAfterMins === 1 ? "" : "s"}.`,
       retryAfter: retryAfterMins,
     });
   },
@@ -85,6 +88,8 @@ router.post("/auth/login", loginRateLimiter, async (req, res) => {
       const [location] = await db.select({ name: locationsTable.name }).from(locationsTable).where(eq(locationsTable.id, user.locationId));
       if (location) locationName = location.name;
     }
+
+    loginRateLimiter.resetKey(req.ip || "unknown");
 
     res.json({
       user: {
