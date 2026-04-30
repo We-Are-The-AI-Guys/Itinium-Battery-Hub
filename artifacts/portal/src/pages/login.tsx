@@ -7,6 +7,7 @@ import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -142,9 +143,9 @@ export default function LoginPage() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label htmlFor="password" className="text-sm font-medium text-[#1e293b]">Password</label>
-                <a href="#" className="text-sm font-medium text-[#0ea5e9] hover:text-[#0284c7] transition-colors" data-testid="link-forgot-password">
+                <Link href="/forgot-password" className="text-sm font-medium text-[#0ea5e9] hover:text-[#0284c7] transition-colors" data-testid="link-forgot-password">
                   Forgot Password?
-                </a>
+                </Link>
               </div>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">

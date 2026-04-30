@@ -1,10 +1,11 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { usersTable, sessionsTable, clientsTable, locationsTable } from "@workspace/db/schema";
-import { eq, lt } from "drizzle-orm";
+import { usersTable, sessionsTable, clientsTable, locationsTable, passwordResetTokensTable } from "@workspace/db/schema";
+import { eq, lt, and, isNull } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { z } from "zod";
+import { sendEmail, buildPasswordResetEmail } from "../lib/email";
 
 const router: IRouter = Router();
 
@@ -171,9 +172,128 @@ router.post("/auth/logout", async (req, res) => {
   }
 });
 
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+router.post("/auth/forgot-password", async (req, res) => {
+  try {
+    const parsed = forgotPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: "A valid email address is required" });
+      return;
+    }
+    const { email } = parsed.data;
+
+    const [user] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, email.toLowerCase().trim()));
+
+    if (user && user.isActive) {
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+      await db.insert(passwordResetTokensTable).values({
+        userId: user.id,
+        token,
+        expiresAt,
+      });
+
+      const domain =
+        process.env.REPLIT_DEV_DOMAIN
+          ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+          : process.env.APP_URL || "http://localhost:3000";
+
+      const resetUrl = `${domain}/reset-password?token=${token}`;
+      const html = buildPasswordResetEmail(resetUrl, user.fullName);
+
+      await sendEmail(user.email, "Reset your Itinium password", html);
+    }
+
+    res.json({ message: "If that email is registered, a reset link has been sent." });
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+router.get("/auth/check-reset-token", async (req, res) => {
+  try {
+    const token = String(req.query.token || "");
+    if (!token) {
+      res.status(400).json({ message: "Token is required" });
+      return;
+    }
+    const [resetToken] = await db
+      .select({ id: passwordResetTokensTable.id, expiresAt: passwordResetTokensTable.expiresAt, usedAt: passwordResetTokensTable.usedAt })
+      .from(passwordResetTokensTable)
+      .where(and(eq(passwordResetTokensTable.token, token), isNull(passwordResetTokensTable.usedAt)));
+
+    if (!resetToken || resetToken.expiresAt < new Date()) {
+      res.status(410).json({ message: "This reset link has expired or has already been used." });
+      return;
+    }
+    res.json({ valid: true });
+  } catch (error) {
+    console.error("Check reset token error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  newPassword: z.string().min(8, "Password must be at least 8 characters"),
+});
+
+router.post("/auth/reset-password", async (req, res) => {
+  try {
+    const parsed = resetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: parsed.error.issues[0]?.message || "Invalid request" });
+      return;
+    }
+    const { token, newPassword } = parsed.data;
+
+    const [resetToken] = await db
+      .select()
+      .from(passwordResetTokensTable)
+      .where(
+        and(
+          eq(passwordResetTokensTable.token, token),
+          isNull(passwordResetTokensTable.usedAt),
+        )
+      );
+
+    if (!resetToken || resetToken.expiresAt < new Date()) {
+      res.status(410).json({ message: "This reset link has expired or has already been used." });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+
+    await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, resetToken.userId));
+
+    await db
+      .update(passwordResetTokensTable)
+      .set({ usedAt: new Date() })
+      .where(eq(passwordResetTokensTable.id, resetToken.id));
+
+    await db.delete(sessionsTable).where(eq(sessionsTable.userId, resetToken.userId));
+
+    res.json({ message: "Password reset successfully." });
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 setInterval(async () => {
   try {
     await db.delete(sessionsTable).where(lt(sessionsTable.expiresAt, new Date()));
+    await db
+      .delete(passwordResetTokensTable)
+      .where(lt(passwordResetTokensTable.expiresAt, new Date()));
   } catch {}
 }, 60 * 60 * 1000);
 

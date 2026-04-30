@@ -17,6 +17,8 @@ import JobDetailPage from "@/pages/job-detail";
 import StillagesPage from "@/pages/stillages";
 import PlaceholderPage from "@/pages/placeholder";
 import KpiPage from "@/pages/kpi";
+import ForgotPasswordPage from "@/pages/forgot-password";
+import ResetPasswordPage from "@/pages/reset-password";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -136,6 +138,12 @@ function AppRouter() {
         <GuestGuard>
           <LoginPage />
         </GuestGuard>
+      </Route>
+      <Route path="/forgot-password">
+        <ForgotPasswordPage />
+      </Route>
+      <Route path="/reset-password">
+        <ResetPasswordPage />
       </Route>
       <Route path="/">
         <AuthGuard>
