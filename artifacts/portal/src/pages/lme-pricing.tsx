@@ -12,7 +12,6 @@ import {
   RefreshCw,
   Receipt,
   Search,
-  Eye,
   FileDown,
   FileSpreadsheet,
   FileText,
@@ -116,6 +115,7 @@ export default function LmePricingPage() {
   const [downloadingXlsx, setDownloadingXlsx] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [downloadingCsv, setDownloadingCsv] = useState(false);
+  const [downloadingJobId, setDownloadingJobId] = useState<number | null>(null);
   const [pdfMonth, setPdfMonth] = useState(currentMonthValue());
 
   const calculatedGbp = (parseFloat(usdPrice.replace(/,/g, "")) * parseFloat(exchangeRate)).toFixed(2);
@@ -259,6 +259,24 @@ export default function LmePricingPage() {
       toast({ title: "CSV export failed", description: e instanceof Error ? e.message : "Try again.", variant: "destructive" });
     } finally {
       setDownloadingCsv(false);
+    }
+  }
+
+  async function handleDownloadJobInvoice(job: Job) {
+    setDownloadingJobId(job.id);
+    try {
+      await downloadFromApi(
+        `${API_BASE}/api/jobs/${job.id}/invoice.pdf`,
+        `invoice-${job.reference.toLowerCase().replace(/[^a-z0-9]/g, "-")}.pdf`
+      );
+    } catch (e) {
+      toast({
+        title: "Invoice download failed",
+        description: e instanceof Error ? e.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingJobId(null);
     }
   }
 
@@ -424,20 +442,22 @@ export default function LmePricingPage() {
                         <Button
                           size="sm"
                           className="h-8 bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
-                          onClick={() => setLocation(`/jobs/${job.id}`)}
+                          onClick={() => handleDownloadJobInvoice(job)}
+                          disabled={downloadingJobId === job.id}
                         >
                           <FileDown className="w-3.5 h-3.5 mr-1.5" />
-                          Generate Invoice
+                          {downloadingJobId === job.id ? "Preparing…" : "Generate Invoice"}
                         </Button>
                       ) : (
                         <Button
                           variant="outline"
                           size="sm"
                           className="h-8 text-[#0ea5e9] border-[#0ea5e9]/30 hover:bg-[#0ea5e9] hover:text-white transition-colors"
-                          onClick={() => setLocation(`/jobs/${job.id}`)}
+                          onClick={() => handleDownloadJobInvoice(job)}
+                          disabled={downloadingJobId === job.id}
                         >
-                          <Eye className="w-3.5 h-3.5 mr-1.5" />
-                          View Invoice
+                          <FileDown className="w-3.5 h-3.5 mr-1.5" />
+                          {downloadingJobId === job.id ? "Preparing…" : "Download Invoice"}
                         </Button>
                       )}
                     </td>

@@ -6,6 +6,7 @@ import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewa
 import { MANUFACTURERS } from "./manufacturers";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
+import { createBrandedDoc } from "../lib/pdf-branding";
 
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
@@ -145,13 +146,15 @@ router.get(
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="invoice-summary-${stamp}.pdf"`);
 
-      const doc = new PDFDocument({ size: "A4", margin: 40 });
+      const { doc, finalize } = createBrandedDoc(
+        "Invoice Summary",
+        `Month: ${monthLabel}`
+      );
       doc.pipe(res);
 
-      doc.fontSize(18).fillColor("#0f2744").text("Invoice Summary", { align: "left" });
+      doc.fontSize(18).fillColor("#0f2744").font("Helvetica-Bold").text("Invoice Summary", 40, doc.y);
       doc.moveDown(0.2);
-      doc.fontSize(11).fillColor("#475569").text(`Month: ${monthLabel}`);
-      doc.fontSize(9).fillColor("#94a3b8").text(`Generated: ${new Date().toLocaleString("en-GB")}`);
+      doc.fontSize(11).fillColor("#475569").font("Helvetica").text(`Month: ${monthLabel}`);
       doc.moveDown(0.8);
 
       const cols = [
@@ -166,6 +169,7 @@ router.get(
 
       function drawHeader() {
         const y = doc.y;
+        doc.rect(40, y - 4, 515, 20).fill("#f1f5f9");
         doc.fontSize(9).fillColor("#0f2744").font("Helvetica-Bold");
         for (const c of cols) {
           doc.text(c.label, c.x, y, { width: c.w, align: c.align, lineBreak: false });
@@ -177,7 +181,7 @@ router.get(
       }
 
       function ensureRoom() {
-        if (doc.y > 760) {
+        if (doc.y > 720) {
           doc.addPage();
         }
       }
@@ -235,7 +239,7 @@ router.get(
           .text(`Grand Total: £${grandTotal.toFixed(2)}   (${jobs.length} job${jobs.length === 1 ? "" : "s"})`, 40, doc.y, { align: "right", width: 515 });
       }
 
-      doc.end();
+      finalize();
     } catch (error) {
       console.error("Invoice summary PDF error:", error);
       if (!res.headersSent) {
@@ -288,6 +292,213 @@ router.get(
     } catch (error) {
       console.error("Jobs list error:", error);
       res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+router.get(
+  "/jobs/:id/invoice.pdf",
+  requireAuth,
+  requireRole("accounts", "head_office_admin"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const jobId = parseInt(String(req.params.id), 10);
+      if (isNaN(jobId)) {
+        res.status(400).json({ message: "Invalid job ID" });
+        return;
+      }
+
+      const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+      if (!job) {
+        res.status(404).json({ message: "Job not found" });
+        return;
+      }
+
+      const batteries = await db
+        .select()
+        .from(jobBatteriesTable)
+        .where(eq(jobBatteriesTable.jobId, jobId));
+
+      const invoiceRef = job.itiniumInvoiceNo || job.customerInvoiceNo || job.reference;
+      const collectionLabel = job.collectionDate
+        ? new Date(`${job.collectionDate}T00:00:00Z`).toLocaleDateString("en-GB", {
+            day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
+          })
+        : "—";
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="invoice-${job.reference.toLowerCase().replace(/[^a-z0-9]/g, "-")}.pdf"`
+      );
+
+      const { doc, finalize } = createBrandedDoc(
+        `Invoice — ${job.reference}`,
+        `${job.clientName} | ${job.depot}`
+      );
+      doc.pipe(res);
+
+      const pageW = doc.page.width;
+      const contentW = pageW - 80;
+      const NAVY = "#0f2744";
+      const TEAL = "#0ea5e9";
+
+      function ensureRoom(needed = 30) {
+        if (doc.y + needed > doc.page.height - 60) {
+          doc.addPage();
+        }
+      }
+
+      doc.fontSize(18).fillColor(NAVY).font("Helvetica-Bold")
+        .text(`Tax Invoice`, 40, doc.y, { continued: false });
+      doc.moveDown(0.3);
+
+      const generatedStr = `Date: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`;
+      doc.fontSize(9).fillColor("#475569").font("Helvetica").text(generatedStr, 40);
+      doc.moveDown(0.8);
+
+      const topY = doc.y;
+
+      doc.fontSize(10).fillColor(NAVY).font("Helvetica-Bold").text("Bill To:", 40, topY);
+      doc.fontSize(10).fillColor("#334155").font("Helvetica")
+        .text(job.clientName, 40)
+        .text(job.depot, 40);
+      if (job.collectionPoint) doc.text(job.collectionPoint, 40);
+
+      const rightColX = pageW / 2 + 10;
+      const labelW = 120;
+      const valueX = rightColX + labelW;
+      const valueW = pageW - valueX - 40;
+
+      function infoRow(label: string, value: string, yPos: number) {
+        doc.fontSize(9).fillColor("#64748b").font("Helvetica-Bold")
+          .text(label, rightColX, yPos, { width: labelW, lineBreak: false });
+        doc.fontSize(9).fillColor("#1e293b").font("Helvetica")
+          .text(value, valueX, yPos, { width: valueW, lineBreak: false });
+      }
+
+      infoRow("Job Reference:", job.reference, topY);
+      infoRow("Collection Date:", collectionLabel, topY + 16);
+      infoRow("Itinium Invoice No:", job.itiniumInvoiceNo || "—", topY + 32);
+      infoRow("Customer Invoice No:", job.customerInvoiceNo || "—", topY + 48);
+      infoRow("Invoice Status:", job.invoiceStatus || "—", topY + 64);
+
+      doc.y = Math.max(doc.y, topY + 90);
+      doc.moveDown(1.2);
+
+      doc.moveTo(40, doc.y).lineTo(pageW - 40, doc.y).strokeColor("#e2e8f0").lineWidth(0.5).stroke();
+      doc.moveDown(0.8);
+
+      const batCols = [
+        { label: "Pallet", x: 40, w: 48 },
+        { label: "Manufacturer / Cell Type", x: 92, w: 160 },
+        { label: "Qty", x: 256, w: 35, align: "right" as const },
+        { label: "Wt (kg)", x: 295, w: 55, align: "right" as const },
+        { label: "Pb (kg)", x: 354, w: 55, align: "right" as const },
+        { label: "Value (£)", x: 413, w: 70, align: "right" as const },
+      ];
+
+      const headerY = doc.y;
+      doc.rect(40, headerY - 4, contentW, 22).fill("#f1f5f9");
+      doc.fontSize(8.5).fillColor(NAVY).font("Helvetica-Bold");
+      for (const c of batCols) {
+        doc.text(c.label, c.x, headerY + 2, { width: c.w, align: c.align, lineBreak: false });
+      }
+      doc.moveDown(0.2);
+      doc.y = headerY + 22;
+      doc.font("Helvetica").fillColor("#1e293b");
+
+      let totalPb = 0;
+      let totalValue = 0;
+      let rowIdx = 0;
+
+      for (const b of batteries) {
+        ensureRoom(20);
+        const ry = doc.y;
+        if (rowIdx % 2 === 1) {
+          doc.rect(40, ry - 2, contentW, 18).fill("#f8fafc");
+        }
+        const pbNum = b.pbContentKg ? parseFloat(b.pbContentKg) : null;
+        const valNum = b.valueGbp ? parseFloat(b.valueGbp) : null;
+        if (pbNum) totalPb += pbNum;
+        if (valNum) totalValue += valNum;
+
+        const qty = b.isLooseCells ? (b.looseCellsQty ? String(b.looseCellsQty) : "—") : "1";
+        const weight = b.estimatedWeightKg ? `${parseFloat(b.estimatedWeightKg).toFixed(1)}` : "—";
+        const pbStr = pbNum !== null ? pbNum.toFixed(3) : "—";
+        const valStr = valNum !== null ? `${valNum.toFixed(2)}` : "—";
+        const cellLabel = [b.manufacture, b.cellType].filter(Boolean).join(" / ") || "—";
+
+        doc.fontSize(8.5).fillColor("#1e293b").font("Helvetica");
+        doc.text(b.palletNumber || "—", batCols[0].x, ry, { width: batCols[0].w, lineBreak: false });
+        doc.text(cellLabel, batCols[1].x, ry, { width: batCols[1].w, lineBreak: false });
+        doc.text(qty, batCols[2].x, ry, { width: batCols[2].w, align: "right", lineBreak: false });
+        doc.text(weight, batCols[3].x, ry, { width: batCols[3].w, align: "right", lineBreak: false });
+        doc.text(pbStr, batCols[4].x, ry, { width: batCols[4].w, align: "right", lineBreak: false });
+        doc.text(valStr, batCols[5].x, ry, { width: batCols[5].w, align: "right", lineBreak: false });
+        doc.y = ry + 18;
+        rowIdx++;
+      }
+
+      if (batteries.length === 0) {
+        doc.fontSize(9).fillColor("#94a3b8").text("No battery items recorded.", 40);
+      }
+
+      ensureRoom(30);
+      doc.moveDown(0.4);
+      doc.moveTo(40, doc.y).lineTo(pageW - 40, doc.y).strokeColor("#cbd5e1").lineWidth(0.5).stroke();
+      doc.moveDown(0.6);
+
+      function summaryRow(label: string, value: string, highlight = false) {
+        ensureRoom(18);
+        const sy = doc.y;
+        doc.fontSize(9)
+          .fillColor(highlight ? NAVY : "#475569")
+          .font(highlight ? "Helvetica-Bold" : "Helvetica")
+          .text(label, 40, sy, { width: contentW - 90, lineBreak: false });
+        doc.fontSize(9)
+          .fillColor(highlight ? NAVY : "#1e293b")
+          .font(highlight ? "Helvetica-Bold" : "Helvetica")
+          .text(value, 40, sy, { width: contentW, align: "right", lineBreak: false });
+        doc.y = sy + 16;
+      }
+
+      summaryRow("Total Pb Content:", `${totalPb.toFixed(3)} kg`);
+      summaryRow("LME Rate Used:", job.lmeRateUsed ? `£${parseFloat(job.lmeRateUsed).toLocaleString("en-GB", { minimumFractionDigits: 2 })} / tonne` : "—");
+      summaryRow("Tonnage:", job.tonnage ? `${parseFloat(job.tonnage).toFixed(3)} t` : "—");
+
+      doc.moveDown(0.3);
+      doc.moveTo(pageW - 190, doc.y).lineTo(pageW - 40, doc.y).strokeColor("#cbd5e1").lineWidth(0.5).stroke();
+      doc.moveDown(0.4);
+
+      const calcValue = job.calculatedValue ? parseFloat(job.calculatedValue) : totalValue;
+      summaryRow("Calculated Value:", `£${calcValue.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, true);
+
+      if (job.grossProfit) {
+        const gp = parseFloat(job.grossProfit);
+        summaryRow(
+          "Gross Profit:",
+          `£${gp.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          true
+        );
+      }
+
+      doc.moveDown(1.5);
+      ensureRoom(50);
+      doc.fontSize(8).fillColor("#94a3b8").font("Helvetica")
+        .text(
+          "This invoice is generated by the Itinium Battery Portal. All values are calculated based on the LME lead price and Pb content of the batteries collected. Please retain for your records.",
+          40, doc.y, { width: contentW }
+        );
+
+      finalize();
+    } catch (error) {
+      console.error("Per-job invoice PDF error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Internal server error" });
+      } else {
+        res.end();
+      }
     }
   }
 );

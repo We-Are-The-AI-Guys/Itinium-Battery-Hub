@@ -13,6 +13,7 @@ import {
   PoundSterling,
   ClipboardCheck,
   RefreshCw,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -125,6 +126,32 @@ function formatDate(dateStr: string | null) {
   });
 }
 
+const API_BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+
+async function downloadFromApi(url: string, fallbackFilename: string) {
+  const res = await fetch(url, { credentials: "include" });
+  if (!res.ok) {
+    let message = `Download failed (${res.status})`;
+    try {
+      const err = await res.json();
+      if (err?.message) message = err.message;
+    } catch {}
+    throw new Error(message);
+  }
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  const filename = match ? match[1] : fallbackFilename;
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
 export default function JobDetailPage() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
@@ -135,6 +162,8 @@ export default function JobDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [lmePrice, setLmePrice] = useState<LmePrice | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [downloadingInvoice, setDownloadingInvoice] = useState(false);
   const cblLmeInitialRef = useRef<string | null>(null);
   const lmePriceRef = useRef<LmePrice | null>(null);
   const lmePrefillDoneRef = useRef(false);
@@ -245,7 +274,32 @@ export default function JobDetailPage() {
         }
       })
       .catch(() => {});
+    fetch("/api/auth/me", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.user?.role) setUserRole(data.user.role);
+      })
+      .catch(() => {});
   }, [loadJob]);
+
+  async function handleDownloadInvoice() {
+    if (!job) return;
+    setDownloadingInvoice(true);
+    try {
+      await downloadFromApi(
+        `${API_BASE}/api/jobs/${job.id}/invoice.pdf`,
+        `invoice-${job.reference.toLowerCase().replace(/[^a-z0-9]/g, "-")}.pdf`
+      );
+    } catch (e) {
+      toast({
+        title: "Invoice download failed",
+        description: e instanceof Error ? e.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingInvoice(false);
+    }
+  }
 
   useEffect(() => {
     if (!lmePrice) return;
@@ -459,6 +513,18 @@ export default function JobDetailPage() {
           </button>
 
           <div className="flex items-center gap-2">
+            {(userRole === "accounts" || userRole === "head_office_admin") && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-[#0ea5e9] border-[#0ea5e9]/40 hover:bg-[#0ea5e9] hover:text-white transition-colors"
+                onClick={handleDownloadInvoice}
+                disabled={downloadingInvoice}
+              >
+                <Download className="w-3.5 h-3.5 mr-1.5" />
+                {downloadingInvoice ? "Preparing…" : "Download Invoice PDF"}
+              </Button>
+            )}
             <Badge variant="outline" className={`font-medium text-sm px-3 py-1 ${statusStyles[job.status] || ""}`}>
               {statusLabels[job.status] || job.status}
             </Badge>
