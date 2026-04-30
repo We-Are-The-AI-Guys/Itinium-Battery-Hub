@@ -132,6 +132,7 @@ export default function JobDetailPage() {
   const [job, setJob] = useState<JobData | null>(null);
   const [batteries, setBatteries] = useState<BatteryData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [lmePrice, setLmePrice] = useState<LmePrice | null>(null);
   const cblLmeInitialRef = useRef<string | null>(null);
@@ -162,10 +163,18 @@ export default function JobDetailPage() {
   });
 
   const loadJob = useCallback(() => {
+    setLoadError(null);
+    setLoading(true);
     fetch(`/api/jobs/${params.id}`, { credentials: "include" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data) {
+      .then(async (res) => {
+        if (res.ok) {
+          return { ok: true as const, data: await res.json() };
+        }
+        return { ok: false as const, status: res.status };
+      })
+      .then((result) => {
+        if (result.ok) {
+          const data = result.data;
           setJob(data.job);
           setBatteries(data.batteries);
 
@@ -212,10 +221,17 @@ export default function JobDetailPage() {
             dueDate: data.job.dueDate || "",
             datePaid: data.job.datePaid || "",
           });
+        } else if (result.status === 404) {
+          setLoadError("not_found");
+        } else {
+          setLoadError("error");
         }
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        setLoadError("error");
+        setLoading(false);
+      });
   }, [params.id]);
 
   useEffect(() => {
@@ -385,11 +401,28 @@ export default function JobDetailPage() {
     );
   }
 
-  if (!job) {
+  if (loadError === "error") {
+    return (
+      <SidebarLayout title="Job Detail" subtitle="Could not load job">
+        <div className="text-center py-20">
+          <p className="text-slate-500 mb-4">Couldn't load this job — please try again.</p>
+          <div className="flex items-center justify-center gap-3">
+            <Button variant="outline" onClick={() => setLocation("/jobs")}>Back to Jobs</Button>
+            <Button onClick={loadJob}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Retry
+            </Button>
+          </div>
+        </div>
+      </SidebarLayout>
+    );
+  }
+
+  if (loadError === "not_found" || (!loading && !job)) {
     return (
       <SidebarLayout title="Job Not Found" subtitle="The requested job does not exist">
         <div className="text-center py-20">
-          <p className="text-slate-500 mb-4">Job not found or you don't have access.</p>
+          <p className="text-slate-500 mb-4">This job doesn't exist or has been removed.</p>
           <Button onClick={() => setLocation("/jobs")}>Back to Jobs</Button>
         </div>
       </SidebarLayout>
