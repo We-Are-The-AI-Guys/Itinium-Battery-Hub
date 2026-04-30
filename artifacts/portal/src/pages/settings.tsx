@@ -12,7 +12,6 @@ import {
   Settings,
   Save,
   Lock,
-  Monitor,
   Trash2,
   Building2,
   FileText,
@@ -43,15 +42,6 @@ interface NotificationPrefs {
   weeklySummary: boolean;
 }
 
-interface SessionData {
-  id: number;
-  browser: string;
-  ipAddress: string;
-  lastUsedAt: string;
-  createdAt: string;
-  expiresAt: string;
-  isCurrent: boolean;
-}
 
 interface SystemSettings {
   id: number;
@@ -65,7 +55,6 @@ interface SystemSettings {
 const TABS = [
   { id: "profile", label: "Profile", icon: User },
   { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "security", label: "Security", icon: ShieldCheck },
   { id: "weights", label: "Battery Weights", icon: Weight },
   { id: "collection-points", label: "Collection Points", icon: Building2 },
   { id: "system", label: "System", icon: Settings },
@@ -375,188 +364,6 @@ function NotificationsTab() {
   );
 }
 
-function SecurityTab({ user }: { user: UserProfile }) {
-  const { toast } = useToast();
-  const [sessions, setSessions] = useState<SessionData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [revoking, setRevoking] = useState<number | "all" | null>(null);
-
-  const fetchSessions = useCallback(async () => {
-    try {
-      const res = await fetch("/api/settings/sessions", { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        setSessions(data.sessions);
-      }
-    } catch {}
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { fetchSessions(); }, [fetchSessions]);
-
-  async function handleRevokeSession(id: number) {
-    setRevoking(id);
-    try {
-      const res = await fetch(`/api/settings/sessions/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (res.ok) {
-        toast({ title: "Session revoked", description: "The session has been terminated." });
-        fetchSessions();
-      } else {
-        const data = await res.json();
-        toast({ title: "Error", description: data.message || "Failed to revoke session", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Error", description: "Failed to revoke session", variant: "destructive" });
-    } finally {
-      setRevoking(null);
-    }
-  }
-
-  async function handleRevokeAll() {
-    setRevoking("all");
-    try {
-      const res = await fetch("/api/settings/sessions", {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (res.ok) {
-        toast({ title: "Sessions revoked", description: "All other sessions have been terminated." });
-        fetchSessions();
-      } else {
-        toast({ title: "Error", description: "Failed to revoke sessions", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Error", description: "Failed to revoke sessions", variant: "destructive" });
-    } finally {
-      setRevoking(null);
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100">
-          <h3 className="text-lg font-bold text-[#0f2744] flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-[#0ea5e9]" />
-            Account Information
-          </h3>
-        </div>
-        <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status</p>
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                <span className="text-sm font-medium text-slate-700">Active</span>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Role</p>
-              <p className="text-sm font-medium text-slate-700">{getRoleLabel(user.role)}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Account Email</p>
-              <p className="text-sm font-medium text-slate-700">{user.email}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Account Created</p>
-              <p className="text-sm font-medium text-slate-700">
-                {user.createdAt
-                  ? new Date(user.createdAt).toLocaleDateString("en-GB", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })
-                  : "—"}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-[#0f2744] flex items-center gap-2">
-              <Monitor className="w-5 h-5 text-[#0ea5e9]" />
-              Active Sessions
-            </h3>
-            <p className="text-sm text-slate-500 mt-1">Manage your logged-in devices and sessions</p>
-          </div>
-          {sessions.filter((s) => !s.isCurrent).length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-              onClick={handleRevokeAll}
-              disabled={revoking === "all"}
-            >
-              <Trash2 className="w-3.5 h-3.5 mr-1.5" />
-              {revoking === "all" ? "Revoking..." : "Revoke All Others"}
-            </Button>
-          )}
-        </div>
-        <div className="divide-y divide-slate-100">
-          {loading ? (
-            <div className="px-6 py-12 text-center text-slate-500">Loading sessions...</div>
-          ) : sessions.length === 0 ? (
-            <div className="px-6 py-12 text-center text-slate-500">No active sessions found</div>
-          ) : (
-            sessions.map((session) => (
-              <div key={session.id} className="px-6 py-4 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center">
-                    <Monitor className="w-5 h-5 text-slate-500" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-[#0f2744]">{session.browser}</p>
-                      {session.isCurrent && (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
-                          Current
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      IP: {session.ipAddress} · Last active:{" "}
-                      {new Date(session.lastUsedAt).toLocaleDateString("en-GB", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                      {" "}· Created:{" "}
-                      {new Date(session.createdAt).toLocaleDateString("en-GB", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </p>
-                  </div>
-                </div>
-                {!session.isCurrent && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 h-8"
-                    onClick={() => handleRevokeSession(session.id)}
-                    disabled={revoking === session.id}
-                  >
-                    {revoking === session.id ? "Revoking..." : "Revoke"}
-                  </Button>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 interface WeightRef {
   id: number;
@@ -1575,7 +1382,6 @@ export default function SettingsPage() {
                 <ProfileTab user={user} onProfileUpdated={fetchUser} />
               )}
               {activeTab === "notifications" && <NotificationsTab />}
-              {activeTab === "security" && <SecurityTab user={user} />}
               {activeTab === "weights" && isAdmin && <WeightsTab />}
               {activeTab === "collection-points" && isAdmin && <CollectionPointsTab />}
               {activeTab === "system" && isAdmin && <SystemTab />}
