@@ -418,12 +418,29 @@ export default function JobDetailPage() {
     );
   }
 
-  if (loadError === "not_found" || (!loading && !job)) {
+  if (loadError === "not_found") {
     return (
       <SidebarLayout title="Job Not Found" subtitle="The requested job does not exist">
         <div className="text-center py-20">
           <p className="text-slate-500 mb-4">This job doesn't exist or has been removed.</p>
           <Button onClick={() => setLocation("/jobs")}>Back to Jobs</Button>
+        </div>
+      </SidebarLayout>
+    );
+  }
+
+  if (!job) {
+    return (
+      <SidebarLayout title="Job Detail" subtitle="Could not load job">
+        <div className="text-center py-20">
+          <p className="text-slate-500 mb-4">Couldn't load this job — please try again.</p>
+          <div className="flex items-center justify-center gap-3">
+            <Button variant="outline" onClick={() => setLocation("/jobs")}>Back to Jobs</Button>
+            <Button onClick={loadJob}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Retry
+            </Button>
+          </div>
         </div>
       </SidebarLayout>
     );
