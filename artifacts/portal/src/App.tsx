@@ -16,6 +16,7 @@ import JobListPage from "@/pages/job-list";
 import JobDetailPage from "@/pages/job-detail";
 import StillagesPage from "@/pages/stillages";
 import PlaceholderPage from "@/pages/placeholder";
+import KpiPage from "@/pages/kpi";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -163,7 +164,7 @@ function AppRouter() {
       </Route>
       <Route path="/kpi">
         <RoleGuard allowedRoles={["accounts", "head_office_admin"]}>
-          <PlaceholderPage title="KPI Reporting" />
+          <KpiPage />
         </RoleGuard>
       </Route>
       <Route path="/help">

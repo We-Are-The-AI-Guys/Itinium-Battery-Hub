@@ -13,12 +13,14 @@ import collectionPointsRouter from "./collection-points";
 import depotsRouter from "./depots";
 import clientsRouter from "./clients";
 import locationsRouter from "./locations";
+import kpiRouter from "./kpi";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
 router.use(jobsRouter);
+router.use(kpiRouter);
 router.use(lmeRouter);
 router.use(usersRouter);
 router.use(settingsRouter);
