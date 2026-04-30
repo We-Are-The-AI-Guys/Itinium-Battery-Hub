@@ -1,0 +1,95 @@
+Submitting Support Tickets to AI Guys CRM
+There are two endpoints depending on what you need. Use Option A — it's the simpler one for most cases.
+
+Option A — Simple External Feedback (recommended)
+Endpoint: POST https://aiguyscrm.replit.app/api/external/feedback
+
+Auth header: x-api-key: <EXTERNAL_API_KEY>
+(Ask Mat for the key — it's stored in the CRM's environment secrets as EXTERNAL_API_KEY)
+
+Payload — send an array (you can batch multiple tickets in one call):
+
+[
+  {
+    "client": "Company Name Here",
+    "username": "john.doe",
+    "issueType": "Bug Report",
+    "details": "Full description of the issue goes here.",
+    "timestamp": "2026-04-30T13:00:00.000Z",
+    "screenshotUrl": "https://your-app.com/screenshot.png"
+  }
+]
+
+Fields:
+
+Field	Required	Notes
+client	✅ Yes	Must match a company name in the CRM exactly (case-insensitive) to auto-link the ticket to that prospect
+username	No	The user's name/email within your app
+issueType	No	e.g. "Bug Report", "Feature Request", "Question"
+details	No	Full description text
+timestamp	No	ISO 8601 string — when the issue occurred
+screenshotUrl	No	Public URL to a screenshot image
+attachments	No	Array of public URLs to files
+Example (JavaScript/fetch):
+
+async function submitSupportTicket({ companyName, username, issueType, details, screenshotUrl }) {
+  const response = await fetch("https://aiguyscrm.replit.app/api/external/feedback", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": process.env.AIGUYS_API_KEY, // store this as a secret
+    },
+    body: JSON.stringify([
+      {
+        client: companyName,
+        username,
+        issueType,
+        details,
+        timestamp: new Date().toISOString(),
+        screenshotUrl,
+      }
+    ]),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.message);
+  return result; // { success: true, results: [{ client, success, id, matched }] }
+}
+
+Successful response:
+
+{
+  "success": true,
+  "message": "Processed 1 feedback item(s)",
+  "results": [
+    {
+      "client": "Company Name Here",
+      "success": true,
+      "id": 42,
+      "matched": true
+    }
+  ]
+}
+
+"matched": true means it found the company in the CRM and linked the ticket automatically.
+
+Option B — Webhook (if the ticket needs to be tied to a specific CRM project)
+Endpoint: POST https://aiguyscrm.replit.app/api/webhooks/feedback
+
+Auth header: x-api-key: <EXTERNAL_API_KEY>
+
+{
+  "projectId": 5,
+  "title": "Login page broken",
+  "details": "Users cannot log in after the latest update.",
+  "priority": "P2",
+  "screenshotUrl": "https://your-app.com/screenshot.png"
+}
+
+You need to know the CRM project ID to use this — get that from Mat. Priority options: P1, P2, P3 (default), P4.
+
+Setting up the secret in the other Replit project
+In the other project's Replit Secrets, add:
+
+Key	Value
+AIGUYS_API_KEY	(the EXTERNAL_API_KEY value — ask Mat)
+Then reference it in code as process.env.AIGUYS_API_KEY.
