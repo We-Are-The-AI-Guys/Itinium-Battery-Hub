@@ -28,8 +28,11 @@ export default function LoginPage() {
     defaultValues: { email: "", password: "" },
   });
 
+  const [rateLimitError, setRateLimitError] = useState<string | null>(null);
+
   async function onSubmit(data: LoginForm) {
     setIsLoading(true);
+    setRateLimitError(null);
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -38,6 +41,10 @@ export default function LoginPage() {
         credentials: "include",
       });
       const body = await res.json();
+      if (res.status === 429) {
+        setRateLimitError(body.message || "Too many login attempts — please try again later.");
+        return;
+      }
       if (!res.ok) {
         toast({ title: "Login failed", description: body.message || "Invalid credentials", variant: "destructive" });
         return;
@@ -126,6 +133,13 @@ export default function LoginPage() {
             <h2 className="text-2xl font-bold text-[#1e293b] mb-2" data-testid="text-login-heading">Welcome Back</h2>
             <p className="text-[#64748b] text-sm">Sign in to your account to continue</p>
           </div>
+
+          {rateLimitError && (
+            <div className="mb-4 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3" data-testid="banner-rate-limit">
+              <Shield className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-700 font-medium">{rateLimitError}</p>
+            </div>
+          )}
 
           <form className="space-y-5" onSubmit={form.handleSubmit(onSubmit)}>
             <div className="space-y-1.5">

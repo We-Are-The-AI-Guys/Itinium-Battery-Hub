@@ -6,15 +6,31 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { z } from "zod";
 import { sendEmail, buildPasswordResetEmail } from "../lib/email";
+import rateLimit from "express-rate-limit";
 
 const router: IRouter = Router();
+
+const loginRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res, _next, options) => {
+    const retryAfterMins = Math.ceil(options.windowMs / 1000 / 60);
+    res.status(429).json({
+      message: `Too many failed login attempts — please try again in ${retryAfterMins} minutes.`,
+      retryAfter: retryAfterMins,
+    });
+  },
+});
 
 const loginBodySchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
 
-router.post("/auth/login", async (req, res) => {
+router.post("/auth/login", loginRateLimiter, async (req, res) => {
   try {
     const parsed = loginBodySchema.safeParse(req.body);
     if (!parsed.success) {
