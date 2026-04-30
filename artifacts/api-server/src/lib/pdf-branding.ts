@@ -1,15 +1,16 @@
 import PDFDocument from "pdfkit";
 import path from "path";
 import fs from "fs";
-import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const LOGO_PATH = path.resolve(__dirname, "../../../../attached_assets/itinium-logo-transparent_1773848738567.png");
+const LOGO_FILENAME = "itinium-logo-transparent_1773848738567.png";
+const LOGO_CANDIDATES = [
+  path.resolve(process.cwd(), "attached_assets", LOGO_FILENAME),
+  path.resolve(process.cwd(), "../../attached_assets", LOGO_FILENAME),
+];
+const LOGO_PATH = LOGO_CANDIDATES.find((p) => { try { return fs.existsSync(p); } catch { return false; } }) ?? LOGO_CANDIDATES[0];
 
 if (!fs.existsSync(LOGO_PATH)) {
-  console.warn(`[pdf-branding] Itinium logo not found at: ${LOGO_PATH}`);
+  console.warn(`[pdf-branding] Itinium logo not found (tried: ${LOGO_CANDIDATES.join(", ")})`);
 }
 const NAVY = "#0f2744";
 const TEAL = "#0ea5e9";
