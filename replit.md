@@ -40,6 +40,21 @@ The Itinium Battery Portal is built as a monorepo using pnpm workspaces.
 - **Dashboard & Reporting**: Summary statistics and job listings for administrative oversight.
 - **Settings**: User profile, password, notification preferences, and system-wide settings management.
 
+## Environment Variables
+
+Required for production deployment:
+
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string (auto-provided by Replit DB) |
+| `SMTP_HOST` | SMTP server hostname for transactional emails (e.g. `smtp.sendgrid.net`) |
+| `SMTP_PORT` | SMTP port — `587` for STARTTLS, `465` for SSL (defaults to `587`) |
+| `SMTP_USER` | SMTP authentication username |
+| `SMTP_PASS` | SMTP authentication password / API key |
+| `SMTP_FROM` | Sender address shown on emails (defaults to `noreply@itinium.co.uk`) |
+
+If `SMTP_HOST` is not set, email sending degrades gracefully: in development mode, emails are logged to the console; in production, a warning is logged and the email is skipped (no crash).
+
 ## External Dependencies
 
 - **PostgreSQL**: Primary database for all application data.

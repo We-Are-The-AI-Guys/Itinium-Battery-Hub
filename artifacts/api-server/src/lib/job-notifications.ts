@@ -136,7 +136,7 @@ export async function notifySubmitterStatusChange(job: Job, newStatus: string): 
       .where(eq(usersTable.id, job.submittedById));
 
     if (!submitter) return;
-    if (!wantsEmail(submitter.notificationPreferences, "jobUpdates", "jobApprovedCompleted")) return;
+    if (!wantsEmail(submitter.notificationPreferences, "jobUpdates")) return;
 
     const statusLabel = STATUS_LABELS[newStatus] ?? newStatus;
     const html = buildBrandedEmail(
