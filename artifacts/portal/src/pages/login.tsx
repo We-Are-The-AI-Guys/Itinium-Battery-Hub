@@ -42,7 +42,11 @@ export default function LoginPage() {
       });
       const body = await res.json();
       if (res.status === 429) {
-        setRateLimitError(body.message || "Too many login attempts — please try again later.");
+        const retryAfterHeader = res.headers.get("Retry-After");
+        const fallback = retryAfterHeader
+          ? `Too many failed login attempts — please try again in ${retryAfterHeader} minute${retryAfterHeader === "1" ? "" : "s"}.`
+          : "Too many login attempts — please try again later.";
+        setRateLimitError(body.message || fallback);
         return;
       }
       if (!res.ok) {

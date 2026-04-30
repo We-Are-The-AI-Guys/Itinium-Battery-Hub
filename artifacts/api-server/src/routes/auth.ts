@@ -17,7 +17,7 @@ const loginRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res, _next, options) => {
-    const rl = (req as unknown as { rateLimit?: { resetTime?: Date } }).rateLimit;
+    const rl = req.rateLimit;
     const resetTime = rl?.resetTime instanceof Date ? rl.resetTime.getTime() : Date.now() + options.windowMs;
     const remainingMs = Math.max(0, resetTime - Date.now());
     const retryAfterMins = Math.max(1, Math.ceil(remainingMs / 1000 / 60));
