@@ -67,7 +67,7 @@ export function drawPageHeader(doc: Doc, docTitle: string, docSubtitle?: string)
 export function drawPageFooter(doc: Doc, pageNum: number, totalPages: number) {
   doc.save();
 
-  const footerY = doc.page.height - 38;
+  const footerY = doc.page.height - (doc.page.margins?.bottom ?? MARGIN) - 12;
 
   doc.moveTo(MARGIN, footerY - 6)
     .lineTo(doc.page.width - MARGIN, footerY - 6)
