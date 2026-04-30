@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, and } from "drizzle-orm";
 import { sendEmail, buildBrandedEmail } from "./email";
 
 type Job = {
@@ -54,10 +54,10 @@ function jobTable(job: Job): string {
   </table>`;
 }
 
-function wantsEmail(prefs: unknown, key: string): boolean {
+function wantsEmail(prefs: unknown, ...keys: string[]): boolean {
   if (!prefs || typeof prefs !== "object") return true;
   const p = prefs as Record<string, unknown>;
-  return p[key] !== false;
+  return keys.every(k => p[k] !== false);
 }
 
 export async function notifyAdminsNewJob(job: Job): Promise<void> {
@@ -65,7 +65,10 @@ export async function notifyAdminsNewJob(job: Job): Promise<void> {
     const admins = await db
       .select({ email: usersTable.email, fullName: usersTable.fullName, notificationPreferences: usersTable.notificationPreferences })
       .from(usersTable)
-      .where(inArray(usersTable.role, ["accounts", "head_office_admin"]));
+      .where(and(
+        inArray(usersTable.role, ["accounts", "head_office_admin"]),
+        eq(usersTable.isActive, true)
+      ));
 
     const eligible = admins.filter(u => wantsEmail(u.notificationPreferences, "newJobSubmitted"));
     if (eligible.length === 0) return;
@@ -96,7 +99,10 @@ export async function notifyAdminsFlaggedBatteries(job: Job, flagCount: number):
     const admins = await db
       .select({ email: usersTable.email, notificationPreferences: usersTable.notificationPreferences })
       .from(usersTable)
-      .where(inArray(usersTable.role, ["accounts", "head_office_admin"]));
+      .where(and(
+        inArray(usersTable.role, ["accounts", "head_office_admin"]),
+        eq(usersTable.isActive, true)
+      ));
 
     const eligible = admins.filter(u => wantsEmail(u.notificationPreferences, "newJobSubmitted"));
     if (eligible.length === 0) return;
@@ -130,7 +136,7 @@ export async function notifySubmitterStatusChange(job: Job, newStatus: string): 
       .where(eq(usersTable.id, job.submittedById));
 
     if (!submitter) return;
-    if (!wantsEmail(submitter.notificationPreferences, "jobApprovedCompleted")) return;
+    if (!wantsEmail(submitter.notificationPreferences, "jobUpdates", "jobApprovedCompleted")) return;
 
     const statusLabel = STATUS_LABELS[newStatus] ?? newStatus;
     const html = buildBrandedEmail(
