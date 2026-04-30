@@ -258,10 +258,16 @@ export default function KpiPage() {
       <style>{`
         @media print {
           .print-hide { display: none !important; }
-          .sidebar-layout-sidebar { display: none !important; }
-          body { background: white; }
+          aside { display: none !important; }
+          header { display: none !important; }
+          body { background: white !important; }
+          main {
+            margin-left: 0 !important;
+            width: 100% !important;
+          }
           .recharts-wrapper { page-break-inside: avoid; }
           .kpi-table { page-break-inside: avoid; }
+          * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}</style>
 
