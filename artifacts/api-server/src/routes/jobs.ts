@@ -7,6 +7,7 @@ import { MANUFACTURERS } from "./manufacturers";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { createBrandedDoc } from "../lib/pdf-branding";
+import { notifyAdminsNewJob, notifyAdminsFlaggedBatteries, notifySubmitterStatusChange } from "../lib/job-notifications";
 
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
@@ -794,6 +795,20 @@ router.post(
       });
 
       res.status(201).json(result);
+
+      const flaggedCount = result.batteries.filter(
+        b => b.serialFlagReason || b.manufacturerFlagReason || b.cellModelFlagReason
+      ).length;
+
+      const jobForNotify = {
+        ...result.job,
+        submittedById: req.user!.id,
+      };
+
+      notifyAdminsNewJob(jobForNotify).catch(() => {});
+      if (flaggedCount > 0) {
+        notifyAdminsFlaggedBatteries(jobForNotify, flaggedCount).catch(() => {});
+      }
     } catch (error) {
       console.error("Job creation error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -951,6 +966,8 @@ router.patch(
       }
 
       res.json({ job: updated });
+
+      notifySubmitterStatusChange(updated, status).catch(() => {});
     } catch (error) {
       console.error("Job status update error:", error);
       res.status(500).json({ message: "Internal server error" });
