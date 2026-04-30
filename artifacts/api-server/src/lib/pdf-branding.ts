@@ -1,8 +1,16 @@
 import PDFDocument from "pdfkit";
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from "url";
 
-const LOGO_PATH = path.resolve(process.cwd(), "attached_assets/itinium-logo-transparent_1773848738567.png");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const LOGO_PATH = path.resolve(__dirname, "../../../../attached_assets/itinium-logo-transparent_1773848738567.png");
+
+if (!fs.existsSync(LOGO_PATH)) {
+  console.warn(`[pdf-branding] Itinium logo not found at: ${LOGO_PATH}`);
+}
 const NAVY = "#0f2744";
 const TEAL = "#0ea5e9";
 const HEADER_H = 68;
