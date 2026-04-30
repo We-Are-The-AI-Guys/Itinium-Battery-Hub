@@ -12,7 +12,8 @@ router.get(
   requireRole("accounts", "head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
-      const { from, to, clientId } = req.query as Record<string, string>;
+      const { from, to, clientId: rawClientId } = req.query as Record<string, string>;
+      const clientId = req.user?.role === "head_office_admin" ? rawClientId : undefined;
 
       const now = new Date();
 
