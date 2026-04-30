@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { usersTable, sessionsTable, clientsTable, locationsTable, passwordResetTokensTable } from "@workspace/db/schema";
-import { eq, lt, and, isNull } from "drizzle-orm";
+import { eq, lt, and, isNull, gt } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { z } from "zod";
@@ -208,13 +208,15 @@ router.post("/auth/forgot-password", async (req, res) => {
       const resetUrl = `${domain}/reset-password?token=${token}`;
       const html = buildPasswordResetEmail(resetUrl, user.fullName);
 
-      await sendEmail(user.email, "Reset your Itinium password", html);
+      sendEmail(user.email, "Reset your Itinium password", html).catch((err) => {
+        console.error("Failed to send password reset email:", err);
+      });
     }
 
     res.json({ message: "If that email is registered, a reset link has been sent." });
   } catch (error) {
     console.error("Forgot password error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    res.json({ message: "If that email is registered, a reset link has been sent." });
   }
 });
 
@@ -255,31 +257,29 @@ router.post("/auth/reset-password", async (req, res) => {
     }
     const { token, newPassword } = parsed.data;
 
-    const [resetToken] = await db
-      .select()
-      .from(passwordResetTokensTable)
+    const now = new Date();
+    const [claimed] = await db
+      .update(passwordResetTokensTable)
+      .set({ usedAt: now })
       .where(
         and(
           eq(passwordResetTokensTable.token, token),
           isNull(passwordResetTokensTable.usedAt),
+          gt(passwordResetTokensTable.expiresAt, now),
         )
-      );
+      )
+      .returning({ userId: passwordResetTokensTable.userId });
 
-    if (!resetToken || resetToken.expiresAt < new Date()) {
+    if (!claimed) {
       res.status(410).json({ message: "This reset link has expired or has already been used." });
       return;
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
 
-    await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, resetToken.userId));
+    await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, claimed.userId));
 
-    await db
-      .update(passwordResetTokensTable)
-      .set({ usedAt: new Date() })
-      .where(eq(passwordResetTokensTable.id, resetToken.id));
-
-    await db.delete(sessionsTable).where(eq(sessionsTable.userId, resetToken.userId));
+    await db.delete(sessionsTable).where(eq(sessionsTable.userId, claimed.userId));
 
     res.json({ message: "Password reset successfully." });
   } catch (error) {
