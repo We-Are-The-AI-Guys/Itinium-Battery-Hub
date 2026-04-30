@@ -2,11 +2,11 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Lock, Eye, EyeOff, Shield, ArrowLeft, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
+import { Lock, Eye, EyeOff, Shield, ArrowLeft, AlertTriangle, Loader2 } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Link, useSearch } from "wouter";
+import { Link, useSearch, useLocation } from "wouter";
 
 const schema = z.object({
   newPassword: z.string().min(8, "Password must be at least 8 characters"),
@@ -18,13 +18,14 @@ const schema = z.object({
 
 type ResetForm = z.infer<typeof schema>;
 
-type PageState = "loading" | "ready" | "success" | "error";
+type PageState = "loading" | "ready" | "error";
 
 export default function ResetPasswordPage() {
   const search = useSearch();
   const params = new URLSearchParams(search);
   const token = params.get("token") || "";
 
+  const [, navigate] = useLocation();
   const [pageState, setPageState] = useState<PageState>(token ? "loading" : "error");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -70,7 +71,7 @@ export default function ResetPasswordPage() {
         }
         return;
       }
-      setPageState("success");
+      navigate("/login?reset=1");
     } catch {
       setErrorMsg("Unable to connect to the server. Please try again.");
     } finally {
@@ -86,25 +87,6 @@ export default function ResetPasswordPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 p-8 sm:p-10">
-          {pageState === "success" && (
-            <div className="text-center" data-testid="reset-password-success">
-              <div className="flex justify-center mb-4">
-                <div className="w-14 h-14 bg-green-50 rounded-full flex items-center justify-center">
-                  <CheckCircle2 className="w-7 h-7 text-green-500" />
-                </div>
-              </div>
-              <h2 className="text-xl font-bold text-[#1e293b] mb-2">Password updated</h2>
-              <p className="text-sm text-[#64748b] mb-6">
-                Your password has been reset successfully. You can now sign in with your new password.
-              </p>
-              <Link href="/login">
-                <Button className="w-full h-12 bg-[#0f2744] hover:bg-[#132744] text-white font-medium" data-testid="button-go-to-login">
-                  Go to Sign In
-                </Button>
-              </Link>
-            </div>
-          )}
-
           {pageState === "error" && (
             <div className="text-center" data-testid="reset-password-expired">
               <div className="flex justify-center mb-4">

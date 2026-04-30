@@ -7,7 +7,7 @@ import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -17,6 +17,8 @@ const loginSchema = z.object({
 type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
+  const search = useSearch();
+  const wasReset = new URLSearchParams(search).get("reset") === "1";
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -114,6 +116,12 @@ export default function LoginPage() {
         </div>
 
         <div className="w-full max-w-[420px] bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 p-8 sm:p-10">
+          {wasReset && (
+            <div className="mb-6 flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3" data-testid="banner-password-reset">
+              <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+              <p className="text-sm text-green-700 font-medium">Password updated — please sign in with your new password.</p>
+            </div>
+          )}
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-[#1e293b] mb-2" data-testid="text-login-heading">Welcome Back</h2>
             <p className="text-[#64748b] text-sm">Sign in to your account to continue</p>
