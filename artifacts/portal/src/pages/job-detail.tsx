@@ -522,7 +522,7 @@ export default function JobDetailPage() {
                 disabled={downloadingInvoice}
               >
                 <Download className="w-3.5 h-3.5 mr-1.5" />
-                {downloadingInvoice ? "Preparing…" : "Download Invoice PDF"}
+                {downloadingInvoice ? "Preparing…" : "Download Remittance PDF"}
               </Button>
             )}
             <Badge variant="outline" className={`font-medium text-sm px-3 py-1 ${statusStyles[job.status] || ""}`}>
