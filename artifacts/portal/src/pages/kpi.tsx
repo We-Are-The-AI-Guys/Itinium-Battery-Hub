@@ -157,15 +157,28 @@ function StatCard({ label, value, sub, color, icon, alert }: StatCardProps) {
   );
 }
 
-const CustomTooltipCurrency = ({ active, payload, label }: any) => {
+interface TooltipPayloadEntry {
+  name: string;
+  value: number;
+  color: string;
+  dataKey: string;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: TooltipPayloadEntry[];
+  label?: string;
+}
+
+const CustomTooltipCurrency = ({ active, payload, label }: CustomTooltipProps) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm">
       <p className="font-semibold text-[#0f2744] mb-1">{label}</p>
-      {payload.map((p: any) => (
+      {payload.map((p) => (
         <p key={p.name} style={{ color: p.color }}>
-          {p.name}: {typeof p.value === "number" && p.name?.toLowerCase().includes("tonnage")
-            ? `${p.value.toFixed(1)}t`
+          {p.name}: {p.name?.toLowerCase().includes("tonnage")
+            ? `${Number(p.value).toFixed(1)}t`
             : formatCurrencyDecimal(p.value)}
         </p>
       ))}
@@ -173,12 +186,12 @@ const CustomTooltipCurrency = ({ active, payload, label }: any) => {
   );
 };
 
-const CustomTooltipOps = ({ active, payload, label }: any) => {
+const CustomTooltipOps = ({ active, payload, label }: CustomTooltipProps) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm">
       <p className="font-semibold text-[#0f2744] mb-1">{label}</p>
-      {payload.map((p: any) => (
+      {payload.map((p) => (
         <p key={p.name} style={{ color: p.color }}>
           {p.name}: {p.name === "Tonnage (t)" ? `${Number(p.value).toFixed(1)}t` : p.value}
         </p>

@@ -111,15 +111,17 @@ router.get(
 
       const totalInvoiceValue = months.reduce((s, m) => s + m.invoiceValue, 0);
       const totalGrossProfit = months.reduce((s, m) => s + m.grossProfit, 0);
-      const activeMonths = monthlyRows.length;
-      const avgCblLmePct =
-        activeMonths > 0
-          ? monthlyRows.reduce((s, m) => s + parseFloat(m.avgCblLmePct || "0"), 0) / activeMonths
-          : 0;
-      const avgDaysToPay =
-        activeMonths > 0
-          ? monthlyRows.reduce((s, m) => s + parseFloat(m.avgDaysToPay || "0"), 0) / activeMonths
-          : 0;
+
+      const [overallAvgs] = await db
+        .select({
+          avgCblLmePct: sql<string>`COALESCE(AVG(${jobsTable.cblLmePercent}) FILTER (WHERE ${jobsTable.cblLmePercent} IS NOT NULL), 0)`,
+          avgDaysToPay: sql<string>`COALESCE(AVG(${jobsTable.daysToPay}) FILTER (WHERE ${jobsTable.daysToPay} IS NOT NULL), 0)`,
+        })
+        .from(jobsTable)
+        .where(whereConditions);
+
+      const avgCblLmePct = parseFloat(overallAvgs?.avgCblLmePct || "0");
+      const avgDaysToPay = parseFloat(overallAvgs?.avgDaysToPay || "0");
 
       const statusBreakdown: Record<string, number> = {};
       for (const r of statusRows) {
