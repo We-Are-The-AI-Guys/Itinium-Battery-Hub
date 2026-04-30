@@ -19,12 +19,16 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
   const transporter = createTransporter();
 
   if (!transporter) {
-    console.log("=== EMAIL (no SMTP configured — dev mode) ===");
-    console.log(`To: ${to}`);
-    console.log(`Subject: ${subject}`);
-    const linkMatch = html.match(/href="([^"]+)"/);
-    if (linkMatch) console.log(`Link: ${linkMatch[1]}`);
-    console.log("=============================================");
+    if (process.env.NODE_ENV !== "production") {
+      console.log("=== EMAIL (no SMTP configured — dev mode) ===");
+      console.log(`To: ${to}`);
+      console.log(`Subject: ${subject}`);
+      const linkMatch = html.match(/href="([^"]+)"/);
+      if (linkMatch) console.log(`Link: ${linkMatch[1]}`);
+      console.log("=============================================");
+    } else {
+      console.warn(`[email] SMTP not configured — email to ${to} was NOT sent.`);
+    }
     return;
   }
 

@@ -257,29 +257,34 @@ router.post("/auth/reset-password", async (req, res) => {
     }
     const { token, newPassword } = parsed.data;
 
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+
     const now = new Date();
-    const [claimed] = await db
-      .update(passwordResetTokensTable)
-      .set({ usedAt: now })
-      .where(
-        and(
-          eq(passwordResetTokensTable.token, token),
-          isNull(passwordResetTokensTable.usedAt),
-          gt(passwordResetTokensTable.expiresAt, now),
+    const claimed = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(passwordResetTokensTable)
+        .set({ usedAt: now })
+        .where(
+          and(
+            eq(passwordResetTokensTable.token, token),
+            isNull(passwordResetTokensTable.usedAt),
+            gt(passwordResetTokensTable.expiresAt, now),
+          )
         )
-      )
-      .returning({ userId: passwordResetTokensTable.userId });
+        .returning({ userId: passwordResetTokensTable.userId });
+
+      if (!row) return null;
+
+      await tx.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, row.userId));
+      await tx.delete(sessionsTable).where(eq(sessionsTable.userId, row.userId));
+
+      return row;
+    });
 
     if (!claimed) {
       res.status(410).json({ message: "This reset link has expired or has already been used." });
       return;
     }
-
-    const passwordHash = await bcrypt.hash(newPassword, 12);
-
-    await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, claimed.userId));
-
-    await db.delete(sessionsTable).where(eq(sessionsTable.userId, claimed.userId));
 
     res.json({ message: "Password reset successfully." });
   } catch (error) {
