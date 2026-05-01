@@ -163,6 +163,41 @@ function SupportModal({ open, onClose, user }: SupportModalProps) {
     setTimeout(resetForm, 300);
   }
 
+  async function compressImage(file: File, maxBytes = 900 * 1024): Promise<File> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        const canvas = document.createElement("canvas");
+        let { width, height } = img;
+        const MAX_DIM = 1920;
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) { height = Math.round((height * MAX_DIM) / width); width = MAX_DIM; }
+          else { width = Math.round((width * MAX_DIM) / height); height = MAX_DIM; }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+        let quality = 0.85;
+        const tryCompress = () => {
+          canvas.toBlob((blob) => {
+            if (!blob) { resolve(file); return; }
+            if (blob.size <= maxBytes || quality <= 0.3) {
+              resolve(new File([blob], file.name.replace(/\.\w+$/, ".jpg"), { type: "image/jpeg" }));
+            } else {
+              quality -= 0.1;
+              tryCompress();
+            }
+          }, "image/jpeg", quality);
+        };
+        tryCompress();
+      };
+      img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(file); };
+      img.src = objectUrl;
+    });
+  }
+
   async function handleScreenshotChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -170,18 +205,27 @@ function SupportModal({ open, onClose, user }: SupportModalProps) {
       setUploadError("Please select an image file.");
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      setUploadError("Image must be under 5 MB.");
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError("Image must be under 10 MB.");
       return;
     }
     setUploadError(null);
-    setScreenshotFile(file);
-    setScreenshotPreview(URL.createObjectURL(file));
     setScreenshotUrl(null);
     setUploading(true);
+
+    let compressed: File;
+    try {
+      compressed = await compressImage(file);
+    } catch {
+      compressed = file;
+    }
+
+    setScreenshotFile(compressed);
+    setScreenshotPreview(URL.createObjectURL(compressed));
+
     try {
       const form = new FormData();
-      form.append("screenshot", file);
+      form.append("screenshot", compressed);
       const res = await fetch("/api/support/screenshot", {
         method: "POST",
         credentials: "include",
