@@ -18,6 +18,8 @@ import {
   MapPin,
   CheckCircle2,
   AlertCircle,
+  ImagePlus,
+  X as XIcon,
 } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Input } from "@/components/ui/input";
@@ -135,6 +137,11 @@ function SupportModal({ open, onClose, user }: SupportModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   function resetForm() {
     setIssueType("Bug Report");
@@ -144,11 +151,62 @@ function SupportModal({ open, onClose, user }: SupportModalProps) {
     setSubmitting(false);
     setSubmitted(false);
     setError(null);
+    setScreenshotFile(null);
+    setScreenshotPreview(null);
+    setScreenshotUrl(null);
+    setUploading(false);
+    setUploadError(null);
   }
 
   function handleClose() {
     onClose();
     setTimeout(resetForm, 300);
+  }
+
+  async function handleScreenshotChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setUploadError("Please select an image file.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError("Image must be under 5 MB.");
+      return;
+    }
+    setUploadError(null);
+    setScreenshotFile(file);
+    setScreenshotPreview(URL.createObjectURL(file));
+    setScreenshotUrl(null);
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("screenshot", file);
+      const res = await fetch("/api/support/screenshot", {
+        method: "POST",
+        credentials: "include",
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setUploadError(data.message || "Screenshot upload failed.");
+        setScreenshotFile(null);
+        setScreenshotPreview(null);
+      } else {
+        setScreenshotUrl(data.screenshotUrl);
+      }
+    } catch {
+      setUploadError("Could not upload screenshot. You can still submit without it.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function removeScreenshot() {
+    setScreenshotFile(null);
+    setScreenshotPreview(null);
+    setScreenshotUrl(null);
+    setUploadError(null);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -157,15 +215,18 @@ function SupportModal({ open, onClose, user }: SupportModalProps) {
     setSubmitting(true);
     setError(null);
     try {
+      const body: Record<string, string> = {
+        title: `[${issueType}] ${title.trim()}`,
+        details,
+        priority,
+      };
+      if (screenshotUrl) body.screenshotUrl = screenshotUrl;
+
       const res = await fetch("/api/support/ticket", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: `[${issueType}] ${title.trim()}`,
-          details,
-          priority,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -182,7 +243,7 @@ function SupportModal({ open, onClose, user }: SupportModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-[#0f2744] flex items-center gap-2">
             <HelpCircle className="w-5 h-5 text-[#0ea5e9]" />
@@ -269,9 +330,57 @@ function SupportModal({ open, onClose, user }: SupportModalProps) {
                 value={details}
                 onChange={(e) => setDetails(e.target.value)}
                 placeholder="Describe the issue or request in more detail..."
-                rows={4}
+                rows={3}
                 className="w-full text-sm border border-slate-200 rounded-md px-3 py-2 bg-white text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] resize-none"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Screenshot <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
+              {screenshotPreview ? (
+                <div className="relative inline-block">
+                  <img
+                    src={screenshotPreview}
+                    alt="Screenshot preview"
+                    className="h-24 rounded-md border border-slate-200 object-cover"
+                  />
+                  {uploading && (
+                    <div className="absolute inset-0 bg-white/70 flex items-center justify-center rounded-md">
+                      <span className="w-4 h-4 border-2 border-[#0ea5e9] border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
+                  {!uploading && (
+                    <button
+                      type="button"
+                      onClick={removeScreenshot}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-slate-600 text-white rounded-full flex items-center justify-center hover:bg-red-500 transition-colors"
+                    >
+                      <XIcon className="w-3 h-3" />
+                    </button>
+                  )}
+                  {screenshotUrl && (
+                    <span className="mt-1 flex items-center gap-1 text-xs text-emerald-600">
+                      <CheckCircle2 className="w-3 h-3" /> Uploaded
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <label className="flex items-center gap-2 w-fit cursor-pointer px-3 py-2 text-sm text-slate-600 border border-dashed border-slate-300 rounded-md hover:border-[#0ea5e9] hover:text-[#0ea5e9] transition-colors">
+                  <ImagePlus className="w-4 h-4" />
+                  Attach image
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={handleScreenshotChange}
+                  />
+                </label>
+              )}
+              {uploadError && (
+                <p className="mt-1 text-xs text-red-600">{uploadError}</p>
+              )}
             </div>
 
             {error && (
@@ -291,7 +400,7 @@ function SupportModal({ open, onClose, user }: SupportModalProps) {
               </button>
               <button
                 type="submit"
-                disabled={submitting || !title.trim()}
+                disabled={submitting || uploading || !title.trim()}
                 className="px-5 py-2 text-sm font-medium text-white bg-[#0ea5e9] hover:bg-[#0284c7] rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {submitting && (
