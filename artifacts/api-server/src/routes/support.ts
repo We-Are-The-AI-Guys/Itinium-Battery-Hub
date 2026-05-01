@@ -14,7 +14,8 @@ router.post("/support/ticket", requireAuth, async (req: AuthenticatedRequest, re
   const apiKey = process.env.AIGUYS_API_KEY;
   const projectId = process.env.CRM_PROJECT_ID;
 
-  if (!apiKey || !projectId) {
+  const projectIdNum = Number(projectId);
+  if (!apiKey || !projectId || !Number.isInteger(projectIdNum) || projectIdNum <= 0) {
     res.status(503).json({
       success: false,
       message: "Support ticket service not configured",
@@ -51,7 +52,7 @@ router.post("/support/ticket", requireAuth, async (req: AuthenticatedRequest, re
         "x-api-key": apiKey,
       },
       body: JSON.stringify({
-        projectId: Number(projectId),
+        projectId: projectIdNum,
         title: title.trim(),
         details: fullDetails,
         priority: priority || "P3",
