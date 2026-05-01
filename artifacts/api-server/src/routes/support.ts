@@ -17,7 +17,7 @@ router.post("/support/ticket", requireAuth, async (req: AuthenticatedRequest, re
   if (!apiKey || !projectId) {
     res.status(503).json({
       success: false,
-      message: "Support ticket service not configured. Please contact your administrator.",
+      message: "Support ticket service not configured",
     });
     return;
   }
@@ -38,8 +38,6 @@ router.post("/support/ticket", requireAuth, async (req: AuthenticatedRequest, re
     details?.trim() || "",
     "",
     `Submitted by: ${user.fullName} (${user.email})`,
-    user.clientName ? `Client: ${user.clientName}` : "",
-    user.locationName ? `Location: ${user.locationName}` : "",
   ]
     .filter((l, i, arr) => !(l === "" && arr[i - 1] === ""))
     .join("\n")
