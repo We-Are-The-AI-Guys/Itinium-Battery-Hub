@@ -241,9 +241,55 @@ router.post(
           createdAt: usersTable.createdAt,
         });
 
-      res.status(201).json({ user });
+      res.status(201).json({ user, tempPassword });
     } catch (error) {
       console.error("Create user error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+router.patch(
+  "/users/:id/password",
+  requireAuth,
+  requireRole("head_office_admin", "team_leader"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = parseInt(req.params.id as string);
+      if (isNaN(userId)) {
+        res.status(400).json({ message: "Invalid user ID" });
+        return;
+      }
+
+      const { password } = req.body as { password?: string };
+      if (!password || password.length < 6) {
+        res.status(400).json({ message: "Password must be at least 6 characters" });
+        return;
+      }
+
+      const [target] = await db
+        .select({ id: usersTable.id, clientId: usersTable.clientId, role: usersTable.role })
+        .from(usersTable)
+        .where(eq(usersTable.id, userId));
+
+      if (!target) {
+        res.status(404).json({ message: "User not found" });
+        return;
+      }
+
+      if (req.user!.role === "team_leader") {
+        if (target.clientId !== req.user!.clientId || target.role !== "depot_user") {
+          res.status(403).json({ message: "Access denied" });
+          return;
+        }
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10);
+      await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, userId));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Change password error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   }

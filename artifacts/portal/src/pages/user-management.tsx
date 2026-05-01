@@ -16,6 +16,12 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  KeyRound,
+  Copy,
+  Check,
+  Eye,
+  EyeOff,
+  CheckCircle2,
 } from "lucide-react";
 
 interface UserData {
@@ -111,11 +117,21 @@ export default function UserManagementPage() {
     locationId: "",
   });
 
+  const [createdTempPassword, setCreatedTempPassword] = useState<string | null>(null);
+  const [copiedPassword, setCopiedPassword] = useState(false);
+
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
   const [editForm, setEditForm] = useState({ fullName: "", role: "", clientId: "", locationId: "" });
   const [editLocationOptions, setEditLocationOptions] = useState<LocationOption[]>([]);
   const [editError, setEditError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const [changingPasswordFor, setChangingPasswordFor] = useState<UserData | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me", { credentials: "include" })
@@ -270,7 +286,8 @@ export default function UserManagementPage() {
         }),
       });
       if (res.ok) {
-        setShowModal(false);
+        const data = await res.json();
+        setCreatedTempPassword(data.tempPassword || null);
         setNewUser({ fullName: "", email: "", role: "", clientId: "", locationId: "" });
         fetchUsers();
         fetchStats();
@@ -282,6 +299,59 @@ export default function UserManagementPage() {
       setFormError("Failed to create user");
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleChangePassword() {
+    if (!changingPasswordFor) return;
+    setPasswordError("");
+    if (newPassword.length < 6) {
+      setPasswordError("Password must be at least 6 characters");
+      return;
+    }
+    setPasswordSaving(true);
+    try {
+      const res = await fetch(`/api/users/${changingPasswordFor.id}/password`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ password: newPassword }),
+      });
+      if (res.ok) {
+        setPasswordSuccess(true);
+        setNewPassword("");
+      } else {
+        const data = await res.json();
+        setPasswordError(data.message || "Failed to change password");
+      }
+    } catch {
+      setPasswordError("Failed to change password");
+    } finally {
+      setPasswordSaving(false);
+    }
+  }
+
+  function closeTempPasswordModal() {
+    setShowModal(false);
+    setCreatedTempPassword(null);
+    setCopiedPassword(false);
+  }
+
+  function openChangePasswordModal(user: UserData) {
+    setChangingPasswordFor(user);
+    setNewPassword("");
+    setShowNewPassword(false);
+    setPasswordError("");
+    setPasswordSuccess(false);
+  }
+
+  async function copyToClipboard(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedPassword(true);
+      setTimeout(() => setCopiedPassword(false), 2000);
+    } catch {
+      /* fallback: select input */
     }
   }
 
@@ -552,7 +622,7 @@ export default function UserManagementPage() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         {(isAdmin || (isTeamLeader && user.role === "depot_user")) ? (
-                          <div className="flex items-center justify-end gap-3">
+                          <div className="flex items-center justify-end gap-2">
                             <Button
                               variant="outline"
                               size="sm"
@@ -561,6 +631,15 @@ export default function UserManagementPage() {
                             >
                               <Edit className="w-3.5 h-3.5 mr-1" />
                               Edit
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2.5 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-[#0f2744] transition-colors"
+                              onClick={() => openChangePasswordModal(user)}
+                            >
+                              <KeyRound className="w-3.5 h-3.5 mr-1" />
+                              Password
                             </Button>
                             <button
                               className={`text-xs font-medium hover:underline ${user.isActive ? "text-red-600 hover:text-red-700" : "text-green-600 hover:text-green-700"}`}
@@ -617,110 +696,151 @@ export default function UserManagementPage() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-[2px]">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-[500px] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-[#0f2744] flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-[#0ea5e9]" />
-                Add New User
-              </h3>
-              <button onClick={() => setShowModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-5">
-              {formError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{formError}</div>
-              )}
-
-              <div className="space-y-4">
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-slate-700">Full Name</label>
-                  <Input
-                    placeholder="e.g. Jane Smith"
-                    className="border-slate-200 focus-visible:ring-[#0ea5e9]"
-                    value={newUser.fullName}
-                    onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
-                  />
+            {createdTempPassword ? (
+              <>
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-[#0f2744] flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                    User Created
+                  </h3>
                 </div>
-
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-slate-700">Email Address</label>
-                  <Input
-                    placeholder="jane.smith@example.com"
-                    type="email"
-                    className="border-slate-200 focus-visible:ring-[#0ea5e9]"
-                    value={newUser.email}
-                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-slate-700">Role</label>
-                  <div className="relative">
-                    <select
-                      className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
-                      value={newUser.role}
-                      onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                    >
-                      <option value="" disabled>Select a role...</option>
-                      {availableCreateRoles.map((r) => (
-                        <option key={r.value} value={r.value}>{r.label}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
-                </div>
-
-                {isAdmin && needsClientForNewUser && (
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium text-slate-700">
-                      Client <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <select
-                        className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
-                        value={newUser.clientId}
-                        onChange={(e) => handleNewUserClientChange(e.target.value)}
+                <div className="p-6 space-y-5">
+                  <p className="text-sm text-slate-600">
+                    The account has been created. Share this temporary password with the user — <strong>it will only be shown once.</strong>
+                  </p>
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
+                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Temporary Password</p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-base font-mono font-bold text-[#0f2744] tracking-widest select-all">
+                        {createdTempPassword}
+                      </code>
+                      <button
+                        onClick={() => copyToClipboard(createdTempPassword)}
+                        className="p-2 rounded-md hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                        title="Copy to clipboard"
                       >
-                        <option value="">Select a client...</option>
-                        {clients.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        {copiedPassword ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                      </button>
                     </div>
                   </div>
-                )}
+                  <p className="text-xs text-slate-400">
+                    The user can change their password after logging in via Settings, or via "Forgot Password" on the login page.
+                  </p>
+                </div>
+                <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
+                  <Button className="bg-[#0f2744] hover:bg-[#1e3a5f] text-white border-none shadow-sm" onClick={closeTempPasswordModal}>
+                    Done
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-[#0f2744] flex items-center gap-2">
+                    <UserPlus className="w-5 h-5 text-[#0ea5e9]" />
+                    Add New User
+                  </h3>
+                  <button onClick={() => setShowModal(false)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
 
-                {needsLocationForNewUser && (
-                  <div className="grid gap-2">
-                    <label className="text-sm font-medium text-slate-700">
-                      Location <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <select
-                        className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
-                        value={newUser.locationId}
-                        onChange={(e) => setNewUser({ ...newUser, locationId: e.target.value })}
-                      >
-                        <option value="">Select a location...</option>
-                        {locationOptions.map((l) => (
-                          <option key={l.id} value={l.id}>{l.name}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <div className="p-6 space-y-5">
+                  {formError && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{formError}</div>
+                  )}
+
+                  <div className="space-y-4">
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium text-slate-700">Full Name</label>
+                      <Input
+                        placeholder="e.g. Jane Smith"
+                        className="border-slate-200 focus-visible:ring-[#0ea5e9]"
+                        value={newUser.fullName}
+                        onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
+                      />
                     </div>
-                  </div>
-                )}
-              </div>
-            </div>
 
-            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
-              <Button variant="outline" onClick={() => setShowModal(false)} className="border-slate-200 text-slate-700 hover:bg-slate-100">Cancel</Button>
-              <Button className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-none shadow-sm" onClick={handleCreateUser} disabled={creating}>
-                {creating ? "Creating..." : "Create User"}
-              </Button>
-            </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium text-slate-700">Email Address</label>
+                      <Input
+                        placeholder="jane.smith@example.com"
+                        type="email"
+                        className="border-slate-200 focus-visible:ring-[#0ea5e9]"
+                        value={newUser.email}
+                        onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium text-slate-700">Role</label>
+                      <div className="relative">
+                        <select
+                          className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
+                          value={newUser.role}
+                          onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                        >
+                          <option value="" disabled>Select a role...</option>
+                          {availableCreateRoles.map((r) => (
+                            <option key={r.value} value={r.value}>{r.label}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+                    </div>
+
+                    {isAdmin && needsClientForNewUser && (
+                      <div className="grid gap-2">
+                        <label className="text-sm font-medium text-slate-700">
+                          Client <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <select
+                            className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
+                            value={newUser.clientId}
+                            onChange={(e) => handleNewUserClientChange(e.target.value)}
+                          >
+                            <option value="">Select a client...</option>
+                            {clients.map((c) => (
+                              <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
+                      </div>
+                    )}
+
+                    {needsLocationForNewUser && (
+                      <div className="grid gap-2">
+                        <label className="text-sm font-medium text-slate-700">
+                          Location <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <select
+                            className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
+                            value={newUser.locationId}
+                            onChange={(e) => setNewUser({ ...newUser, locationId: e.target.value })}
+                          >
+                            <option value="">Select a location...</option>
+                            {locationOptions.map((l) => (
+                              <option key={l.id} value={l.id}>{l.name}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+                  <Button variant="outline" onClick={() => setShowModal(false)} className="border-slate-200 text-slate-700 hover:bg-slate-100">Cancel</Button>
+                  <Button className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-none shadow-sm" onClick={handleCreateUser} disabled={creating}>
+                    {creating ? "Creating..." : "Create User"}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -847,6 +967,85 @@ export default function UserManagementPage() {
               <Button className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-none shadow-sm" onClick={handleEditUser} disabled={saving}>
                 {saving ? "Saving..." : "Save Changes"}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {changingPasswordFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-[2px]">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-[420px] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[#0f2744] flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-[#0ea5e9]" />
+                Change Password
+              </h3>
+              <button
+                onClick={() => setChangingPasswordFor(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${getRoleStyles(changingPasswordFor.role).avatar}`}>
+                  {getInitials(changingPasswordFor.fullName)}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-700">{changingPasswordFor.fullName}</p>
+                  <p className="text-xs text-slate-500">{changingPasswordFor.email}</p>
+                </div>
+              </div>
+
+              {passwordSuccess ? (
+                <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  Password updated successfully. Share the new password with the user.
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-2">
+                    <label className="text-sm font-medium text-slate-700">New Password</label>
+                    <div className="relative">
+                      <Input
+                        type={showNewPassword ? "text" : "password"}
+                        placeholder="Min. 6 characters"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="border-slate-200 focus-visible:ring-[#0ea5e9] pr-10"
+                        onKeyDown={(e) => { if (e.key === "Enter") handleChangePassword(); }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword((v) => !v)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {passwordError && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{passwordError}</div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+              <Button variant="outline" onClick={() => setChangingPasswordFor(null)} className="border-slate-200 text-slate-700 hover:bg-slate-100">
+                {passwordSuccess ? "Close" : "Cancel"}
+              </Button>
+              {!passwordSuccess && (
+                <Button
+                  className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-none shadow-sm"
+                  onClick={handleChangePassword}
+                  disabled={passwordSaving || newPassword.length < 6}
+                >
+                  {passwordSaving ? "Saving..." : "Set Password"}
+                </Button>
+              )}
             </div>
           </div>
         </div>
