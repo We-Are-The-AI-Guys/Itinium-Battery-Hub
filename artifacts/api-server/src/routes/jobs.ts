@@ -722,6 +722,17 @@ router.post(
         const nextNum = (jobCount[0]?.count || 0) + 1;
         const reference = `JOB-${new Date().getFullYear()}-${String(nextNum).padStart(5, "0")}`;
 
+        let latestLmeGbpPrice: number | null = null;
+        const [latestLme] = await tx
+          .select({ gbpPrice: lmePricesTable.gbpPrice })
+          .from(lmePricesTable)
+          .orderBy(desc(lmePricesTable.createdAt))
+          .limit(1);
+        if (latestLme) {
+          const parsed = parseFloat(latestLme.gbpPrice);
+          if (isFinite(parsed) && parsed > 0) latestLmeGbpPrice = parsed;
+        }
+
         const [job] = await tx
           .insert(jobsTable)
           .values({
@@ -736,6 +747,7 @@ router.post(
             status: "request",
             notes: notes || null,
             submittedById: req.user!.id,
+            lmeRateUsed: latestLmeGbpPrice !== null ? String(latestLmeGbpPrice) : null,
           })
           .returning();
 
@@ -753,17 +765,6 @@ router.post(
               pbLookup.set(key, totalPb.toFixed(3));
             }
           }
-        }
-
-        let latestLmeGbpPrice: number | null = null;
-        const [latestLme] = await tx
-          .select({ gbpPrice: lmePricesTable.gbpPrice })
-          .from(lmePricesTable)
-          .orderBy(desc(lmePricesTable.createdAt))
-          .limit(1);
-        if (latestLme) {
-          const parsed = parseFloat(latestLme.gbpPrice);
-          if (isFinite(parsed) && parsed > 0) latestLmeGbpPrice = parsed;
         }
 
         const batteryRows = batteryInputs.map((b) => {
