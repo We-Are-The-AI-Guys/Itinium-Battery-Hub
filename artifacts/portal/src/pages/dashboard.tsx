@@ -1,34 +1,20 @@
-import { useEffect, useState } from "react";
 import { Link, Redirect } from "wouter";
 import { LogOut, Plus, Battery, TrendingUp } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Button } from "@/components/ui/button";
-
-interface User {
-  id: number;
-  email: string;
-  fullName: string;
-  role: string;
-  clientName: string | null;
-  locationName: string | null;
-}
+import { useAuth } from "@/contexts/auth-context";
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<User | null>(null);
-
-  useEffect(() => {
-    fetch("/api/auth/me", { credentials: "include" })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => { if (data?.user) setUser(data.user); })
-      .catch(() => {});
-  }, []);
+  const { user } = useAuth();
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     window.location.href = import.meta.env.BASE_URL;
   }
 
-  const isAdminRole = user && ["team_leader", "accounts", "head_office_admin"].includes(user.role);
+  if (!user) return null;
+
+  const isAdminRole = ["team_leader", "accounts", "head_office_admin"].includes(user.role);
 
   if (isAdminRole) {
     return <Redirect to="/dashboard" />;

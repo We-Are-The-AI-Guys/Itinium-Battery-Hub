@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider, useAuth } from "@/contexts/auth-context";
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
 import AdminDashboardPage from "@/pages/admin-dashboard";
@@ -23,78 +23,31 @@ import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
 
-interface AuthUser {
-  id: number;
-  email: string;
-  fullName: string;
-  role: string;
-  depot: string | null;
+function AppSpinner() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
+      <div className="flex items-center gap-3 text-[#64748b]">
+        <div className="w-6 h-6 border-2 border-[#0ea5e9] border-t-transparent rounded-full animate-spin" />
+        <span>Loading...</span>
+      </div>
+    </div>
+  );
 }
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const [isAuth, setIsAuth] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    fetch("/api/auth/me", { credentials: "include" })
-      .then(res => {
-        setIsAuth(res.ok);
-      })
-      .catch(() => setIsAuth(false));
-  }, []);
-
-  if (isAuth === null) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
-        <div className="flex items-center gap-3 text-[#64748b]">
-          <div className="w-6 h-6 border-2 border-[#0ea5e9] border-t-transparent rounded-full animate-spin" />
-          <span>Loading...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuth) {
-    return <Redirect to="/login" />;
-  }
-
+  const { user, loading } = useAuth();
+  if (loading) return <AppSpinner />;
+  if (!user) return <Redirect to="/login" />;
   return <>{children}</>;
 }
 
 const ADMIN_ROLES = ["team_leader", "accounts", "head_office_admin"];
 
 function RoleGuard({ allowedRoles, children }: { allowedRoles: string[]; children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/auth/me", { credentials: "include" })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data?.user) setUser(data.user);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
-        <div className="flex items-center gap-3 text-[#64748b]">
-          <div className="w-6 h-6 border-2 border-[#0ea5e9] border-t-transparent rounded-full animate-spin" />
-          <span>Loading...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Redirect to="/login" />;
-  }
-
-  if (!allowedRoles.includes(user.role)) {
-    return <Redirect to="/" />;
-  }
-
+  const { user, loading } = useAuth();
+  if (loading) return <AppSpinner />;
+  if (!user) return <Redirect to="/login" />;
+  if (!allowedRoles.includes(user.role)) return <Redirect to="/" />;
   return <>{children}</>;
 }
 
@@ -103,31 +56,9 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
 }
 
 function GuestGuard({ children }: { children: React.ReactNode }) {
-  const [isAuth, setIsAuth] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    fetch("/api/auth/me", { credentials: "include" })
-      .then(res => {
-        setIsAuth(res.ok);
-      })
-      .catch(() => setIsAuth(false));
-  }, []);
-
-  if (isAuth === null) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f8fafc]">
-        <div className="flex items-center gap-3 text-[#64748b]">
-          <div className="w-6 h-6 border-2 border-[#0ea5e9] border-t-transparent rounded-full animate-spin" />
-          <span>Loading...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (isAuth) {
-    return <Redirect to="/" />;
-  }
-
+  const { user, loading } = useAuth();
+  if (loading) return <AppSpinner />;
+  if (user) return <Redirect to="/" />;
   return <>{children}</>;
 }
 
@@ -219,10 +150,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <AppRouter />
-        </WouterRouter>
-        <Toaster />
+        <AuthProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <AppRouter />
+          </WouterRouter>
+          <Toaster />
+        </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
