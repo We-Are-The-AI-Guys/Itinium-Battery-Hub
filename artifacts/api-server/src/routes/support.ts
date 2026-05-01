@@ -118,7 +118,7 @@ router.post("/support/ticket", requireAuth, async (req: AuthenticatedRequest, re
     };
     if (screenshotUrl) payload.screenshotUrl = screenshotUrl;
 
-    const crmRes = await fetch("https://aiguyscrm.replit.app/api/webhooks/feedback", {
+    const crmRes = await fetch("https://crm.aiguys.app/api/webhooks/feedback", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -134,11 +134,12 @@ router.post("/support/ticket", requireAuth, async (req: AuthenticatedRequest, re
     if (!crmRes.ok) {
       const crmDown = !isJson || crmRes.status === 404;
       console.error("[support] CRM responded with", crmRes.status, body);
+      const crmMessage = typeof body?.message === "string" ? body.message : null;
       res.status(502).json({
         success: false,
         message: crmDown
           ? "The support system is temporarily unavailable. Please email support@itinium.co.uk directly."
-          : "The support service returned an error. Please try again later.",
+          : crmMessage || "The support service returned an error. Please try again later.",
       });
       return;
     }
