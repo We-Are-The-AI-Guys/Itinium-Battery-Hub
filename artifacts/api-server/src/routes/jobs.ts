@@ -266,7 +266,14 @@ router.get(
 
       const [jobs, [totalResult]] = await Promise.all([
         db
-          .select()
+          .select({
+            ...jobsTable,
+            batteryValueSum: sql<string | null>`(
+              SELECT CAST(SUM(jb.value_gbp) AS TEXT)
+              FROM job_batteries jb
+              WHERE jb.job_id = ${jobsTable.id}
+            )`,
+          })
           .from(jobsTable)
           .where(whereClause)
           .orderBy(sql`${jobsTable.submittedAt} DESC`)

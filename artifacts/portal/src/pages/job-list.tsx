@@ -36,6 +36,7 @@ interface Job {
   status: string;
   invoiceStatus: string;
   totalInvoiceValue: string | null;
+  batteryValueSum: string | null;
   dueDate: string | null;
   datePaid: string | null;
 }
@@ -382,7 +383,13 @@ export default function JobListPage() {
                     )}
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">
-                    {formatCurrency(job.totalInvoiceValue)}
+                    {job.totalInvoiceValue ? (
+                      formatCurrency(job.totalInvoiceValue)
+                    ) : job.batteryValueSum ? (
+                      <span className="text-slate-500 text-sm" title="Estimated from battery data">
+                        ~{formatCurrency(job.batteryValueSum)}
+                      </span>
+                    ) : "—"}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <Button
