@@ -412,8 +412,9 @@ export default function DepotFormPage() {
       }
     }
     if (weightLookupVersion.current[battery.id] !== version) return;
+    const safeWeight = weight ? (parseFloat(weight) * SAFE_LOAD_FACTOR).toFixed(3) : weight;
     setBatteries((prev) =>
-      prev.map((b) => (b.id === battery.id && !b.weightManual ? { ...b, estimatedWeightKg: weight } : b))
+      prev.map((b) => (b.id === battery.id && !b.weightManual ? { ...b, estimatedWeightKg: safeWeight } : b))
     );
   }
 
@@ -1561,7 +1562,7 @@ export default function DepotFormPage() {
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-slate-600">
-                      {battery.isLooseCells ? "Net Weight (kg) — required" : "Net Weight (kg)"}
+                      {battery.isLooseCells ? `Safe Load (kg) — net × ${SAFE_LOAD_FACTOR}, required` : `Safe Load (kg) — net × ${SAFE_LOAD_FACTOR}`}
                     </label>
                     <Input
                       type="number"
@@ -1587,14 +1588,6 @@ export default function DepotFormPage() {
                     {battery.estimatedWeightKg && !battery.weightManual && (
                       <p className="text-[10px] text-emerald-600">Auto-populated from reference</p>
                     )}
-                    {battery.estimatedWeightKg && (() => {
-                      const net = parseFloat(battery.estimatedWeightKg);
-                      return isFinite(net) && net > 0 ? (
-                        <p className="text-[10px] text-slate-500">
-                          Safe load: {(net * SAFE_LOAD_FACTOR).toFixed(3)} kg (net × {SAFE_LOAD_FACTOR})
-                        </p>
-                      ) : null;
-                    })()}
                     {battery.weightManual && battery.cellType && (
                       <button
                         type="button"
