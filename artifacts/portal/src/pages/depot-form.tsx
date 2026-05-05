@@ -60,6 +60,8 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
+const SAFE_LOAD_FACTOR = 1.35;
+
 interface CellModelOption {
   id: number;
   manufacturer: string;
@@ -410,8 +412,9 @@ export default function DepotFormPage() {
       }
     }
     if (weightLookupVersion.current[battery.id] !== version) return;
+    const safeWeight = weight ? (parseFloat(weight) * SAFE_LOAD_FACTOR).toFixed(3) : weight;
     setBatteries((prev) =>
-      prev.map((b) => (b.id === battery.id && !b.weightManual ? { ...b, estimatedWeightKg: weight } : b))
+      prev.map((b) => (b.id === battery.id && !b.weightManual ? { ...b, estimatedWeightKg: safeWeight } : b))
     );
   }
 
@@ -1559,7 +1562,7 @@ export default function DepotFormPage() {
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-slate-600">
-                      {battery.isLooseCells ? "Net Weight (kg) — safe load ×1.35 applied on save, required" : "Net Weight (kg) — safe load ×1.35 applied on save"}
+                      {battery.isLooseCells ? "Safe Load (kg) — net × 1.35, required" : "Safe Load (kg) — net × 1.35"}
                     </label>
                     <Input
                       type="number"
