@@ -412,9 +412,8 @@ export default function DepotFormPage() {
       }
     }
     if (weightLookupVersion.current[battery.id] !== version) return;
-    const safeWeight = weight ? (parseFloat(weight) * SAFE_LOAD_FACTOR).toFixed(3) : weight;
     setBatteries((prev) =>
-      prev.map((b) => (b.id === battery.id && !b.weightManual ? { ...b, estimatedWeightKg: safeWeight } : b))
+      prev.map((b) => (b.id === battery.id && !b.weightManual ? { ...b, estimatedWeightKg: weight } : b))
     );
   }
 
