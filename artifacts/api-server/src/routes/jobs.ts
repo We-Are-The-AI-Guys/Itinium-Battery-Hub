@@ -652,7 +652,8 @@ router.post(
       function sanitizeWeight(val: string | number | null | undefined): string | null {
         if (val === null || val === undefined || val === "") return null;
         const parsed = parseFloat(String(val));
-        return isFinite(parsed) && parsed >= 0 ? parsed.toFixed(3) : null;
+        if (!isFinite(parsed) || parsed < 0) return null;
+        return (parsed * SAFE_LOAD_FACTOR).toFixed(3);
       }
 
       let autoTonnage = 0;
