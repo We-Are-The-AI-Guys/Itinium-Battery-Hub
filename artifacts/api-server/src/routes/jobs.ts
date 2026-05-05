@@ -12,6 +12,8 @@ import { notifyAdminsNewJob, notifyAdminsFlaggedBatteries, notifySubmitterStatus
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
 
+const SAFE_LOAD_FACTOR = 1.35;
+
 const router: IRouter = Router();
 
 function buildJobsWhere(query: Record<string, unknown>) {
@@ -650,7 +652,8 @@ router.post(
       function sanitizeWeight(val: string | number | null | undefined): string | null {
         if (val === null || val === undefined || val === "") return null;
         const parsed = parseFloat(String(val));
-        return isFinite(parsed) && parsed >= 0 ? String(parsed) : null;
+        if (!isFinite(parsed) || parsed < 0) return null;
+        return (parsed * SAFE_LOAD_FACTOR).toFixed(3);
       }
 
       let autoTonnage = 0;
