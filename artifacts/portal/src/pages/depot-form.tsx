@@ -562,7 +562,7 @@ export default function DepotFormPage() {
 
           const mfrTrim = rawMfr.trim();
           let normalizedMfr = mfrTrim;
-          if (mfrTrim && !knownMfrs.some((m) => m.toLowerCase() === mfrTrim.toLowerCase())) {
+          if (mfrTrim) {
             const canonical = mfrByNorm.get(normalizeForMatch(mfrTrim));
             if (canonical) normalizedMfr = canonical;
           }
