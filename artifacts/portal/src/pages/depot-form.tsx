@@ -700,6 +700,9 @@ export default function DepotFormPage() {
       const hasOnlyEmpty = prev.length === 1 && !prev[0].assetNumber && !prev[0].batterySerial && !prev[0].palletNumber;
       return hasOnlyEmpty ? finalRows : [...prev, ...finalRows];
     });
+    finalRows.forEach((row) => {
+      if (!row.weightManual) computeAndSetAutoWeight(row);
+    });
     const flaggedCount = applyFlags
       ? finalRows.filter((b) => b.manufacturerFlagReason || b.cellModelFlagReason || b.voltageFlagReason).length
       : 0;
