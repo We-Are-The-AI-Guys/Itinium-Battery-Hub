@@ -572,12 +572,12 @@ export default function DepotFormPage() {
           let normalizedCellModel = modelTrim;
           let normalizedCellType = cellTypeTrim;
           if (modelTrim) {
-            const exactMatch = cellModels.find(
+            const strictMatch = cellModels.find(
               (m) =>
-                m.modelName.toLowerCase() === modelTrim.toLowerCase() &&
+                m.modelName === modelTrim &&
                 (!normalizedMfr || m.manufacturer.toLowerCase() === normalizedMfr.toLowerCase())
             );
-            if (!exactMatch) {
+            if (!strictMatch) {
               const candidates = modelsByNorm.get(normalizeForMatch(modelTrim));
               if (candidates && candidates.length > 0) {
                 const matched =
@@ -587,7 +587,7 @@ export default function DepotFormPage() {
                       )
                     : undefined) ?? candidates[0];
                 normalizedCellModel = matched.modelName;
-                if (!normalizedCellType) normalizedCellType = matched.cellFamily;
+                normalizedCellType = matched.cellFamily;
               }
             }
           }
