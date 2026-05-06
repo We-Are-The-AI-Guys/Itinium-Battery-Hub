@@ -531,11 +531,14 @@ export default function DepotFormPage() {
         }
 
         const dataRows = rows.slice(1).filter((row) => row.some((cell) => cell && cell.trim()));
+        let lastPalletNumber = "";
         const imported: BatteryRow[] = dataRows.map((row) => {
+          const rawPallet = colMap["palletNumber"] !== undefined ? row[colMap["palletNumber"]]?.trim() || "" : "";
+          if (rawPallet) lastPalletNumber = rawPallet;
           const looseQty = colMap["looseCellsQty"] !== undefined ? row[colMap["looseCellsQty"]] || "" : "";
           return {
             id: crypto.randomUUID(),
-            palletNumber: row[colMap["palletNumber"]] || "",
+            palletNumber: lastPalletNumber,
             assetNumber: row[colMap["assetNumber"]] || "",
             batterySerial: row[colMap["batterySerial"]] || "",
             manufacture: colMap["manufacture"] !== undefined ? row[colMap["manufacture"]] || "" : "",
