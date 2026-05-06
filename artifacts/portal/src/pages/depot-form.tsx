@@ -434,8 +434,15 @@ export default function DepotFormPage() {
     } else if (battery.cellType === "Other") {
       weight = await fetchWeightFromApi("Other", null);
     } else if (battery.cellModel && battery.voltage) {
-      const mfr = battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture;
-      weight = await fetchWeightFromApi("", battery.voltage, battery.cellModel, mfr || undefined);
+      const effMfr = battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture;
+      const matchedModel =
+        cellModels.find((m) => m.modelName === battery.cellModel && (!effMfr || m.manufacturer === effMfr)) ||
+        cellModels.find((m) => m.modelName === battery.cellModel);
+      const voltageNum = parseInt(String(battery.voltage).replace(/[^0-9]/g, ""), 10);
+      if (matchedModel && !isNaN(voltageNum) && voltageNum > 0 && voltageNum % 2 === 0) {
+        const numCells = voltageNum / 2;
+        weight = (parseFloat(matchedModel.weightPerCellKg) * numCells).toFixed(3);
+      }
     } else if (battery.cellType && battery.voltage) {
       const effectiveVoltage = battery.voltage === "Other" ? battery.customVoltage : battery.voltage;
       if (effectiveVoltage) {
