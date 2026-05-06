@@ -165,6 +165,10 @@ function levenshtein(a: string, b: string): number {
   return dp[n];
 }
 
+function normalizeForMatch(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 function findClosestMatch(value: string, candidates: string[], minSimilarity = 0.6): string | null {
   const v = value.trim().toLowerCase();
   if (!v) return null;
@@ -538,20 +542,65 @@ export default function DepotFormPage() {
         }
 
         const dataRows = rows.slice(1).filter((row) => row.some((cell) => cell && cell.trim()));
+        const knownMfrs = manufacturers.filter((m) => m.toLowerCase() !== "other");
+        const mfrByNorm = new Map(knownMfrs.map((m) => [normalizeForMatch(m), m] as const));
+        const modelsByNorm = new Map<string, typeof cellModels>();
+        for (const m of cellModels) {
+          const key = normalizeForMatch(m.modelName);
+          const list = modelsByNorm.get(key) ?? [];
+          list.push(m);
+          modelsByNorm.set(key, list);
+        }
         let lastPalletNumber = "";
         const imported: BatteryRow[] = dataRows.map((row) => {
           const rawPallet = colMap["palletNumber"] !== undefined ? row[colMap["palletNumber"]]?.trim() || "" : "";
           if (rawPallet) lastPalletNumber = rawPallet;
           const looseQty = colMap["looseCellsQty"] !== undefined ? row[colMap["looseCellsQty"]] || "" : "";
+          const rawMfr = colMap["manufacture"] !== undefined ? row[colMap["manufacture"]] || "" : "";
+          const rawCellModel = colMap["cellModel"] !== undefined ? row[colMap["cellModel"]] || "" : "";
+          const rawCellType = colMap["cellType"] !== undefined ? row[colMap["cellType"]] || "" : "";
+
+          const mfrTrim = rawMfr.trim();
+          let normalizedMfr = mfrTrim;
+          if (mfrTrim && !knownMfrs.some((m) => m.toLowerCase() === mfrTrim.toLowerCase())) {
+            const canonical = mfrByNorm.get(normalizeForMatch(mfrTrim));
+            if (canonical) normalizedMfr = canonical;
+          }
+
+          const modelTrim = rawCellModel.trim();
+          const cellTypeTrim = rawCellType.trim();
+          let normalizedCellModel = modelTrim;
+          let normalizedCellType = cellTypeTrim;
+          if (modelTrim) {
+            const exactMatch = cellModels.find(
+              (m) =>
+                m.modelName.toLowerCase() === modelTrim.toLowerCase() &&
+                (!normalizedMfr || m.manufacturer.toLowerCase() === normalizedMfr.toLowerCase())
+            );
+            if (!exactMatch) {
+              const candidates = modelsByNorm.get(normalizeForMatch(modelTrim));
+              if (candidates && candidates.length > 0) {
+                const matched =
+                  (normalizedMfr
+                    ? candidates.find(
+                        (m) => m.manufacturer.toLowerCase() === normalizedMfr.toLowerCase()
+                      )
+                    : undefined) ?? candidates[0];
+                normalizedCellModel = matched.modelName;
+                if (!normalizedCellType) normalizedCellType = matched.cellFamily;
+              }
+            }
+          }
+
           return {
             id: crypto.randomUUID(),
             palletNumber: lastPalletNumber,
             assetNumber: row[colMap["assetNumber"]] || "",
             batterySerial: row[colMap["batterySerial"]] || "",
-            manufacture: colMap["manufacture"] !== undefined ? row[colMap["manufacture"]] || "" : "",
+            manufacture: normalizedMfr,
             manufactureCustom: "",
-            cellType: colMap["cellType"] !== undefined ? row[colMap["cellType"]] || "" : "",
-            cellModel: colMap["cellModel"] !== undefined ? row[colMap["cellModel"]] || "" : "",
+            cellType: normalizedCellType,
+            cellModel: normalizedCellModel,
             voltage: colMap["voltage"] !== undefined ? row[colMap["voltage"]] || "" : "",
             customVoltage: "",
             looseCellsQty: looseQty,
