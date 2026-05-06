@@ -139,7 +139,7 @@ function createEmptyBattery(): BatteryRow {
   };
 }
 
-const CSV_TEMPLATE_HEADERS = "Pallet Number,Asset No,Battery Serial,Manufacturer,Cell Type,Cell Model,Voltage,Loose Cells Qty,Est Weight Kg,Notes";
+const CSV_TEMPLATE_HEADERS = "Pallet Number,Asset No,Battery Serial,Manufacturer,Loose Cells Qty,Voltage,Cell Type,Cell Model,Notes";
 
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
