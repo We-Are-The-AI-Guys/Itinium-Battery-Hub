@@ -158,6 +158,33 @@ async function bootstrap() {
 
   try {
     await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS job_drafts (
+        id SERIAL PRIMARY KEY,
+        saved_by_id INTEGER NOT NULL REFERENCES users(id),
+        depot VARCHAR(255) NOT NULL,
+        client_id INTEGER REFERENCES clients(id),
+        location_id INTEGER REFERENCES locations(id),
+        form_data JSONB NOT NULL,
+        collection_point VARCHAR(255),
+        battery_count INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+      )
+    `);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_job_drafts_saved_by ON job_drafts (saved_by_id)`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_job_drafts_depot_client ON job_drafts (depot, client_id)`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_job_drafts_client ON job_drafts (client_id)`);
+  } catch (err) {
+    console.error("Bootstrap: failed to create job_drafts table:", err);
+  }
+
+  try {
+    await db.execute(sql`ALTER TABLE job_drafts ALTER COLUMN form_data TYPE JSONB USING form_data::jsonb`);
+  } catch {
+  }
+
+  try {
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS collection_points (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL UNIQUE,

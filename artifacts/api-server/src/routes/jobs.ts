@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable, locationsTable, clientsTable, usersTable } from "@workspace/db/schema";
+import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable, locationsTable, clientsTable, usersTable, jobDraftsTable } from "@workspace/db/schema";
 import { eq, sql, and, count, ilike, or, inArray, desc, asc } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { MANUFACTURERS } from "./manufacturers";
@@ -589,7 +589,7 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res) => {
     try {
-      const { collectionPoint, collectionDate, tonnage, tonnageManualOverride, notes, batteries } = req.body;
+      const { collectionPoint, collectionDate, tonnage, tonnageManualOverride, notes, batteries, draftId } = req.body;
       let { depot } = req.body;
 
       let resolvedClientId = req.user!.clientId || null;
@@ -809,6 +809,25 @@ router.post(
       });
 
       res.status(201).json(result);
+
+      if (draftId) {
+        const draftIdNum = parseInt(String(draftId), 10);
+        if (!isNaN(draftIdNum)) {
+          const submitter = req.user!;
+          const [draftRow] = await db.select().from(jobDraftsTable).where(eq(jobDraftsTable.id, draftIdNum));
+          if (draftRow) {
+            const role = submitter.role;
+            const canDelete =
+              role === "head_office_admin" ||
+              role === "accounts" ||
+              (role === "team_leader" && draftRow.clientId === submitter.clientId) ||
+              (role === "depot_user" && draftRow.depot === submitter.depot && draftRow.clientId === submitter.clientId);
+            if (canDelete) {
+              await db.delete(jobDraftsTable).where(eq(jobDraftsTable.id, draftIdNum));
+            }
+          }
+        }
+      }
 
       const flaggedCount = result.batteries.filter(
         b => b.serialFlagReason || b.manufacturerFlagReason || b.cellModelFlagReason

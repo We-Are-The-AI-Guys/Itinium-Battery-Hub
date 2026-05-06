@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp, varchar, decimal, date, index, boolean, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, varchar, decimal, date, index, boolean, uniqueIndex, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -122,3 +122,22 @@ export const cellModelsTable = pgTable("cell_models", {
 
 export type CellModel = typeof cellModelsTable.$inferSelect;
 export type InsertCellModel = typeof cellModelsTable.$inferInsert;
+
+export const jobDraftsTable = pgTable("job_drafts", {
+  id: serial("id").primaryKey(),
+  savedById: integer("saved_by_id").notNull().references(() => usersTable.id),
+  depot: varchar("depot", { length: 255 }).notNull(),
+  clientId: integer("client_id").references(() => clientsTable.id),
+  locationId: integer("location_id").references(() => locationsTable.id),
+  formData: jsonb("form_data").notNull(),
+  collectionPoint: varchar("collection_point", { length: 255 }),
+  batteryCount: integer("battery_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_job_drafts_saved_by").on(table.savedById),
+  index("idx_job_drafts_depot_client").on(table.depot, table.clientId),
+  index("idx_job_drafts_client").on(table.clientId),
+]);
+
+export type JobDraft = typeof jobDraftsTable.$inferSelect;

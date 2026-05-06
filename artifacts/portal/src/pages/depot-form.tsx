@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import {
   Package,
   Battery,
@@ -253,10 +253,13 @@ interface CollectionPointPreset {
 }
 
 export default function DepotFormPage() {
+  const searchStr = useSearch();
   const [user, setUser] = useState<User | null>(null);
   const [collectionPoint, setCollectionPoint] = useState("");
   const [jobNotes, setJobNotes] = useState("");
   const [batteries, setBatteries] = useState<BatteryRow[]>([createEmptyBattery()]);
+  const [currentDraftId, setCurrentDraftId] = useState<number | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [pendingCsvImport, setPendingCsvImport] = useState<{
     rows: BatteryRow[];
     issues: {
@@ -284,6 +287,10 @@ export default function DepotFormPage() {
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
 
   useEffect(() => {
+    const params = new URLSearchParams(searchStr);
+    const draftParam = params.get("draft");
+    const draftIdFromUrl = draftParam ? parseInt(draftParam, 10) : null;
+
     fetch("/api/auth/me", { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -318,6 +325,30 @@ export default function DepotFormPage() {
         if (data?.collectionPoints) setCollectionPointPresets(data.collectionPoints);
       })
       .catch(() => {});
+
+    if (draftIdFromUrl && !isNaN(draftIdFromUrl)) {
+      fetch("/api/job-drafts", { credentials: "include" })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!data?.drafts) return;
+          const draft = data.drafts.find((d: { id: number }) => d.id === draftIdFromUrl);
+          if (!draft) return;
+          try {
+            const fd = typeof draft.formData === "string" ? JSON.parse(draft.formData) : draft.formData;
+            if (fd.collectionPoint !== undefined) setCollectionPoint(fd.collectionPoint || "");
+            if (fd.jobNotes !== undefined) setJobNotes(fd.jobNotes || "");
+            if (fd.tonnageOverride !== undefined) setTonnageOverride(fd.tonnageOverride || "");
+            if (fd.tonnageManual !== undefined) setTonnageManual(!!fd.tonnageManual);
+            if (fd.selectedLocationId !== undefined) setSelectedLocationId(fd.selectedLocationId || "");
+            if (fd.batteries && Array.isArray(fd.batteries) && fd.batteries.length > 0) {
+              setBatteries(fd.batteries);
+            }
+            setCurrentDraftId(draftIdFromUrl);
+          } catch {
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -817,6 +848,7 @@ export default function DepotFormPage() {
           tonnage: currentLoad > 0 ? currentLoad.toFixed(3) : "0.000",
           tonnageManualOverride: tonnageManual,
           notes: jobNotes || null,
+          draftId: currentDraftId || undefined,
           batteries: batteries.map((b) => ({
             palletNumber: b.palletNumber || null,
             assetNumber: b.assetNumber || null,
@@ -848,6 +880,7 @@ export default function DepotFormPage() {
         setJobNotes("");
         setTonnageManual(false);
         setTonnageOverride("");
+        setCurrentDraftId(null);
       } else {
         const err = await res.json().catch(() => ({}));
         toast({
@@ -867,11 +900,55 @@ export default function DepotFormPage() {
     }
   }
 
-  function onSaveDraft() {
-    toast({
-      title: "Draft saved",
-      description: "Your collection draft has been saved.",
-    });
+  async function onSaveDraft() {
+    setSavingDraft(true);
+    try {
+      const formData = {
+        collectionPoint,
+        jobNotes,
+        tonnageOverride,
+        tonnageManual,
+        selectedLocationId,
+        batteries,
+      };
+      const body: Record<string, unknown> = {
+        formData,
+        collectionPoint: collectionPoint || null,
+        batteryCount: batteries.length,
+      };
+      if (currentDraftId !== null) {
+        body.draftId = currentDraftId;
+      }
+      const res = await fetch("/api/job-drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentDraftId(data.draft.id);
+        toast({
+          title: "Draft saved",
+          description: `Draft #${data.draft.id} saved — ${batteries.length} battery row(s).`,
+        });
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast({
+          title: "Could not save draft",
+          description: (err as { message?: string }).message || "Something went wrong.",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Could not save draft",
+        description: "Network error. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingDraft(false);
+    }
   }
 
   const totalWeightKg = batteries.reduce((sum, b) => {
@@ -1846,10 +1923,11 @@ export default function DepotFormPage() {
             variant="outline"
             className="flex-1 sm:flex-none border-slate-300 text-slate-600 hover:bg-slate-50 h-12 font-medium"
             onClick={onSaveDraft}
+            disabled={savingDraft}
             data-testid="button-save-draft"
           >
             <Save className="w-4 h-4 mr-2" />
-            Save Draft
+            {savingDraft ? "Saving..." : currentDraftId ? "Update Draft" : "Save Draft"}
           </Button>
           <Button
             type="button"
