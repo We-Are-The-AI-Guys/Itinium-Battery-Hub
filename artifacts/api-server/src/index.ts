@@ -135,20 +135,22 @@ async function bootstrap() {
     await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family_height ON cell_models (cell_family, cell_height_mm)`);
     await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_manufacturer ON cell_models (manufacturer)`);
     console.log("Refreshing cell models from canonical data...");
-    await db.delete(cellModelsTable);
-    const batchSize = 50;
-    for (let i = 0; i < CELL_MODEL_DATA.length; i += batchSize) {
-      const batch = CELL_MODEL_DATA.slice(i, i + batchSize).map(cm => ({
-        manufacturer: cm.manufacturer,
-        modelName: cm.modelName,
-        cellFamily: cm.cellFamily,
-        cellHeightMm: cm.cellHeightMm,
-        cellsCount: cm.cellsCount,
-        weightPerCellKg: String(cm.weightPerCellKg),
-        pbContentKgPerCell: cm.pbContentKgPerCell != null ? String(cm.pbContentKgPerCell) : null,
-      }));
-      await db.insert(cellModelsTable).values(batch).onConflictDoNothing();
-    }
+    await db.transaction(async (tx) => {
+      await tx.delete(cellModelsTable);
+      const batchSize = 50;
+      for (let i = 0; i < CELL_MODEL_DATA.length; i += batchSize) {
+        const batch = CELL_MODEL_DATA.slice(i, i + batchSize).map(cm => ({
+          manufacturer: cm.manufacturer,
+          modelName: cm.modelName,
+          cellFamily: cm.cellFamily,
+          cellHeightMm: cm.cellHeightMm,
+          cellsCount: cm.cellsCount,
+          weightPerCellKg: String(cm.weightPerCellKg),
+          pbContentKgPerCell: cm.pbContentKgPerCell != null ? String(cm.pbContentKgPerCell) : null,
+        }));
+        await tx.insert(cellModelsTable).values(batch).onConflictDoNothing();
+      }
+    });
     const [{ value: cellModelCount }] = await db.select({ value: count() }).from(cellModelsTable);
     console.log(`Refreshed cell models: ${cellModelCount} entries (expected ${CELL_MODEL_DATA.length})`);
   } catch (err) {
@@ -209,10 +211,12 @@ async function bootstrap() {
       { name: "Linde Basingstoke (Pelton Road)", address: "Linde MH UK Ltd, Pelton Road, Basingstoke, RG21 6XD" },
     ];
     console.log("Refreshing collection point presets from canonical data...");
-    await db.delete(collectionPointsTable);
-    for (const cp of collectionPoints) {
-      await db.insert(collectionPointsTable).values(cp).onConflictDoNothing();
-    }
+    await db.transaction(async (tx) => {
+      await tx.delete(collectionPointsTable);
+      for (const cp of collectionPoints) {
+        await tx.insert(collectionPointsTable).values(cp).onConflictDoNothing();
+      }
+    });
     console.log(`Refreshed ${collectionPoints.length} collection point presets`);
   } catch (err) {
     console.error("Bootstrap: failed to refresh collection points:", err);
