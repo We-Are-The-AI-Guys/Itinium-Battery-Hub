@@ -128,32 +128,31 @@ async function bootstrap() {
   }
 
   try {
-    const [{ value: cellModelCount }] = await db.select({ value: count() }).from(cellModelsTable);
-    if (cellModelCount === 0) {
-      console.log("Seeding cell models...");
-      await db.execute(sql`ALTER TABLE cell_models ADD COLUMN IF NOT EXISTS manufacturer VARCHAR(100) NOT NULL DEFAULT 'Unknown'`);
-      await db.execute(sql`DROP INDEX IF EXISTS cell_models_model_name_unique`);
-      await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_cell_models_mfr_model ON cell_models (manufacturer, model_name)`);
-      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family ON cell_models (cell_family)`);
-      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family_height ON cell_models (cell_family, cell_height_mm)`);
-      await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_manufacturer ON cell_models (manufacturer)`);
-      const batchSize = 50;
-      for (let i = 0; i < CELL_MODEL_DATA.length; i += batchSize) {
-        const batch = CELL_MODEL_DATA.slice(i, i + batchSize).map(cm => ({
-          manufacturer: cm.manufacturer,
-          modelName: cm.modelName,
-          cellFamily: cm.cellFamily,
-          cellHeightMm: cm.cellHeightMm,
-          cellsCount: cm.cellsCount,
-          weightPerCellKg: String(cm.weightPerCellKg),
-          pbContentKgPerCell: cm.pbContentKgPerCell != null ? String(cm.pbContentKgPerCell) : null,
-        }));
-        await db.insert(cellModelsTable).values(batch).onConflictDoNothing();
-      }
-      console.log(`Seeded ${CELL_MODEL_DATA.length} cell model entries`);
+    await db.execute(sql`ALTER TABLE cell_models ADD COLUMN IF NOT EXISTS manufacturer VARCHAR(100) NOT NULL DEFAULT 'Unknown'`);
+    await db.execute(sql`DROP INDEX IF EXISTS cell_models_model_name_unique`);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_cell_models_mfr_model ON cell_models (manufacturer, model_name)`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family ON cell_models (cell_family)`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family_height ON cell_models (cell_family, cell_height_mm)`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_manufacturer ON cell_models (manufacturer)`);
+    console.log("Refreshing cell models from canonical data...");
+    await db.delete(cellModelsTable);
+    const batchSize = 50;
+    for (let i = 0; i < CELL_MODEL_DATA.length; i += batchSize) {
+      const batch = CELL_MODEL_DATA.slice(i, i + batchSize).map(cm => ({
+        manufacturer: cm.manufacturer,
+        modelName: cm.modelName,
+        cellFamily: cm.cellFamily,
+        cellHeightMm: cm.cellHeightMm,
+        cellsCount: cm.cellsCount,
+        weightPerCellKg: String(cm.weightPerCellKg),
+        pbContentKgPerCell: cm.pbContentKgPerCell != null ? String(cm.pbContentKgPerCell) : null,
+      }));
+      await db.insert(cellModelsTable).values(batch).onConflictDoNothing();
     }
+    const [{ value: cellModelCount }] = await db.select({ value: count() }).from(cellModelsTable);
+    console.log(`Refreshed cell models: ${cellModelCount} entries (expected ${CELL_MODEL_DATA.length})`);
   } catch (err) {
-    console.error("Bootstrap: failed to seed cell models:", err);
+    console.error("Bootstrap: failed to refresh cell models:", err);
   }
 
   try {
@@ -192,31 +191,31 @@ async function bootstrap() {
         created_at TIMESTAMP DEFAULT NOW() NOT NULL
       )
     `);
-    const [{ value: cpCount }] = await db.select({ value: count() }).from(collectionPointsTable);
-    if (cpCount === 0) {
-      const collectionPoints = [
-        { name: "Linde Basingstoke", address: "Linde Material Handling, Mulberry Business Park, Fishers Lane, Cheltenham, Basingstoke RG24 8GF" },
-        { name: "Linde Fareham", address: "Linde Material Handling, Unit 7, Segensworth Business Centre, Fareham PO15 5RR" },
-        { name: "Linde Immingham", address: "Linde Material Handling, Manby Road, Immingham, North East Lincolnshire DN40 3DZ" },
-        { name: "Linde Lincoln", address: "Linde Material Handling, Doddington Road, Lincoln LN6 7HA" },
-        { name: "Linde Lutterworth", address: "Linde Material Handling, Magna Park, Coventry Road, Lutterworth LE17 4XN" },
-        { name: "Linde Normanton", address: "Linde Material Handling, Unit 2, Wakefield Europort, Normanton WF6 1ZB" },
-        { name: "Linde Swindon", address: "Linde Material Handling, Bridgemead Close, Westmead Industrial Estate, Swindon SN5 7YG" },
-        { name: "Still Aston", address: "Still Materials Handling, Unit 4, Aston Industrial Estate, Birmingham B6 7EY" },
-        { name: "Still Bristol", address: "Still Materials Handling, Western Approach Distribution Park, Severn Beach, Bristol BS35 4GG" },
-        { name: "Still Dartford", address: "Still Materials Handling, Crossways Business Park, Dartford DA2 6QE" },
-        { name: "Still Glasgow", address: "Still Materials Handling, Cambuslang Investment Park, Glasgow G32 8NB" },
-        { name: "Still Manchester", address: "Still Materials Handling, Trafford Park, Manchester M17 1WA" },
-        { name: "Still Northampton", address: "Still Materials Handling, Moulton Park Industrial Estate, Northampton NN3 6AQ" },
-        { name: "Still Warrington", address: "Still Materials Handling, Woolston Grange Avenue, Warrington WA1 4PQ" },
-      ];
-      for (const cp of collectionPoints) {
-        await db.insert(collectionPointsTable).values(cp).onConflictDoNothing();
-      }
-      console.log(`Seeded ${collectionPoints.length} collection point presets`);
+    const collectionPoints = [
+      { name: "Linde South East (Camberley)", address: "Linde South East, Camberley, Surrey, GU15 3BU" },
+      { name: "Linde South (Bridgend)", address: "Linde South, North Road, Bridgend Industrial Estate, Bridgend, Mid Glamorgan, CF31 3SZ" },
+      { name: "Linde East (Hoddesdon)", address: "Linde East, Hoddesdon, Herts, EN11 0DJ" },
+      { name: "Linde Creighton (West Bromwich)", address: "Linde Creighton Ltd, Radial Point, Dartmouth Road, West Bromwich, West Midlands. B66 1BG" },
+      { name: "Linde Warrington", address: "Linde MH UK Ltd, Winwick Road, Warrington, Cheshire, WA2 8JF" },
+      { name: "Linde Castleford", address: "Linde MH UK Ltd, Pioneer Way, Castleford, West Yorkshire, WF10 5QU" },
+      { name: "Linde Newton Aycliffe", address: "Linde MH UK Ltd, Linde Way, Aycliffe Business Park, Newton Aycliffe, Co. Durham, DL5 6HR" },
+      { name: "Linde East Kilbride", address: "Linde MH UK Ltd, 3 Milton Road, East Kilbride, Scotland, G74, 5BU" },
+      { name: "Linde Basingstoke (Kingsclare Road)", address: "Linde MH UK Ltd, Gate 2, Kingsclare Road, Basingstoke, RG21 6XJ" },
+      { name: "CM - Jewsbury (Castleford)", address: "CM - Jewsbury, WF10 5QU" },
+      { name: "Still Exeter", address: "Still Materials Handling Ltd, Jacks Way, Hill Barton Business Park, Clyst St Mary, Exeter, EX5 1FG" },
+      { name: "Linde MH South (Swanley)", address: "Linde MH South, Unit 5 & 6 The Interchange, Westead Lane, Swanley, Kent. BR8 8TE" },
+      { name: "Linde Wellingborough", address: "Linde MH UK LTD, 6-8 Patterson Road, Wellingborough. NN8 4EX" },
+      { name: "Linde Andover", address: "Linde MH UK Ltd, Co-operative Food Primary Logistics Services, 4 Andover Business Park, Pioneer Rd, Andover, SP11 8EZ" },
+      { name: "Linde Basingstoke (Pelton Road)", address: "Linde MH UK Ltd, Pelton Road, Basingstoke, RG21 6XD" },
+    ];
+    console.log("Refreshing collection point presets from canonical data...");
+    await db.delete(collectionPointsTable);
+    for (const cp of collectionPoints) {
+      await db.insert(collectionPointsTable).values(cp).onConflictDoNothing();
     }
+    console.log(`Refreshed ${collectionPoints.length} collection point presets`);
   } catch (err) {
-    console.error("Bootstrap: failed to seed collection points:", err);
+    console.error("Bootstrap: failed to refresh collection points:", err);
   }
 }
 

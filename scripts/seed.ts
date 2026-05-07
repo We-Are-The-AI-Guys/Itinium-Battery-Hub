@@ -40,9 +40,6 @@ async function seed() {
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS location_id INTEGER REFERENCES locations(id)`);
 
   const sampleClients = [
-    { name: "Greenfield Logistics", contactName: "Alex Johnson", contactEmail: "alex.j@greenfield.co.uk" },
-    { name: "MetroWaste Solutions", contactName: "Tom Whitaker", contactEmail: "t.whitaker@metrowaste.co.uk" },
-    { name: "EcoCollect Ltd", contactName: "James Patel", contactEmail: "j.patel@ecocollect.co.uk" },
     { name: "Linde", contactName: null, contactEmail: null },
   ];
 
@@ -63,13 +60,6 @@ async function seed() {
   console.log(`Seeded ${Object.keys(clientIds).length} clients`);
 
   const sampleLocations = [
-    { clientName: "Greenfield Logistics", name: "Birmingham Central", address: "Unit 5, Aston Industrial Park, Birmingham B6 7EY" },
-    { clientName: "Greenfield Logistics", name: "Bristol South", address: "Western Approach Distribution Park, Severn Beach, Bristol BS35 4GG" },
-    { clientName: "Greenfield Logistics", name: "London Depot", address: "Crossways Business Park, Dartford DA2 6QE" },
-    { clientName: "MetroWaste Solutions", name: "Manchester North", address: "Trafford Park, Manchester M17 1WA" },
-    { clientName: "MetroWaste Solutions", name: "Sheffield East", address: "Moulton Park Industrial Estate, Sheffield S9 1WA" },
-    { clientName: "EcoCollect Ltd", name: "Leeds Hub", address: "Wakefield Europort, Normanton WF6 1ZB" },
-    { clientName: "EcoCollect Ltd", name: "Reading Central", address: "Green Park, Reading RG2 6GP" },
     { clientName: "Linde", name: "Linde South East (Camberley)", address: "Linde South East, Camberley, Surrey, GU15 3BU" },
     { clientName: "Linde", name: "Linde South (Bridgend)", address: "Linde South, North Road, Bridgend Industrial Estate, Bridgend, Mid Glamorgan, CF31 3SZ" },
     { clientName: "Linde", name: "Linde East (Hoddesdon)", address: "Linde East, Hoddesdon, Herts, EN11 0DJ" },
@@ -110,15 +100,8 @@ async function seed() {
     { email: "admin@itinium.co.uk", fullName: "Sarah Mitchell", role: "head_office_admin", depot: null, clientId: null, locationId: null },
     { email: "accounts@itinium.co.uk", fullName: "Rachel Adams", role: "accounts", depot: null, clientId: null, locationId: null },
     { email: "l.chen@itinium.co.uk", fullName: "Lisa Chen", role: "accounts", depot: null, clientId: null, locationId: null },
-    { email: "team@itinium.co.uk", fullName: "Sarah Cooper", role: "team_leader", depot: "Birmingham Central", clientName: "Greenfield Logistics", locationName: null },
-    { email: "t.whitaker@metrowaste.co.uk", fullName: "Tom Whitaker", role: "team_leader", depot: "Manchester North", clientName: "MetroWaste Solutions", locationName: null },
-    { email: "d.osei@thamesbatt.co.uk", fullName: "David Osei", role: "team_leader", depot: "Reading Central", clientName: "EcoCollect Ltd", locationName: null },
-    { email: "depot@itinium.co.uk", fullName: "Dave Mitchell", role: "depot_user", depot: "Birmingham Central", clientName: "Greenfield Logistics", locationName: "Birmingham Central" },
-    { email: "alex.j@greenfield.co.uk", fullName: "Alex Johnson", role: "depot_user", depot: "Birmingham Central", clientName: "Greenfield Logistics", locationName: "Birmingham Central" },
-    { email: "e.clarke@cleanpower.co.uk", fullName: "Emma Clarke", role: "depot_user", depot: "Bristol South", clientName: "Greenfield Logistics", locationName: "Bristol South" },
-    { email: "p.sharma@nationalgrid.co.uk", fullName: "Priya Sharma", role: "depot_user", depot: "London Depot", clientName: "Greenfield Logistics", locationName: "London Depot" },
-    { email: "j.patel@ecocollect.co.uk", fullName: "James Patel", role: "depot_user", depot: "Leeds Hub", clientName: "EcoCollect Ltd", locationName: "Leeds Hub" },
-    { email: "m.thompson@northernenergy.co.uk", fullName: "Mark Thompson", role: "depot_user", depot: "Sheffield East", clientName: "MetroWaste Solutions", locationName: "Sheffield East" },
+    { email: "team@itinium.co.uk", fullName: "Sarah Cooper", role: "team_leader", depot: "Linde South East (Camberley)", clientName: "Linde", locationName: null },
+    { email: "depot@itinium.co.uk", fullName: "Dave Mitchell", role: "depot_user", depot: "Linde South East (Camberley)", clientName: "Linde", locationName: "Linde South East (Camberley)" },
   ];
 
   for (const u of users) {
@@ -148,7 +131,7 @@ async function seed() {
     }
   }
 
-  console.log("Seeded 12 demo users with client/location assignments (password: password123)");
+  console.log(`Seeded ${users.length} demo users with client/location assignments (password: password123)`);
 
   await db.insert(systemSettingsTable).values({
     singletonKey: "default",
@@ -234,6 +217,7 @@ async function seed() {
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family ON cell_models (cell_family)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family_height ON cell_models (cell_family, cell_height_mm)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_manufacturer ON cell_models (manufacturer)`);
+  await db.delete(cellModelsTable);
   const batchSize = 50;
   for (let i = 0; i < CELL_MODEL_DATA.length; i += batchSize) {
     const batch = CELL_MODEL_DATA.slice(i, i + batchSize).map(cm => ({
