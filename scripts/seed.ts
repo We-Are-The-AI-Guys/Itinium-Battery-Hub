@@ -43,6 +43,7 @@ async function seed() {
     { name: "Greenfield Logistics", contactName: "Alex Johnson", contactEmail: "alex.j@greenfield.co.uk" },
     { name: "MetroWaste Solutions", contactName: "Tom Whitaker", contactEmail: "t.whitaker@metrowaste.co.uk" },
     { name: "EcoCollect Ltd", contactName: "James Patel", contactEmail: "j.patel@ecocollect.co.uk" },
+    { name: "Linde", contactName: null, contactEmail: null },
   ];
 
   const clientIds: Record<string, number> = {};
@@ -69,6 +70,21 @@ async function seed() {
     { clientName: "MetroWaste Solutions", name: "Sheffield East", address: "Moulton Park Industrial Estate, Sheffield S9 1WA" },
     { clientName: "EcoCollect Ltd", name: "Leeds Hub", address: "Wakefield Europort, Normanton WF6 1ZB" },
     { clientName: "EcoCollect Ltd", name: "Reading Central", address: "Green Park, Reading RG2 6GP" },
+    { clientName: "Linde", name: "Linde South East (Camberley)", address: "Linde South East, Camberley, Surrey, GU15 3BU" },
+    { clientName: "Linde", name: "Linde South (Bridgend)", address: "Linde South, North Road, Bridgend Industrial Estate, Bridgend, Mid Glamorgan, CF31 3SZ" },
+    { clientName: "Linde", name: "Linde East (Hoddesdon)", address: "Linde East, Hoddesdon, Herts, EN11 0DJ" },
+    { clientName: "Linde", name: "Linde Creighton (West Bromwich)", address: "Linde Creighton Ltd, Radial Point, Dartmouth Road, West Bromwich, West Midlands. B66 1BG" },
+    { clientName: "Linde", name: "Linde Warrington", address: "Linde MH UK Ltd, Winwick Road, Warrington, Cheshire, WA2 8JF" },
+    { clientName: "Linde", name: "Linde Castleford", address: "Linde MH UK Ltd, Pioneer Way, Castleford, West Yorkshire, WF10 5QU" },
+    { clientName: "Linde", name: "Linde Newton Aycliffe", address: "Linde MH UK Ltd, Linde Way, Aycliffe Business Park, Newton Aycliffe, Co. Durham, DL5 6HR" },
+    { clientName: "Linde", name: "Linde East Kilbride", address: "Linde MH UK Ltd, 3 Milton Road, East Kilbride, Scotland, G74, 5BU" },
+    { clientName: "Linde", name: "Linde Basingstoke (Kingsclare Road)", address: "Linde MH UK Ltd, Gate 2, Kingsclare Road, Basingstoke, RG21 6XJ" },
+    { clientName: "Linde", name: "CM - Jewsbury (Castleford)", address: "CM - Jewsbury, WF10 5QU" },
+    { clientName: "Linde", name: "Still Exeter", address: "Still Materials Handling Ltd, Jacks Way, Hill Barton Business Park, Clyst St Mary, Exeter, EX5 1FG" },
+    { clientName: "Linde", name: "Linde MH South (Swanley)", address: "Linde MH South, Unit 5 & 6 The Interchange, Westead Lane, Swanley, Kent. BR8 8TE" },
+    { clientName: "Linde", name: "Linde Wellingborough", address: "Linde MH UK LTD, 6-8 Patterson Road, Wellingborough. NN8 4EX" },
+    { clientName: "Linde", name: "Linde Andover", address: "Linde MH UK Ltd, Co-operative Food Primary Logistics Services, 4 Andover Business Park, Pioneer Rd, Andover, SP11 8EZ" },
+    { clientName: "Linde", name: "Linde Basingstoke (Pelton Road)", address: "Linde MH UK Ltd, Pelton Road, Basingstoke, RG21 6XD" },
   ];
 
   const locationIds: Record<string, number> = {};
