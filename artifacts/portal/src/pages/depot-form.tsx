@@ -280,6 +280,7 @@ export default function DepotFormPage() {
   const [tonnageOverride, setTonnageOverride] = useState("");
   const [tonnageManual, setTonnageManual] = useState(false);
   const [manufacturers, setManufacturers] = useState<string[]>(DEFAULT_MANUFACTURERS);
+  const [manufacturerAliases, setManufacturerAliases] = useState<Record<string, string>>({});
   const [mfrPopoverOpen, setMfrPopoverOpen] = useState<Record<string, boolean>>({});
   const [cellModels, setCellModels] = useState<CellModelOption[]>([]);
   const [collectionPointPresets, setCollectionPointPresets] = useState<CollectionPointPreset[]>([]);
@@ -320,6 +321,7 @@ export default function DepotFormPage() {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.manufacturers?.length) setManufacturers(data.manufacturers);
+        if (data?.aliases) setManufacturerAliases(data.aliases);
       })
       .catch(() => {});
 
@@ -544,6 +546,11 @@ export default function DepotFormPage() {
         const dataRows = rows.slice(1).filter((row) => row.some((cell) => cell && cell.trim()));
         const knownMfrs = manufacturers.filter((m) => m.toLowerCase() !== "other");
         const mfrByNorm = new Map(knownMfrs.map((m) => [normalizeForMatch(m), m] as const));
+        for (const [alias, canonical] of Object.entries(manufacturerAliases)) {
+          if (knownMfrs.includes(canonical)) {
+            mfrByNorm.set(normalizeForMatch(alias), canonical);
+          }
+        }
         const modelsByNorm = new Map<string, typeof cellModels>();
         for (const m of cellModels) {
           const key = normalizeForMatch(m.modelName);

@@ -214,8 +214,6 @@ async function seed() {
   await db.execute(sql`DROP INDEX IF EXISTS idx_cell_models_mfr_model`);
   await db.execute(sql`DROP INDEX IF EXISTS idx_cell_models_mfr_model_height`);
 
-  await db.delete(cellModelsTable);
-
   await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_cell_models_mfr_model ON cell_models (manufacturer, model_name)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family ON cell_models (cell_family)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_cell_models_family_height ON cell_models (cell_family, cell_height_mm)`);
@@ -251,20 +249,21 @@ async function seed() {
 
   await db.delete(collectionPointsTable);
   const collectionPoints = [
-    { name: "Linde Basingstoke", address: "Linde Material Handling, Mulberry Business Park, Fishers Lane, Cheltenham, Basingstoke RG24 8GF" },
-    { name: "Linde Fareham", address: "Linde Material Handling, Unit 7, Segensworth Business Centre, Fareham PO15 5RR" },
-    { name: "Linde Immingham", address: "Linde Material Handling, Manby Road, Immingham, North East Lincolnshire DN40 3DZ" },
-    { name: "Linde Lincoln", address: "Linde Material Handling, Doddington Road, Lincoln LN6 7HA" },
-    { name: "Linde Lutterworth", address: "Linde Material Handling, Magna Park, Coventry Road, Lutterworth LE17 4XN" },
-    { name: "Linde Normanton", address: "Linde Material Handling, Unit 2, Wakefield Europort, Normanton WF6 1ZB" },
-    { name: "Linde Swindon", address: "Linde Material Handling, Bridgemead Close, Westmead Industrial Estate, Swindon SN5 7YG" },
-    { name: "Still Aston", address: "Still Materials Handling, Unit 4, Aston Industrial Estate, Birmingham B6 7EY" },
-    { name: "Still Bristol", address: "Still Materials Handling, Western Approach Distribution Park, Severn Beach, Bristol BS35 4GG" },
-    { name: "Still Dartford", address: "Still Materials Handling, Crossways Business Park, Dartford DA2 6QE" },
-    { name: "Still Glasgow", address: "Still Materials Handling, Cambuslang Investment Park, Glasgow G32 8NB" },
-    { name: "Still Manchester", address: "Still Materials Handling, Trafford Park, Manchester M17 1WA" },
-    { name: "Still Northampton", address: "Still Materials Handling, Moulton Park Industrial Estate, Northampton NN3 6AQ" },
-    { name: "Still Warrington", address: "Still Materials Handling, Woolston Grange Avenue, Warrington WA1 4PQ" },
+    { name: "Linde South East (Camberley)", address: "Linde South East, Camberley, Surrey, GU15 3BU" },
+    { name: "Linde South (Bridgend)", address: "Linde South, North Road, Bridgend Industrial Estate, Bridgend, Mid Glamorgan, CF31 3SZ" },
+    { name: "Linde East (Hoddesdon)", address: "Linde East, Hoddesdon, Herts, EN11 0DJ" },
+    { name: "Linde Creighton (West Bromwich)", address: "Linde Creighton Ltd, Radial Point, Dartmouth Road, West Bromwich, West Midlands. B66 1BG" },
+    { name: "Linde Warrington", address: "Linde MH UK Ltd, Winwick Road, Warrington, Cheshire, WA2 8JF" },
+    { name: "Linde Castleford", address: "Linde MH UK Ltd, Pioneer Way, Castleford, West Yorkshire, WF10 5QU" },
+    { name: "Linde Newton Aycliffe", address: "Linde MH UK Ltd, Linde Way, Aycliffe Business Park, Newton Aycliffe, Co. Durham, DL5 6HR" },
+    { name: "Linde East Kilbride", address: "Linde MH UK Ltd, 3 Milton Road, East Kilbride, Scotland, G74, 5BU" },
+    { name: "Linde Basingstoke (Kingsclare Road)", address: "Linde MH UK Ltd, Gate 2, Kingsclare Road, Basingstoke, RG21 6XJ" },
+    { name: "CM - Jewsbury (Castleford)", address: "CM - Jewsbury, WF10 5QU" },
+    { name: "Still Exeter", address: "Still Materials Handling Ltd, Jacks Way, Hill Barton Business Park, Clyst St Mary, Exeter, EX5 1FG" },
+    { name: "Linde MH South (Swanley)", address: "Linde MH South, Unit 5 & 6 The Interchange, Westead Lane, Swanley, Kent. BR8 8TE" },
+    { name: "Linde Wellingborough", address: "Linde MH UK LTD, 6-8 Patterson Road, Wellingborough. NN8 4EX" },
+    { name: "Linde Andover", address: "Linde MH UK Ltd, Co-operative Food Primary Logistics Services, 4 Andover Business Park, Pioneer Rd, Andover, SP11 8EZ" },
+    { name: "Linde Basingstoke (Pelton Road)", address: "Linde MH UK Ltd, Pelton Road, Basingstoke, RG21 6XD" },
   ];
 
   for (const cp of collectionPoints) {
