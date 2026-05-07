@@ -39,6 +39,47 @@ async function seed() {
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id)`);
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS location_id INTEGER REFERENCES locations(id)`);
 
+  const CANONICAL_USER_EMAILS = [
+    "admin@itinium.co.uk",
+    "accounts@itinium.co.uk",
+    "l.chen@itinium.co.uk",
+    "team@itinium.co.uk",
+    "depot@itinium.co.uk",
+  ];
+  const CANONICAL_CLIENT_NAMES = ["Linde"];
+  const CANONICAL_LOCATION_NAMES = [
+    "Linde South East (Camberley)",
+    "Linde South (Bridgend)",
+    "Linde East (Hoddesdon)",
+    "Linde Creighton (West Bromwich)",
+    "Linde Warrington",
+    "Linde Castleford",
+    "Linde Newton Aycliffe",
+    "Linde East Kilbride",
+    "Linde Basingstoke (Kingsclare Road)",
+    "CM - Jewsbury (Castleford)",
+    "Still Exeter",
+    "Linde MH South (Swanley)",
+    "Linde Wellingborough",
+    "Linde Andover",
+    "Linde Basingstoke (Pelton Road)",
+  ];
+
+  const canonicalEmailList = sql.join(CANONICAL_USER_EMAILS.map((e) => sql`${e}`), sql`, `);
+  const canonicalLocationList = sql.join(CANONICAL_LOCATION_NAMES.map((n) => sql`${n}`), sql`, `);
+  const canonicalClientList = sql.join(CANONICAL_CLIENT_NAMES.map((n) => sql`${n}`), sql`, `);
+
+  await db.execute(sql`DELETE FROM job_batteries`);
+  await db.execute(sql`DELETE FROM stillage_movements`);
+  await db.execute(sql`DELETE FROM jobs`);
+  await db.execute(sql`DELETE FROM job_drafts`);
+  await db.execute(sql`DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email NOT IN (${canonicalEmailList}))`);
+  await db.execute(sql`DELETE FROM password_reset_tokens WHERE user_id IN (SELECT id FROM users WHERE email NOT IN (${canonicalEmailList}))`);
+  await db.execute(sql`DELETE FROM users WHERE email NOT IN (${canonicalEmailList})`);
+  await db.execute(sql`DELETE FROM locations WHERE name NOT IN (${canonicalLocationList})`);
+  await db.execute(sql`DELETE FROM clients WHERE name NOT IN (${canonicalClientList})`);
+  console.log("Purged non-canonical clients, locations, users, jobs, drafts, and movements");
+
   const sampleClients = [
     { name: "Linde", contactName: null, contactEmail: null },
   ];
