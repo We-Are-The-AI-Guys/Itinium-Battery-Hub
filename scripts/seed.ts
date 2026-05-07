@@ -76,6 +76,7 @@ async function seed() {
   await db.execute(sql`DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email NOT IN (${canonicalEmailList}))`);
   await db.execute(sql`DELETE FROM password_reset_tokens WHERE user_id IN (SELECT id FROM users WHERE email NOT IN (${canonicalEmailList}))`);
   await db.execute(sql`DELETE FROM users WHERE email NOT IN (${canonicalEmailList})`);
+  await db.execute(sql`UPDATE users SET client_id = NULL, location_id = NULL WHERE email IN (${canonicalEmailList})`);
   await db.execute(sql`DELETE FROM locations WHERE name NOT IN (${canonicalLocationList})`);
   await db.execute(sql`DELETE FROM clients WHERE name NOT IN (${canonicalClientList})`);
   console.log("Purged non-canonical clients, locations, users, jobs, drafts, and movements");
