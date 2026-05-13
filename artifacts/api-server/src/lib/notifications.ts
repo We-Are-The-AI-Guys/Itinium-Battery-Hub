@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { notificationsTable, usersTable } from "@workspace/db/schema";
-import { eq, inArray, and, lt, sql } from "drizzle-orm";
+import { eq, inArray, and, lt } from "drizzle-orm";
 import { Resend } from "resend";
 import { buildBrandedEmail } from "./email";
 
@@ -19,10 +19,10 @@ const STATUS_LABELS: Record<string, string> = {
   completed: "Completed",
 };
 
-function wantsEmail(prefs: unknown, ...keys: string[]): boolean {
+function wantsEmail(prefs: unknown, key: string): boolean {
   if (!prefs || typeof prefs !== "object") return true;
   const p = prefs as Record<string, unknown>;
-  return keys.every((k) => p[k] !== false);
+  return p[key] !== false;
 }
 
 function infoRow(label: string, value: string): string {
@@ -99,7 +99,7 @@ export async function dispatchNotification(
       .where(eq(usersTable.id, userId));
 
     if (!user) return;
-    const prefKey = payload.emailPrefKey ?? "jobUpdates";
+    const prefKey = payload.emailPrefKey ?? "jobApprovedCompleted";
     if (!wantsEmail(user.notificationPreferences, prefKey)) return;
 
     await resend.emails.send({
@@ -208,7 +208,7 @@ export async function notifySubmitterStatusChange(job: JobRef, newStatus: string
       link: `/jobs/${job.id}`,
       emailSubject: `Awaiting Invoice — ${job.reference}`,
       emailHtml: accountsEmailHtml,
-      emailPrefKey: "newJobSubmitted",
+      emailPrefKey: "invoiceGenerated",
     });
     return;
   }
@@ -229,7 +229,7 @@ export async function notifySubmitterStatusChange(job: JobRef, newStatus: string
     link: `/jobs/${job.id}`,
     emailSubject: `Collection ${statusLabel} — ${job.reference}`,
     emailHtml,
-    emailPrefKey: "jobUpdates",
+    emailPrefKey: "jobApprovedCompleted",
   };
 
   const promises: Promise<void>[] = [dispatchNotification(job.submittedById, notif)];
@@ -241,7 +241,7 @@ export async function notifySubmitterStatusChange(job: JobRef, newStatus: string
       promises.push(
         dispatchToMany(filteredIds, {
           ...notif,
-          emailPrefKey: "newJobSubmitted",
+          emailPrefKey: "invoiceGenerated",
         })
       );
     }
@@ -267,7 +267,7 @@ export async function notifyFlagResolved(job: JobRef, resolvedByName: string): P
     link: `/jobs/${job.id}`,
     emailSubject: `Flag Resolved — ${job.reference}`,
     emailHtml,
-    emailPrefKey: "jobUpdates",
+    emailPrefKey: "jobApprovedCompleted",
   };
 
   const submitter = await db
