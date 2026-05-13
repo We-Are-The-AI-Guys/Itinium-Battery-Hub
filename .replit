@@ -32,3 +32,4 @@ channel = "stable-25_05"
 
 [userenv.shared]
 CRM_PROJECT_ID = "21"
+PORTAL_URL = "https://itinium.replit.app"
