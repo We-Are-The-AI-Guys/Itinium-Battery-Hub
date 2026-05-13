@@ -129,8 +129,50 @@ export async function recipientsWithRoles(roles: string[]): Promise<number[]> {
   return users.map((u) => u.id);
 }
 
+export type RecipientsForJob = {
+  adminIds: number[];
+  accountIds: number[];
+  submitterAndTeamLeaderIds: number[];
+};
+
+export async function recipientsForJob(job: JobRef): Promise<RecipientsForJob> {
+  const [adminIds, accountIds] = await Promise.all([
+    recipientsWithRoles(["head_office_admin", "accounts"]),
+    recipientsWithRoles(["accounts"]),
+  ]);
+
+  const submitterAndTeamLeaderIds = new Set<number>();
+  if (job.submittedById) {
+    submitterAndTeamLeaderIds.add(job.submittedById);
+    const submitter = await db
+      .select({ clientId: usersTable.clientId })
+      .from(usersTable)
+      .where(eq(usersTable.id, job.submittedById))
+      .then((rows) => rows[0] ?? null);
+    if (submitter?.clientId) {
+      const teamLeaders = await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(
+          and(
+            eq(usersTable.clientId, submitter.clientId),
+            eq(usersTable.role, "team_leader"),
+            eq(usersTable.isActive, true)
+          )
+        );
+      for (const tl of teamLeaders) submitterAndTeamLeaderIds.add(tl.id);
+    }
+  }
+
+  return {
+    adminIds,
+    accountIds,
+    submitterAndTeamLeaderIds: [...submitterAndTeamLeaderIds],
+  };
+}
+
 export async function notifyAdminsNewJob(job: JobRef): Promise<void> {
-  const adminIds = await recipientsWithRoles(["head_office_admin", "accounts"]);
+  const { adminIds } = await recipientsForJob(job);
   const link = portalLink(`/jobs/${job.id}`);
   const emailHtml = buildBrandedEmail(
     "New collection request submitted",
@@ -153,7 +195,7 @@ export async function notifyAdminsNewJob(job: JobRef): Promise<void> {
 
 export async function notifyAdminsFlaggedBatteries(job: JobRef, flagCount: number): Promise<void> {
   if (flagCount === 0) return;
-  const adminIds = await recipientsWithRoles(["head_office_admin", "accounts"]);
+  const { adminIds } = await recipientsForJob(job);
   const link = portalLink(`/jobs/${job.id}`);
   const emailHtml = buildBrandedEmail(
     `Flag alert — ${job.reference}`,
@@ -200,7 +242,7 @@ export async function notifySubmitterStatusChange(job: JobRef, newStatus: string
       ${ctaButton(link)}`,
       "You are receiving this because you are an accounts user on the Itinium Battery Portal."
     );
-    const accountIds = await recipientsWithRoles(["accounts"]);
+    const { accountIds } = await recipientsForJob(job);
     await dispatchToMany(accountIds, {
       type: "status_changed",
       title: `${job.reference} — Awaiting Invoice`,
@@ -235,7 +277,7 @@ export async function notifySubmitterStatusChange(job: JobRef, newStatus: string
   const promises: Promise<void>[] = [dispatchNotification(job.submittedById, notif)];
 
   if (newStatus === "invoice") {
-    const accountIds = await recipientsWithRoles(["accounts"]);
+    const { accountIds } = await recipientsForJob(job);
     const filteredIds = accountIds.filter((id) => id !== job.submittedById);
     if (filteredIds.length > 0) {
       promises.push(
@@ -270,29 +312,8 @@ export async function notifyFlagResolved(job: JobRef, resolvedByName: string): P
     emailPrefKey: "jobApprovedCompleted",
   };
 
-  const submitter = await db
-    .select({ id: usersTable.id, clientId: usersTable.clientId })
-    .from(usersTable)
-    .where(eq(usersTable.id, job.submittedById))
-    .then((rows) => rows[0] ?? null);
-
-  const recipientIds = new Set<number>([job.submittedById]);
-
-  if (submitter?.clientId) {
-    const teamLeaders = await db
-      .select({ id: usersTable.id })
-      .from(usersTable)
-      .where(
-        and(
-          eq(usersTable.clientId, submitter.clientId),
-          eq(usersTable.role, "team_leader"),
-          eq(usersTable.isActive, true)
-        )
-      );
-    for (const tl of teamLeaders) recipientIds.add(tl.id);
-  }
-
-  await dispatchToMany([...recipientIds], notif);
+  const { submitterAndTeamLeaderIds } = await recipientsForJob(job);
+  await dispatchToMany(submitterAndTeamLeaderIds, notif);
 }
 
 export async function pruneOldNotifications(): Promise<void> {

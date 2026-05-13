@@ -1,7 +1,7 @@
 import app from "./app";
 import { db } from "@workspace/db";
-import { usersTable, systemSettingsTable, batteryWeightReferenceTable, cellModelsTable, collectionPointsTable, notificationsTable } from "@workspace/db/schema";
-import { count, sql, lt } from "drizzle-orm";
+import { usersTable, systemSettingsTable, batteryWeightReferenceTable, cellModelsTable, collectionPointsTable } from "@workspace/db/schema";
+import { count, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { CELL_MODEL_DATA } from "@workspace/db/data/cell-models";
 
@@ -198,12 +198,15 @@ async function bootstrap() {
       )
     `);
     await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_notifications_user_read_created ON notifications (user_id, is_read, created_at)`);
-    const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-    const pruneResult = await db.delete(notificationsTable).where(lt(notificationsTable.createdAt, cutoff));
-    const pruned = (pruneResult as { rowCount?: number }).rowCount ?? 0;
-    if (pruned > 0) console.log(`[notifications] Pruned ${pruned} notifications older than 90 days`);
   } catch (err) {
-    console.error("Bootstrap: failed to create/prune notifications table:", err);
+    console.error("Bootstrap: failed to create notifications table:", err);
+  }
+
+  try {
+    const { pruneOldNotifications } = await import("./lib/notifications");
+    await pruneOldNotifications();
+  } catch (err) {
+    console.error("Bootstrap: failed to prune old notifications:", err);
   }
 
   try {
@@ -257,6 +260,10 @@ const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
+}
+
+if (!process.env.RESEND_API_KEY) {
+  console.warn("[notifications] RESEND_API_KEY is not set — job notification emails will be skipped.");
 }
 
 bootstrap().then(() => {
