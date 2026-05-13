@@ -191,6 +191,28 @@ export async function notifySubmitterStatusChange(job: JobRef, newStatus: string
   }
 
   const link = portalLink(`/jobs/${job.id}`);
+
+  if (newStatus === "awaiting_invoice") {
+    const accountsEmailHtml = buildBrandedEmail(
+      `Awaiting invoice — ${job.reference}`,
+      `<p style="color:#475569;margin:0 0 4px;">Collection <strong>${job.reference}</strong> is now <strong>awaiting invoice</strong> from the depot.</p>
+      ${jobTable(job)}
+      ${ctaButton(link)}`,
+      "You are receiving this because you are an accounts user on the Itinium Battery Portal."
+    );
+    const accountIds = await recipientsWithRoles(["accounts"]);
+    await dispatchToMany(accountIds, {
+      type: "status_changed",
+      title: `${job.reference} — Awaiting Invoice`,
+      body: `Collection ${job.reference} is awaiting invoice from the depot.`,
+      link: `/jobs/${job.id}`,
+      emailSubject: `Awaiting Invoice — ${job.reference}`,
+      emailHtml: accountsEmailHtml,
+      emailPrefKey: "newJobSubmitted",
+    });
+    return;
+  }
+
   const emailHtml = buildBrandedEmail(
     `Collection update — ${job.reference}`,
     `<p style="color:#475569;margin:0 0 8px;">Hi there,</p>
@@ -212,14 +234,16 @@ export async function notifySubmitterStatusChange(job: JobRef, newStatus: string
 
   const promises: Promise<void>[] = [dispatchNotification(job.submittedById, notif)];
 
-  if (newStatus === "awaiting_invoice" || newStatus === "invoice") {
-    const accountIds = await recipientsWithRoles(["head_office_admin", "accounts"]);
+  if (newStatus === "invoice") {
+    const accountIds = await recipientsWithRoles(["accounts"]);
     const filteredIds = accountIds.filter((id) => id !== job.submittedById);
     if (filteredIds.length > 0) {
-      await dispatchToMany(filteredIds, {
-        ...notif,
-        emailPrefKey: "newJobSubmitted",
-      });
+      promises.push(
+        dispatchToMany(filteredIds, {
+          ...notif,
+          emailPrefKey: "newJobSubmitted",
+        })
+      );
     }
   }
 
@@ -234,9 +258,9 @@ export async function notifyFlagResolved(job: JobRef, resolvedByName: string): P
     `<p style="color:#475569;margin:0 0 4px;">A flagged battery on <strong>${job.reference}</strong> has been reviewed and resolved by <strong>${resolvedByName}</strong>.</p>
     ${jobTable(job)}
     ${ctaButton(link)}`,
-    "You are receiving this because you submitted this collection request."
+    "You are receiving this because you submitted this collection request or manage the submitting team."
   );
-  await dispatchNotification(job.submittedById, {
+  const notif: NotificationPayload = {
     type: "flag_resolved",
     title: `Flag resolved on ${job.reference}`,
     body: `A flagged battery was resolved by ${resolvedByName}.`,
@@ -244,7 +268,31 @@ export async function notifyFlagResolved(job: JobRef, resolvedByName: string): P
     emailSubject: `Flag Resolved — ${job.reference}`,
     emailHtml,
     emailPrefKey: "jobUpdates",
-  });
+  };
+
+  const submitter = await db
+    .select({ id: usersTable.id, clientId: usersTable.clientId })
+    .from(usersTable)
+    .where(eq(usersTable.id, job.submittedById))
+    .then((rows) => rows[0] ?? null);
+
+  const recipientIds = new Set<number>([job.submittedById]);
+
+  if (submitter?.clientId) {
+    const teamLeaders = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(
+        and(
+          eq(usersTable.clientId, submitter.clientId),
+          eq(usersTable.role, "team_leader"),
+          eq(usersTable.isActive, true)
+        )
+      );
+    for (const tl of teamLeaders) recipientIds.add(tl.id);
+  }
+
+  await dispatchToMany([...recipientIds], notif);
 }
 
 export async function pruneOldNotifications(): Promise<void> {

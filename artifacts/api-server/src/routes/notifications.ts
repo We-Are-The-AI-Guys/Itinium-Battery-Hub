@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { notificationsTable } from "@workspace/db/schema";
-import { eq, and, desc, or } from "drizzle-orm";
+import { eq, and, desc, asc } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -16,7 +16,7 @@ router.get(
         .select()
         .from(notificationsTable)
         .where(eq(notificationsTable.userId, userId))
-        .orderBy(desc(notificationsTable.createdAt))
+        .orderBy(asc(notificationsTable.isRead), desc(notificationsTable.createdAt))
         .limit(50);
       res.json({ notifications: rows });
     } catch (err) {
