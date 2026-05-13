@@ -10,7 +10,6 @@ import {
   HelpCircle,
   LogOut,
   Search,
-  Bell,
   Calendar,
   Plus,
   Package,
@@ -21,6 +20,7 @@ import {
   ImagePlus,
   X as XIcon,
 } from "lucide-react";
+import { NotificationBell } from "@/components/notification-panel";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Input } from "@/components/ui/input";
 import {
@@ -602,10 +602,7 @@ export function SidebarLayout({
               <Calendar className="w-4 h-4 text-slate-400" />
               {getCurrentMonth()}
             </div>
-            <button className="relative p-2 text-slate-400 hover:text-[#0f2744] hover:bg-slate-100 rounded-full transition-colors">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-            </button>
+            <NotificationBell />
           </div>
         </header>
 

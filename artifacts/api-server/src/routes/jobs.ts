@@ -7,7 +7,7 @@ import { MANUFACTURERS } from "./manufacturers";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { createBrandedDoc } from "../lib/pdf-branding";
-import { notifyAdminsNewJob, notifyAdminsFlaggedBatteries, notifySubmitterStatusChange } from "../lib/job-notifications";
+import { notifyAdminsNewJob, notifyAdminsFlaggedBatteries, notifySubmitterStatusChange, notifyFlagResolved } from "../lib/notifications";
 
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
@@ -1001,6 +1001,7 @@ router.patch(
       res.json({ job: updated });
 
       notifySubmitterStatusChange(updated, status).catch(() => {});
+
     } catch (error) {
       console.error("Job status update error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -1116,6 +1117,13 @@ router.patch(
       }
 
       res.json({ battery: { ...updated, resolvedByName } });
+
+      if (clearedAnyFlag && resolvedByName) {
+        const [parentJob] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+        if (parentJob) {
+          notifyFlagResolved(parentJob, resolvedByName).catch(() => {});
+        }
+      }
     } catch (error) {
       console.error("Battery admin update error:", error);
       res.status(500).json({ message: "Internal server error" });

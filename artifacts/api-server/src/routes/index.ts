@@ -16,6 +16,7 @@ import clientsRouter from "./clients";
 import locationsRouter from "./locations";
 import kpiRouter from "./kpi";
 import supportRouter from "./support";
+import notificationsRouter from "./notifications";
 
 const router: IRouter = Router();
 
@@ -36,5 +37,6 @@ router.use(depotsRouter);
 router.use(clientsRouter);
 router.use(locationsRouter);
 router.use(supportRouter);
+router.use(notificationsRouter);
 
 export default router;
