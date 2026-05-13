@@ -274,7 +274,7 @@ function ProfileTab({ user, onProfileUpdated }: { user: UserProfile; onProfileUp
 function NotificationsTab() {
   const { toast } = useToast();
   const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [savingKey, setSavingKey] = useState<keyof NotificationPrefs | null>(null);
 
   useEffect(() => {
     fetch("/api/settings/notifications", { credentials: "include" })
@@ -283,25 +283,27 @@ function NotificationsTab() {
       .catch(() => {});
   }, []);
 
-  async function handleSave() {
-    if (!prefs) return;
-    setSaving(true);
+  async function handleToggle(key: keyof NotificationPrefs, checked: boolean) {
+    if (!prefs || savingKey) return;
+    const updated = { ...prefs, [key]: checked };
+    setPrefs(updated);
+    setSavingKey(key);
     try {
       const res = await fetch("/api/settings/notifications", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(prefs),
+        body: JSON.stringify({ [key]: checked }),
       });
-      if (res.ok) {
-        toast({ title: "Preferences saved", description: "Your notification preferences have been updated." });
-      } else {
-        toast({ title: "Error", description: "Failed to save preferences", variant: "destructive" });
+      if (!res.ok) {
+        setPrefs(prefs);
+        toast({ title: "Error", description: "Failed to save preference", variant: "destructive" });
       }
     } catch {
-      toast({ title: "Error", description: "Failed to save preferences", variant: "destructive" });
+      setPrefs(prefs);
+      toast({ title: "Error", description: "Failed to save preference", variant: "destructive" });
     } finally {
-      setSaving(false);
+      setSavingKey(null);
     }
   }
 
@@ -328,7 +330,7 @@ function NotificationsTab() {
           <Bell className="w-5 h-5 text-[#0ea5e9]" />
           Email Notifications
         </h3>
-        <p className="text-sm text-slate-500 mt-1">Choose which email notifications you would like to receive</p>
+        <p className="text-sm text-slate-500 mt-1">Toggle each notification type — changes are saved automatically</p>
       </div>
       <div className="divide-y divide-slate-100">
         {notifications.map((n) => (
@@ -344,21 +346,12 @@ function NotificationsTab() {
             </div>
             <Switch
               checked={prefs[n.key]}
-              onCheckedChange={(checked) => setPrefs({ ...prefs, [n.key]: checked })}
+              onCheckedChange={(checked) => handleToggle(n.key, checked)}
+              disabled={savingKey !== null}
               className="data-[state=checked]:bg-[#0ea5e9]"
             />
           </div>
         ))}
-      </div>
-      <div className="px-6 py-4 bg-slate-50 border-t border-slate-100">
-        <Button
-          className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-none shadow-sm"
-          onClick={handleSave}
-          disabled={saving}
-        >
-          <Save className="w-4 h-4 mr-2" />
-          {saving ? "Saving..." : "Save Preferences"}
-        </Button>
       </div>
     </div>
   );
