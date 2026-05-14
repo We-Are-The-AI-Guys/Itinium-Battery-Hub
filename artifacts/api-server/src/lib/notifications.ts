@@ -8,7 +8,7 @@ const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
 
-const FROM_ADDRESS = "notifications@itinium.co.uk";
+const FROM_ADDRESS = "notifications@portal.itinium.co.uk";
 
 const STATUS_LABELS: Record<string, string> = {
   request: "Request Submitted",
