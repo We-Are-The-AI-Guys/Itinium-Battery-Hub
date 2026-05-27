@@ -54,6 +54,32 @@ function buildJobsWhere(query: Record<string, unknown>) {
 }
 
 router.get(
+  "/jobs/schedule",
+  requireAuth,
+  requireRole("head_office_admin"),
+  async (_req: AuthenticatedRequest, res) => {
+    try {
+      const jobs = await db
+        .select({
+          id: jobsTable.id,
+          reference: jobsTable.reference,
+          clientName: jobsTable.clientName,
+          depot: jobsTable.depot,
+          collectionDate: jobsTable.collectionDate,
+          status: jobsTable.status,
+        })
+        .from(jobsTable)
+        .where(sql`${jobsTable.collectionDate} IS NOT NULL`)
+        .orderBy(asc(jobsTable.collectionDate));
+      res.json({ jobs });
+    } catch (err) {
+      console.error("Schedule jobs fetch error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+router.get(
   "/jobs/export.xlsx",
   requireAuth,
   requireRole("accounts", "head_office_admin"),

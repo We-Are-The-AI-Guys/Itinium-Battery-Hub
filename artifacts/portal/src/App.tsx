@@ -16,6 +16,7 @@ import JobListPage from "@/pages/job-list";
 import JobDetailPage from "@/pages/job-detail";
 import StillagesPage from "@/pages/stillages";
 import PlaceholderPage from "@/pages/placeholder";
+import SchedulePage from "@/pages/schedule";
 import KpiPage from "@/pages/kpi";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
@@ -143,7 +144,7 @@ function AppRouter() {
       </Route>
       <Route path="/schedule">
         <RoleGuard allowedRoles={["head_office_admin"]}>
-          <PlaceholderPage title="Schedule" />
+          <SchedulePage />
         </RoleGuard>
       </Route>
       <Route component={NotFound} />
