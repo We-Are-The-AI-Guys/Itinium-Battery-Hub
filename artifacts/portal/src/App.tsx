@@ -141,6 +141,11 @@ function AppRouter() {
           <DepotFormPage />
         </AuthGuard>
       </Route>
+      <Route path="/schedule">
+        <RoleGuard allowedRoles={["head_office_admin"]}>
+          <PlaceholderPage title="Schedule" />
+        </RoleGuard>
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );

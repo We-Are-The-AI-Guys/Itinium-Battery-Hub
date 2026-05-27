@@ -11,6 +11,7 @@ import {
   LogOut,
   Search,
   Calendar,
+  CalendarDays,
   Plus,
   Package,
   Building2,
@@ -74,6 +75,7 @@ function getNavItems(user: User | null): NavItem[] {
 
   if (role === "head_office_admin") {
     items.push({ icon: Building2, label: "Clients", path: "/clients" });
+    items.push({ icon: CalendarDays, label: "Schedule", path: "/schedule" });
   }
 
   if (role === "team_leader") {
