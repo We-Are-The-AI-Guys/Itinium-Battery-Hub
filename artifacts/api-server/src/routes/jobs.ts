@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable, locationsTable, clientsTable, usersTable, jobDraftsTable } from "@workspace/db/schema";
+import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable, locationsTable, clientsTable, usersTable, jobDraftsTable, scheduleRescheduleLogTable } from "@workspace/db/schema";
 import { eq, sql, and, count, ilike, or, inArray, desc, asc } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { MANUFACTURERS } from "./manufacturers";
@@ -1321,6 +1321,72 @@ router.get(
       });
     } catch (error) {
       console.error("Dashboard stats error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+// ─── Reschedule (with audit log) ─────────────────────────────────────────────
+
+router.patch(
+  "/jobs/:id/reschedule",
+  requireAuth,
+  requireRole("head_office_admin"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const jobId = parseInt(String(req.params.id), 10);
+      if (isNaN(jobId)) { res.status(400).json({ message: "Invalid job ID" }); return; }
+
+      const { newDate } = req.body;
+      if (!newDate || !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+        res.status(400).json({ message: "newDate is required and must be YYYY-MM-DD" });
+        return;
+      }
+
+      const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+      if (!job) { res.status(404).json({ message: "Job not found" }); return; }
+
+      const oldDate = job.collectionDate ?? null;
+
+      const [updated] = await db
+        .update(jobsTable)
+        .set({ collectionDate: newDate })
+        .where(eq(jobsTable.id, jobId))
+        .returning();
+
+      await db.insert(scheduleRescheduleLogTable).values({
+        jobId,
+        jobReference: job.reference,
+        oldDate: oldDate ?? undefined,
+        newDate,
+        changedById: req.user!.id,
+        changedByName: req.user!.fullName,
+      });
+
+      res.json({ job: updated });
+    } catch (err) {
+      console.error("Reschedule error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+// ─── Reschedule audit log ─────────────────────────────────────────────────────
+
+router.get(
+  "/schedule/audit-log",
+  requireAuth,
+  requireRole("head_office_admin"),
+  async (_req: AuthenticatedRequest, res) => {
+    try {
+      const entries = await db
+        .select()
+        .from(scheduleRescheduleLogTable)
+        .orderBy(desc(scheduleRescheduleLogTable.changedAt))
+        .limit(200);
+      res.json({ entries });
+    } catch (err) {
+      console.error("Audit log fetch error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   }
