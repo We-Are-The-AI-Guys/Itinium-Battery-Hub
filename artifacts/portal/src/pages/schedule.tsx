@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import {
   ChevronLeft, ChevronRight, CalendarDays, Calendar,
-  GanttChartSquare, X, ExternalLink, Battery,
+  GanttChartSquare, X, ExternalLink, Battery, SlidersHorizontal,
 } from "lucide-react";
 import { SidebarLayout } from "@/components/sidebar-layout";
 
@@ -795,6 +795,11 @@ export default function SchedulePage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
 
+  // ── Filters (reset on unmount via useState initial, not persisted) ──
+  const [filterSite, setFilterSite]     = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterClient, setFilterClient] = useState("");
+
   useEffect(() => {
     setLoading(true);
     fetch("/api/jobs/schedule", { credentials: "include" })
@@ -804,8 +809,29 @@ export default function SchedulePage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // ── Derived filter options (sorted, de-duped from loaded jobs) ──
+  const siteOptions   = Array.from(new Set(jobs.map((j) => j.depot))).sort();
+  const clientOptions = Array.from(new Set(jobs.map((j) => j.clientName))).sort();
+  const statusOptions = [
+    { value: "request",          label: "Pending"          },
+    { value: "confirmed",        label: "Confirmed"        },
+    { value: "received",         label: "In Progress"      },
+    { value: "awaiting_invoice", label: "Awaiting Invoice" },
+    { value: "invoice",          label: "Invoiced"         },
+    { value: "completed",        label: "Closed"           },
+  ].filter((s) => jobs.some((j) => j.status === s.value));
+
+  const hasFilters = filterSite !== "" || filterStatus !== "" || filterClient !== "";
+
+  const filteredJobs = jobs.filter((j) => {
+    if (filterSite   && j.depot      !== filterSite)   return false;
+    if (filterStatus && j.status     !== filterStatus) return false;
+    if (filterClient && j.clientName !== filterClient) return false;
+    return true;
+  });
+
   const jobsByDate = new Map<string, ScheduleJob[]>();
-  for (const job of jobs) {
+  for (const job of filteredJobs) {
     if (!job.collectionDate) continue;
     const key = job.collectionDate.slice(0, 10);
     if (!jobsByDate.has(key)) jobsByDate.set(key, []);
@@ -825,7 +851,8 @@ export default function SchedulePage() {
   }
 
   const calendarTitle = view === "month" ? formatMonthYear(anchor) : formatWeekRange(startOfWeek(anchor));
-  const withDate = jobs.length;
+  const withDate = filteredJobs.length;
+  const totalWithDate = jobs.length;
 
   return (
     <SidebarLayout>
@@ -837,6 +864,8 @@ export default function SchedulePage() {
             <p className="text-sm text-slate-500 mt-0.5">
               {loading
                 ? "Loading…"
+                : hasFilters
+                ? `${withDate} of ${totalWithDate} job${totalWithDate === 1 ? "" : "s"} shown`
                 : view === "gantt"
                 ? `${withDate} job${withDate === 1 ? "" : "s"} · click the colour swatch beside each site to customise`
                 : `${withDate} job${withDate === 1 ? "" : "s"} with collection dates`}
@@ -857,6 +886,60 @@ export default function SchedulePage() {
             </div>
           </div>
         </div>
+
+        {/* Filter bar */}
+        {!loading && !error && (
+          <div className="flex items-center gap-2 px-8 py-2.5 border-b border-slate-200 bg-slate-50 shrink-0 flex-wrap">
+            <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+
+            {/* Site */}
+            <select
+              value={filterSite}
+              onChange={(e) => setFilterSite(e.target.value)}
+              className={`h-8 rounded-md border text-xs px-2 pr-7 bg-white focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] transition-colors ${
+                filterSite ? "border-[#0ea5e9] text-[#0f2744] font-semibold" : "border-slate-200 text-slate-600"
+              }`}
+            >
+              <option value="">All Sites</option>
+              {siteOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+
+            {/* Status */}
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className={`h-8 rounded-md border text-xs px-2 pr-7 bg-white focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] transition-colors ${
+                filterStatus ? "border-[#0ea5e9] text-[#0f2744] font-semibold" : "border-slate-200 text-slate-600"
+              }`}
+            >
+              <option value="">All Statuses</option>
+              {statusOptions.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+
+            {/* Client */}
+            <select
+              value={filterClient}
+              onChange={(e) => setFilterClient(e.target.value)}
+              className={`h-8 rounded-md border text-xs px-2 pr-7 bg-white focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] transition-colors ${
+                filterClient ? "border-[#0ea5e9] text-[#0f2744] font-semibold" : "border-slate-200 text-slate-600"
+              }`}
+            >
+              <option value="">All Clients</option>
+              {clientOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+
+            {/* Clear all */}
+            {hasFilters && (
+              <button
+                onClick={() => { setFilterSite(""); setFilterStatus(""); setFilterClient(""); }}
+                className="flex items-center gap-1 h-8 px-2.5 rounded-md text-xs font-medium text-slate-500 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors"
+              >
+                <X className="w-3 h-3" />
+                Clear filters
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Calendar nav — hidden in Gantt */}
         {view !== "gantt" && (
@@ -891,7 +974,7 @@ export default function SchedulePage() {
         ) : view === "week" ? (
           <WeekView anchor={anchor} jobsByDate={jobsByDate} onJobClick={setSelectedJobId} />
         ) : (
-          <GanttView jobs={jobs} onJobClick={setSelectedJobId} />
+          <GanttView jobs={filteredJobs} onJobClick={setSelectedJobId} />
         )}
       </div>
 
