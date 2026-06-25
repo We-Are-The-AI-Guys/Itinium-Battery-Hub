@@ -9,6 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.105.0",
     "@types/multer": "^2.1.0",
     "@types/pdfkit": "^0.17.6",
     "@workspace/api-zod": "workspace:*",

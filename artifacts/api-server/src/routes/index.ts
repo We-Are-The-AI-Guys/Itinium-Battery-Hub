@@ -17,6 +17,7 @@ import locationsRouter from "./locations";
 import kpiRouter from "./kpi";
 import supportRouter from "./support";
 import notificationsRouter from "./notifications";
+import suggestCorrectionRouter from "./suggest-correction";
 
 const router: IRouter = Router();
 
@@ -38,5 +39,6 @@ router.use(clientsRouter);
 router.use(locationsRouter);
 router.use(supportRouter);
 router.use(notificationsRouter);
+router.use(suggestCorrectionRouter);
 
 export default router;

@@ -25,6 +25,7 @@ import {
   AlertTriangle,
   Copy,
   Download,
+  Lightbulb,
 } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Button } from "@/components/ui/button";
@@ -94,6 +95,9 @@ interface BatteryRow {
   cellModelFlagReason: string;
   voltageFlagReason: string;
   rowPhoto: string;
+  manufacturerSuggestion?: string;
+  cellTypeSuggestion?: string;
+  voltageSuggestion?: string;
 }
 
 interface User {
@@ -868,6 +872,38 @@ export default function DepotFormPage() {
     setBatteries((prev) => prev.filter((b) => b.id !== id));
   }
 
+  async function fetchSuggestion(
+    batteryId: string,
+    field: "manufacture" | "cellType" | "voltage",
+    value: string,
+    candidates: string[]
+  ) {
+    if (!value.trim() || !candidates.length) return;
+    try {
+      const res = await fetch("/api/suggest-correction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ field, value, candidates: candidates.slice(0, 60) }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { suggestion: string | null };
+      if (data.suggestion) {
+        setBatteries((prev) =>
+          prev.map((b) => {
+            if (b.id !== batteryId) return b;
+            if (field === "manufacture") return { ...b, manufacturerSuggestion: data.suggestion! };
+            if (field === "cellType") return { ...b, cellTypeSuggestion: data.suggestion! };
+            if (field === "voltage") return { ...b, voltageSuggestion: data.suggestion! };
+            return b;
+          })
+        );
+      }
+    } catch {
+      // Suggestions are non-critical — fail silently
+    }
+  }
+
   async function onSubmit() {
     const hasAtLeastOneIdentifier = batteries.some(
       (b) => b.batterySerial.trim() || b.assetNumber.trim() || b.serialFlagged
@@ -1514,7 +1550,7 @@ export default function DepotFormPage() {
                         setBatteries((prev) =>
                           prev.map((b) =>
                             b.id === battery.id
-                              ? { ...b, manufacture: v, manufactureCustom: "", manufacturerFlagReason: "" }
+                              ? { ...b, manufacture: v, manufactureCustom: "", manufacturerFlagReason: "", manufacturerSuggestion: undefined }
                               : b
                           )
                         );
@@ -1535,10 +1571,15 @@ export default function DepotFormPage() {
                                   manufacture: canonical ?? trimmed,
                                   manufactureCustom: "",
                                   manufacturerFlagReason: reason,
+                                  manufacturerSuggestion: undefined,
                                 }
                               : b
                           )
                         );
+                        if (reason === MANUAL_UNKNOWN_FLAG_REASON) {
+                          const candidates = manufacturers.filter((m) => m.toLowerCase() !== "other");
+                          fetchSuggestion(battery.id, "manufacture", trimmed, candidates);
+                        }
                       }}
                     />
                     {battery.manufacturerFlagReason && (
@@ -1551,8 +1592,29 @@ export default function DepotFormPage() {
                             ? `Flagged — "${battery.manufacture}" is not in Itinium's known list.`
                             : "Flagged — missing from CSV. Fill in to clear."}
                         </p>
-                        {(battery.manufacturerFlagReason === CSV_UNKNOWN_FLAG_REASON ||
-                          battery.manufacturerFlagReason === MANUAL_UNKNOWN_FLAG_REASON) &&
+                        {battery.manufacturerFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.manufacturerSuggestion && (
+                          <CorrectionPrompt
+                            suggestion={battery.manufacturerSuggestion}
+                            onAccept={() => {
+                              const accepted = battery.manufacturerSuggestion!;
+                              setBatteries((prev) =>
+                                prev.map((b) =>
+                                  b.id === battery.id
+                                    ? { ...b, manufacture: accepted, manufactureCustom: "", manufacturerFlagReason: "", manufacturerSuggestion: undefined }
+                                    : b
+                                )
+                              );
+                            }}
+                            onDismiss={() => {
+                              setBatteries((prev) =>
+                                prev.map((b) =>
+                                  b.id === battery.id ? { ...b, manufacturerSuggestion: undefined } : b
+                                )
+                              );
+                            }}
+                          />
+                        )}
+                        {battery.manufacturerFlagReason === CSV_UNKNOWN_FLAG_REASON &&
                           (() => {
                             const knownMfrs = manufacturers.filter((m) => m.toLowerCase() !== "other");
                             const suggestion = findClosestMatch(battery.manufacture, knownMfrs);
@@ -1601,6 +1663,7 @@ export default function DepotFormPage() {
                                     cellModel: "",
                                     cellModelFlagReason: (val === "Blocs" || val === "Other") ? "" : b.cellModelFlagReason,
                                     voltageFlagReason: (val === "Blocs" || val === "Other") ? "" : b.voltageFlagReason,
+                                    cellTypeSuggestion: undefined,
                                   }
                                 : b
                             )
@@ -1615,9 +1678,19 @@ export default function DepotFormPage() {
                         );
                         setBatteries((prev) =>
                           prev.map((b) =>
-                            b.id === battery.id ? { ...b, cellModelFlagReason: reason } : b
+                            b.id === battery.id ? { ...b, cellModelFlagReason: reason, cellTypeSuggestion: undefined } : b
                           )
                         );
+                        if (reason === MANUAL_UNKNOWN_FLAG_REASON) {
+                          const cellFamilies = Array.from(new Set(cellModels.map((m) => m.cellFamily)));
+                          const prefix = committed.trim().toLowerCase().slice(0, 3);
+                          const nearbyModels = cellModels
+                            .filter((m) => m.modelName.toLowerCase().startsWith(prefix))
+                            .slice(0, 40)
+                            .map((m) => m.modelName);
+                          const candidates = [...cellFamilies, ...nearbyModels];
+                          fetchSuggestion(battery.id, "cellType", committed, candidates);
+                        }
                       }}
                     />
                     {battery.cellModel && (
@@ -1635,8 +1708,34 @@ export default function DepotFormPage() {
                             ? `Flagged — "${battery.cellModel}" is not in Itinium's known list.`
                             : "Flagged — missing from CSV. Fill in to clear."}
                         </p>
-                        {(battery.cellModelFlagReason === CSV_UNKNOWN_FLAG_REASON ||
-                          battery.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON) &&
+                        {battery.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.cellTypeSuggestion && (
+                          <CorrectionPrompt
+                            suggestion={battery.cellTypeSuggestion}
+                            onAccept={() => {
+                              const accepted = battery.cellTypeSuggestion!;
+                              const isModel = cellModels.some((m) => m.modelName === accepted);
+                              if (isModel) {
+                                updateBattery(battery.id, "cellModel", accepted);
+                              } else {
+                                setBatteries((prev) =>
+                                  prev.map((b) =>
+                                    b.id === battery.id
+                                      ? { ...b, cellType: accepted, cellModel: "", cellModelFlagReason: "", cellTypeSuggestion: undefined }
+                                      : b
+                                  )
+                                );
+                              }
+                            }}
+                            onDismiss={() => {
+                              setBatteries((prev) =>
+                                prev.map((b) =>
+                                  b.id === battery.id ? { ...b, cellTypeSuggestion: undefined } : b
+                                )
+                              );
+                            }}
+                          />
+                        )}
+                        {battery.cellModelFlagReason === CSV_UNKNOWN_FLAG_REASON &&
                           (() => {
                             const effMfr = battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture;
                             const scoped = effMfr
@@ -1711,7 +1810,7 @@ export default function DepotFormPage() {
                             setBatteries((prev) =>
                               prev.map((b) =>
                                 b.id === battery.id
-                                  ? { ...b, voltage: v, customVoltage: "", voltageFlagReason: "" }
+                                  ? { ...b, voltage: v, customVoltage: "", voltageFlagReason: "", voltageSuggestion: undefined }
                                   : b
                               )
                             );
@@ -1732,11 +1831,15 @@ export default function DepotFormPage() {
                                   voltage: canonical ?? trimmed,
                                   customVoltage: "",
                                   voltageFlagReason: reason,
+                                  voltageSuggestion: undefined,
                                 };
                                 if (!updated.weightManual) computeAndSetAutoWeight(updated);
                                 return updated;
                               })
                             );
+                            if (reason === MANUAL_UNKNOWN_FLAG_REASON) {
+                              fetchSuggestion(battery.id, "voltage", trimmed, VOLTAGE_VALUES);
+                            }
                           }}
                         />
                         {battery.voltageFlagReason && (
@@ -1747,6 +1850,29 @@ export default function DepotFormPage() {
                                 ? `"${battery.voltage}" is not a standard voltage — it will be reviewed by Itinium.`
                                 : "Voltage flagged — missing from CSV. Fill in to clear."}
                             </p>
+                            {battery.voltageFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.voltageSuggestion && (
+                              <CorrectionPrompt
+                                suggestion={battery.voltageSuggestion}
+                                onAccept={() => {
+                                  const accepted = battery.voltageSuggestion!;
+                                  setBatteries((prev) =>
+                                    prev.map((b) => {
+                                      if (b.id !== battery.id) return b;
+                                      const updated = { ...b, voltage: accepted, customVoltage: "", voltageFlagReason: "", voltageSuggestion: undefined };
+                                      if (!updated.weightManual) computeAndSetAutoWeight(updated);
+                                      return updated;
+                                    })
+                                  );
+                                }}
+                                onDismiss={() => {
+                                  setBatteries((prev) =>
+                                    prev.map((b) =>
+                                      b.id === battery.id ? { ...b, voltageSuggestion: undefined } : b
+                                    )
+                                  );
+                                }}
+                              />
+                            )}
                           </div>
                         )}
                       </div>
@@ -2456,6 +2582,39 @@ function CellModelCombobox({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function CorrectionPrompt({
+  suggestion,
+  onAccept,
+  onDismiss,
+}: {
+  suggestion: string;
+  onAccept: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 px-2.5 py-1.5 bg-sky-50 border border-sky-200 rounded-md">
+      <Lightbulb className="w-3 h-3 text-sky-500 flex-shrink-0" />
+      <p className="text-[11px] text-sky-700 flex-1 min-w-0 truncate">
+        Did you mean <strong className="font-semibold">{suggestion}</strong>?
+      </p>
+      <button
+        type="button"
+        className="text-[11px] font-medium px-2 py-0.5 rounded bg-sky-500 text-white hover:bg-sky-600 transition-colors flex-shrink-0"
+        onClick={onAccept}
+      >
+        Accept
+      </button>
+      <button
+        type="button"
+        className="text-[11px] text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0"
+        onClick={onDismiss}
+      >
+        Keep mine
+      </button>
     </div>
   );
 }
