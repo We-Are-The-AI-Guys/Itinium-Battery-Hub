@@ -46,7 +46,7 @@ router.post("/api/suggest-correction", async (req, res) => {
 
     const message = await client.messages.create({
       model: "claude-haiku-4-5",
-      max_tokens: 50,
+      max_tokens: 80,
       messages: [
         {
           role: "user",
@@ -59,21 +59,33 @@ Valid options — choose ONLY from this exact list:
 ${candidates.map((c) => `- ${c}`).join("\n")}
 ${domainHint}
 
-Find the single best match. If a close match exists, respond with ONLY that exact option text (copy it character-for-character from the list).
-If no close match exists, respond with exactly: null`,
+Find the single best match and respond with ONLY a JSON object on one line.
+If a match exists: {"suggestion": "<exact option text copied character-for-character from the list>", "confidence": "high" or "low"}
+If no match exists: {"suggestion": null, "confidence": null}
+
+Confidence rules — use "high" when the fix is obvious and mechanical: a spacing difference, case change, known manufacturer-prefix variation, or single-character typo. Use "low" when the match requires interpretation, abbreviation expansion, or there is any meaningful ambiguity.`,
         },
       ],
     });
 
     const raw =
       message.content[0]?.type === "text" ? message.content[0].text.trim() : "";
-    const suggestion = raw === "null" || !raw ? null : raw;
+
+    let suggestion: string | null = null;
+    let confidence: "high" | "low" | null = null;
+    try {
+      const parsed = JSON.parse(raw) as { suggestion?: string | null; confidence?: string | null };
+      suggestion = typeof parsed.suggestion === "string" ? parsed.suggestion : null;
+      confidence = parsed.confidence === "high" || parsed.confidence === "low" ? parsed.confidence : null;
+    } catch {
+      suggestion = raw === "null" || !raw ? null : raw;
+    }
 
     // Only accept if it is verbatim in the candidates list
     const verified =
       suggestion && candidates.includes(suggestion) ? suggestion : null;
 
-    return res.json({ suggestion: verified });
+    return res.json({ suggestion: verified, confidence: verified ? confidence : null });
   } catch (err) {
     console.error("[suggest-correction] error:", err);
     return res.json({ suggestion: null });

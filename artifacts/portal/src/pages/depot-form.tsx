@@ -98,6 +98,15 @@ interface BatteryRow {
   manufacturerSuggestion?: string;
   cellTypeSuggestion?: string;
   voltageSuggestion?: string;
+  manufacturerManuallyConfirmed?: boolean;
+  cellTypeManuallyConfirmed?: boolean;
+  voltageManuallyConfirmed?: boolean;
+  manufacturerSuggestionConfidence?: "high" | "low";
+  cellTypeSuggestionConfidence?: "high" | "low";
+  voltageSuggestionConfidence?: "high" | "low";
+  manufacturerOriginalValue?: string;
+  cellTypeOriginalValue?: string;
+  voltageOriginalValue?: string;
 }
 
 interface User {
@@ -325,6 +334,7 @@ export default function DepotFormPage() {
   const { toast } = useToast();
   const [clientLocations, setClientLocations] = useState<LocationOption[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
+  const [fetchingSuggestions, setFetchingSuggestions] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const params = new URLSearchParams(searchStr);
@@ -879,6 +889,8 @@ export default function DepotFormPage() {
     candidates: string[]
   ) {
     if (!value.trim() || !candidates.length) return;
+    const key = `${batteryId}_${field}`;
+    setFetchingSuggestions((prev) => new Set([...prev, key]));
     try {
       const res = await fetch("/api/suggest-correction", {
         method: "POST",
@@ -887,20 +899,57 @@ export default function DepotFormPage() {
         body: JSON.stringify({ field, value, candidates: candidates.slice(0, 60) }),
       });
       if (!res.ok) return;
-      const data = (await res.json()) as { suggestion: string | null };
-      if (data.suggestion) {
+      const data = (await res.json()) as { suggestion: string | null; confidence: "high" | "low" | null };
+      if (!data.suggestion) return;
+
+      if (data.confidence === "high") {
+        // Auto-apply: clear the flag, update the field, store original value for Restore
         setBatteries((prev) =>
           prev.map((b) => {
             if (b.id !== batteryId) return b;
-            if (field === "manufacture") return { ...b, manufacturerSuggestion: data.suggestion! };
-            if (field === "cellType") return { ...b, cellTypeSuggestion: data.suggestion! };
-            if (field === "voltage") return { ...b, voltageSuggestion: data.suggestion! };
+            if (field === "manufacture") {
+              return {
+                ...b,
+                manufacture: data.suggestion!,
+                manufactureCustom: "",
+                manufacturerFlagReason: "",
+                manufacturerSuggestionConfidence: "high" as const,
+                manufacturerOriginalValue: value,
+                manufacturerManuallyConfirmed: undefined,
+              };
+            }
+            if (field === "cellType") {
+              const isModel = cellModels.some((m) => m.modelName === data.suggestion);
+              return isModel
+                ? { ...b, cellModel: data.suggestion!, cellModelFlagReason: "", cellTypeSuggestion: undefined, cellTypeSuggestionConfidence: "high" as const, cellTypeOriginalValue: value, cellTypeManuallyConfirmed: undefined }
+                : { ...b, cellType: data.suggestion!, cellModel: "", cellModelFlagReason: "", cellTypeSuggestion: undefined, cellTypeSuggestionConfidence: "high" as const, cellTypeOriginalValue: value, cellTypeManuallyConfirmed: undefined };
+            }
+            if (field === "voltage") {
+              return { ...b, voltage: data.suggestion!, customVoltage: "", voltageFlagReason: "", voltageSuggestion: undefined, voltageSuggestionConfidence: "high" as const, voltageOriginalValue: value, voltageManuallyConfirmed: undefined };
+            }
+            return b;
+          })
+        );
+      } else {
+        // Low confidence: show CorrectionPrompt for user to choose
+        setBatteries((prev) =>
+          prev.map((b) => {
+            if (b.id !== batteryId) return b;
+            if (field === "manufacture") return { ...b, manufacturerSuggestion: data.suggestion!, manufacturerSuggestionConfidence: "low" as const };
+            if (field === "cellType") return { ...b, cellTypeSuggestion: data.suggestion!, cellTypeSuggestionConfidence: "low" as const };
+            if (field === "voltage") return { ...b, voltageSuggestion: data.suggestion!, voltageSuggestionConfidence: "low" as const };
             return b;
           })
         );
       }
     } catch {
       // Suggestions are non-critical — fail silently
+    } finally {
+      setFetchingSuggestions((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
     }
   }
 
@@ -1012,6 +1061,29 @@ export default function DepotFormPage() {
       setBatteries(validatedBatteries);
     }
 
+    // Block submit on unresolved critical flags (manufacturer, cell model, voltage)
+    const unresolvedCritical: string[] = [];
+    validatedBatteries.forEach((b, i) => {
+      const rowLabel = `Row ${i + 1}`;
+      if (b.manufacturerFlagReason === MANUAL_UNKNOWN_FLAG_REASON && !b.manufacturerManuallyConfirmed) {
+        unresolvedCritical.push(`${rowLabel}: Manufacturer`);
+      }
+      if (b.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON && !b.cellTypeManuallyConfirmed) {
+        unresolvedCritical.push(`${rowLabel}: Cell Model`);
+      }
+      if (!b.isLooseCells && b.voltageFlagReason === MANUAL_UNKNOWN_FLAG_REASON && !b.voltageManuallyConfirmed) {
+        unresolvedCritical.push(`${rowLabel}: Voltage`);
+      }
+    });
+    if (unresolvedCritical.length > 0) {
+      toast({
+        title: "Unrecognised fields must be resolved",
+        description: `Please accept a suggestion or confirm the following before submitting: ${unresolvedCritical.join(", ")}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSubmitting(true);
     try {
       const res = await fetch("/api/jobs", {
@@ -1040,6 +1112,9 @@ export default function DepotFormPage() {
             manufacturerFlagReason: b.manufacturerFlagReason || null,
             cellModelFlagReason: b.cellModelFlagReason || null,
             voltageFlagReason: b.isLooseCells ? null : (b.voltageFlagReason || null),
+            manufacturerCorrectionConfidence: b.manufacturerSuggestionConfidence || null,
+            cellModelCorrectionConfidence: b.cellTypeSuggestionConfidence || null,
+            voltageCorrectionConfidence: b.isLooseCells ? null : (b.voltageSuggestionConfidence || null),
             rowPhoto: b.rowPhoto || null,
             notes: b.notes || null,
           })),
@@ -1550,7 +1625,7 @@ export default function DepotFormPage() {
                         setBatteries((prev) =>
                           prev.map((b) =>
                             b.id === battery.id
-                              ? { ...b, manufacture: v, manufactureCustom: "", manufacturerFlagReason: "", manufacturerSuggestion: undefined }
+                              ? { ...b, manufacture: v, manufactureCustom: "", manufacturerFlagReason: "", manufacturerSuggestion: undefined, manufacturerSuggestionConfidence: undefined, manufacturerOriginalValue: undefined, manufacturerManuallyConfirmed: undefined }
                               : b
                           )
                         );
@@ -1572,6 +1647,9 @@ export default function DepotFormPage() {
                                   manufactureCustom: "",
                                   manufacturerFlagReason: reason,
                                   manufacturerSuggestion: undefined,
+                                  manufacturerSuggestionConfidence: undefined,
+                                  manufacturerOriginalValue: undefined,
+                                  manufacturerManuallyConfirmed: undefined,
                                 }
                               : b
                           )
@@ -1582,6 +1660,29 @@ export default function DepotFormPage() {
                         }
                       }}
                     />
+                    {battery.manufacturerOriginalValue && !battery.manufacturerFlagReason && (
+                      <div className="flex items-center gap-2 px-2.5 py-1.5 bg-sky-50 border border-sky-200 rounded-md mt-1">
+                        <Lightbulb className="w-3 h-3 text-sky-500 flex-shrink-0" />
+                        <p className="text-[11px] text-sky-700 flex-1 min-w-0">
+                          Auto-corrected from <strong className="font-semibold">"{battery.manufacturerOriginalValue}"</strong>
+                        </p>
+                        <button
+                          type="button"
+                          className="text-[11px] text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0"
+                          onClick={() => {
+                            const orig = battery.manufacturerOriginalValue!;
+                            const restored = battery.manufacture;
+                            setBatteries((prev) => prev.map((b) => b.id === battery.id ? {
+                              ...b, manufacture: orig, manufactureCustom: "", manufacturerOriginalValue: undefined,
+                              manufacturerFlagReason: MANUAL_UNKNOWN_FLAG_REASON, manufacturerSuggestion: restored,
+                              manufacturerSuggestionConfidence: "low", manufacturerManuallyConfirmed: undefined,
+                            } : b));
+                          }}
+                        >
+                          Restore
+                        </button>
+                      </div>
+                    )}
                     {battery.manufacturerFlagReason && (
                       <div className="space-y-1">
                         <p className="text-[10px] text-amber-600 flex items-center gap-1">
@@ -1613,6 +1714,26 @@ export default function DepotFormPage() {
                               );
                             }}
                           />
+                        )}
+                        {battery.manufacturerFlagReason === MANUAL_UNKNOWN_FLAG_REASON
+                          && !battery.manufacturerSuggestion
+                          && !fetchingSuggestions.has(`${battery.id}_manufacture`)
+                          && !battery.manufacturerManuallyConfirmed && (
+                          <label className="flex items-center gap-1.5 cursor-pointer group mt-0.5">
+                            <input
+                              type="checkbox"
+                              className="accent-amber-600 cursor-pointer"
+                              onChange={() => setBatteries((prev) => prev.map((b) => b.id === battery.id ? { ...b, manufacturerManuallyConfirmed: true } : b))}
+                            />
+                            <span className="text-[10px] text-slate-500 group-hover:text-slate-600 transition-colors">
+                              I confirm this value is correct — submit for Itinium review
+                            </span>
+                          </label>
+                        )}
+                        {battery.manufacturerFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.manufacturerManuallyConfirmed && (
+                          <p className="text-[10px] text-emerald-600 flex items-center gap-1 mt-0.5">
+                            <Check className="w-3 h-3" /> Confirmed — will be flagged for Itinium review
+                          </p>
                         )}
                         {battery.manufacturerFlagReason === CSV_UNKNOWN_FLAG_REASON &&
                           (() => {
@@ -1664,6 +1785,9 @@ export default function DepotFormPage() {
                                     cellModelFlagReason: (val === "Blocs" || val === "Other") ? "" : b.cellModelFlagReason,
                                     voltageFlagReason: (val === "Blocs" || val === "Other") ? "" : b.voltageFlagReason,
                                     cellTypeSuggestion: undefined,
+                                    cellTypeSuggestionConfidence: undefined,
+                                    cellTypeOriginalValue: undefined,
+                                    cellTypeManuallyConfirmed: undefined,
                                   }
                                 : b
                             )
@@ -1678,7 +1802,7 @@ export default function DepotFormPage() {
                         );
                         setBatteries((prev) =>
                           prev.map((b) =>
-                            b.id === battery.id ? { ...b, cellModelFlagReason: reason, cellTypeSuggestion: undefined } : b
+                            b.id === battery.id ? { ...b, cellModelFlagReason: reason, cellTypeSuggestion: undefined, cellTypeSuggestionConfidence: undefined, cellTypeOriginalValue: undefined, cellTypeManuallyConfirmed: undefined } : b
                           )
                         );
                         if (reason === MANUAL_UNKNOWN_FLAG_REASON) {
@@ -1697,6 +1821,29 @@ export default function DepotFormPage() {
                       <p className="text-[10px] text-emerald-600">
                         Cell model selected &mdash; weight = {(() => { const effMfr = battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture; return (cellModels.find(m => m.modelName === battery.cellModel && (!effMfr || m.manufacturer === effMfr)) || cellModels.find(m => m.modelName === battery.cellModel))?.weightPerCellKg || "?"; })()} kg/cell
                       </p>
+                    )}
+                    {battery.cellTypeOriginalValue && !battery.cellModelFlagReason && (
+                      <div className="flex items-center gap-2 px-2.5 py-1.5 bg-sky-50 border border-sky-200 rounded-md mt-1">
+                        <Lightbulb className="w-3 h-3 text-sky-500 flex-shrink-0" />
+                        <p className="text-[11px] text-sky-700 flex-1 min-w-0">
+                          Auto-corrected from <strong className="font-semibold">"{battery.cellTypeOriginalValue}"</strong>
+                        </p>
+                        <button
+                          type="button"
+                          className="text-[11px] text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0"
+                          onClick={() => {
+                            const orig = battery.cellTypeOriginalValue!;
+                            const restored = battery.cellModel || battery.cellType;
+                            setBatteries((prev) => prev.map((b) => b.id === battery.id ? {
+                              ...b, cellType: orig, cellModel: "", cellTypeOriginalValue: undefined,
+                              cellModelFlagReason: MANUAL_UNKNOWN_FLAG_REASON, cellTypeSuggestion: restored,
+                              cellTypeSuggestionConfidence: "low", cellTypeManuallyConfirmed: undefined,
+                            } : b));
+                          }}
+                        >
+                          Restore
+                        </button>
+                      </div>
                     )}
                     {battery.cellModelFlagReason && (
                       <div className="space-y-1">
@@ -1734,6 +1881,26 @@ export default function DepotFormPage() {
                               );
                             }}
                           />
+                        )}
+                        {battery.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON
+                          && !battery.cellTypeSuggestion
+                          && !fetchingSuggestions.has(`${battery.id}_cellType`)
+                          && !battery.cellTypeManuallyConfirmed && (
+                          <label className="flex items-center gap-1.5 cursor-pointer group mt-0.5">
+                            <input
+                              type="checkbox"
+                              className="accent-amber-600 cursor-pointer"
+                              onChange={() => setBatteries((prev) => prev.map((b) => b.id === battery.id ? { ...b, cellTypeManuallyConfirmed: true } : b))}
+                            />
+                            <span className="text-[10px] text-slate-500 group-hover:text-slate-600 transition-colors">
+                              I confirm this value is correct — submit for Itinium review
+                            </span>
+                          </label>
+                        )}
+                        {battery.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.cellTypeManuallyConfirmed && (
+                          <p className="text-[10px] text-emerald-600 flex items-center gap-1 mt-0.5">
+                            <Check className="w-3 h-3" /> Confirmed — will be flagged for Itinium review
+                          </p>
                         )}
                         {battery.cellModelFlagReason === CSV_UNKNOWN_FLAG_REASON &&
                           (() => {
@@ -1810,7 +1977,7 @@ export default function DepotFormPage() {
                             setBatteries((prev) =>
                               prev.map((b) =>
                                 b.id === battery.id
-                                  ? { ...b, voltage: v, customVoltage: "", voltageFlagReason: "", voltageSuggestion: undefined }
+                                  ? { ...b, voltage: v, customVoltage: "", voltageFlagReason: "", voltageSuggestion: undefined, voltageSuggestionConfidence: undefined, voltageOriginalValue: undefined, voltageManuallyConfirmed: undefined }
                                   : b
                               )
                             );
@@ -1832,6 +1999,9 @@ export default function DepotFormPage() {
                                   customVoltage: "",
                                   voltageFlagReason: reason,
                                   voltageSuggestion: undefined,
+                                  voltageSuggestionConfidence: undefined,
+                                  voltageOriginalValue: undefined,
+                                  voltageManuallyConfirmed: undefined,
                                 };
                                 if (!updated.weightManual) computeAndSetAutoWeight(updated);
                                 return updated;
@@ -1842,6 +2012,29 @@ export default function DepotFormPage() {
                             }
                           }}
                         />
+                        {battery.voltageOriginalValue && !battery.voltageFlagReason && (
+                          <div className="flex items-center gap-2 px-2.5 py-1.5 bg-sky-50 border border-sky-200 rounded-md mt-1">
+                            <Lightbulb className="w-3 h-3 text-sky-500 flex-shrink-0" />
+                            <p className="text-[11px] text-sky-700 flex-1 min-w-0">
+                              Auto-corrected from <strong className="font-semibold">"{battery.voltageOriginalValue}"</strong>
+                            </p>
+                            <button
+                              type="button"
+                              className="text-[11px] text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0"
+                              onClick={() => {
+                                const orig = battery.voltageOriginalValue!;
+                                const restored = battery.voltage;
+                                setBatteries((prev) => prev.map((b) => b.id === battery.id ? {
+                                  ...b, voltage: orig, customVoltage: "", voltageOriginalValue: undefined,
+                                  voltageFlagReason: MANUAL_UNKNOWN_FLAG_REASON, voltageSuggestion: restored,
+                                  voltageSuggestionConfidence: "low", voltageManuallyConfirmed: undefined,
+                                } : b));
+                              }}
+                            >
+                              Restore
+                            </button>
+                          </div>
+                        )}
                         {battery.voltageFlagReason && (
                           <div className="space-y-1">
                             <p className="text-[10px] text-amber-600 flex items-center gap-1">
@@ -1872,6 +2065,26 @@ export default function DepotFormPage() {
                                   );
                                 }}
                               />
+                            )}
+                            {battery.voltageFlagReason === MANUAL_UNKNOWN_FLAG_REASON
+                              && !battery.voltageSuggestion
+                              && !fetchingSuggestions.has(`${battery.id}_voltage`)
+                              && !battery.voltageManuallyConfirmed && (
+                              <label className="flex items-center gap-1.5 cursor-pointer group mt-0.5">
+                                <input
+                                  type="checkbox"
+                                  className="accent-amber-600 cursor-pointer"
+                                  onChange={() => setBatteries((prev) => prev.map((b) => b.id === battery.id ? { ...b, voltageManuallyConfirmed: true } : b))}
+                                />
+                                <span className="text-[10px] text-slate-500 group-hover:text-slate-600 transition-colors">
+                                  I confirm this value is correct — submit for Itinium review
+                                </span>
+                              </label>
+                            )}
+                            {battery.voltageFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.voltageManuallyConfirmed && (
+                              <p className="text-[10px] text-emerald-600 flex items-center gap-1 mt-0.5">
+                                <Check className="w-3 h-3" /> Confirmed — will be flagged for Itinium review
+                              </p>
                             )}
                           </div>
                         )}

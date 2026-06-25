@@ -607,6 +607,9 @@ interface BatteryInput {
   manufacturerFlagReason?: string | null;
   cellModelFlagReason?: string | null;
   voltageFlagReason?: string | null;
+  manufacturerCorrectionConfidence?: string | null;
+  cellModelCorrectionConfidence?: string | null;
+  voltageCorrectionConfidence?: string | null;
   rowPhoto?: string | null;
 }
 
@@ -819,6 +822,9 @@ router.post(
             manufacturerFlagReason: b.manufacturerFlagReason || null,
             cellModelFlagReason: b.cellModelFlagReason || null,
             voltageFlagReason: b.voltageFlagReason || null,
+            manufacturerCorrectionConfidence: b.manufacturerCorrectionConfidence || null,
+            cellModelCorrectionConfidence: b.cellModelCorrectionConfidence || null,
+            voltageCorrectionConfidence: b.voltageCorrectionConfidence || null,
             rowPhoto: b.rowPhoto || null,
             notes: b.notes || null,
             pbContentKg,
