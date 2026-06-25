@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable, locationsTable, clientsTable, usersTable, jobDraftsTable, scheduleRescheduleLogTable } from "@workspace/db/schema";
+import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable, locationsTable, clientsTable, usersTable, jobDraftsTable, scheduleRescheduleLogTable, correctionAuditLogTable } from "@workspace/db/schema";
 import { eq, sql, and, count, ilike, or, inArray, desc, asc } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { MANUFACTURERS } from "./manufacturers";
@@ -610,6 +610,15 @@ interface BatteryInput {
   manufacturerCorrectionConfidence?: string | null;
   cellModelCorrectionConfidence?: string | null;
   voltageCorrectionConfidence?: string | null;
+  manufacturerOriginalValue?: string | null;
+  manufacturerSuggestedValue?: string | null;
+  manufacturerWasAccepted?: boolean | null;
+  cellModelOriginalValue?: string | null;
+  cellModelSuggestedValue?: string | null;
+  cellModelWasAccepted?: boolean | null;
+  voltageOriginalValue?: string | null;
+  voltageSuggestedValue?: string | null;
+  voltageWasAccepted?: boolean | null;
   rowPhoto?: string | null;
 }
 
@@ -826,6 +835,8 @@ router.post(
             cellModelCorrectionConfidence: b.cellModelCorrectionConfidence || null,
             voltageCorrectionConfidence: b.voltageCorrectionConfidence || null,
             rowPhoto: b.rowPhoto || null,
+            // AI correction audit payload (not stored in job_batteries, used for audit log only)
+
             notes: b.notes || null,
             pbContentKg,
             valueGbp,
@@ -841,6 +852,53 @@ router.post(
       });
 
       res.status(201).json(result);
+
+      // Fire-and-forget: write AI correction audit log entries
+      setImmediate(async () => {
+        try {
+          const auditRows: Array<typeof correctionAuditLogTable.$inferInsert> = [];
+          for (const b of batteryInputs) {
+            if (b.manufacturerSuggestedValue != null && b.manufacturerWasAccepted != null) {
+              auditRows.push({
+                jobReference: result.job.reference,
+                fieldName: "manufacturer",
+                originalValue: b.manufacturerOriginalValue || null,
+                suggestedValue: b.manufacturerSuggestedValue,
+                wasAccepted: b.manufacturerWasAccepted,
+                confidenceLevel: b.manufacturerCorrectionConfidence || null,
+                submittedByName: req.user!.fullName,
+              });
+            }
+            if (b.cellModelSuggestedValue != null && b.cellModelWasAccepted != null) {
+              auditRows.push({
+                jobReference: result.job.reference,
+                fieldName: "cellModel",
+                originalValue: b.cellModelOriginalValue || null,
+                suggestedValue: b.cellModelSuggestedValue,
+                wasAccepted: b.cellModelWasAccepted,
+                confidenceLevel: b.cellModelCorrectionConfidence || null,
+                submittedByName: req.user!.fullName,
+              });
+            }
+            if (b.voltageSuggestedValue != null && b.voltageWasAccepted != null) {
+              auditRows.push({
+                jobReference: result.job.reference,
+                fieldName: "voltage",
+                originalValue: b.voltageOriginalValue || null,
+                suggestedValue: b.voltageSuggestedValue,
+                wasAccepted: b.voltageWasAccepted,
+                confidenceLevel: b.voltageCorrectionConfidence || null,
+                submittedByName: req.user!.fullName,
+              });
+            }
+          }
+          if (auditRows.length > 0) {
+            await db.insert(correctionAuditLogTable).values(auditRows);
+          }
+        } catch (auditErr) {
+          console.error("Correction audit log error:", auditErr);
+        }
+      });
 
       if (draftId) {
         const draftIdNum = parseInt(String(draftId), 10);

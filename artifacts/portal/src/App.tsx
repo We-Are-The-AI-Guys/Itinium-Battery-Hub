@@ -20,6 +20,7 @@ import SchedulePage from "@/pages/schedule";
 import KpiPage from "@/pages/kpi";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
+import CorrectionAuditPage from "@/pages/correction-audit";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -145,6 +146,11 @@ function AppRouter() {
       <Route path="/schedule">
         <RoleGuard allowedRoles={["head_office_admin"]}>
           <SchedulePage />
+        </RoleGuard>
+      </Route>
+      <Route path="/correction-audit">
+        <RoleGuard allowedRoles={["head_office_admin"]}>
+          <CorrectionAuditPage />
         </RoleGuard>
       </Route>
       <Route component={NotFound} />

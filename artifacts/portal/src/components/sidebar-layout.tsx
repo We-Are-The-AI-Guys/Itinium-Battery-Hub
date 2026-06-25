@@ -20,6 +20,7 @@ import {
   AlertCircle,
   ImagePlus,
   X as XIcon,
+  ClipboardList,
 } from "lucide-react";
 import { NotificationBell } from "@/components/notification-panel";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
@@ -76,6 +77,7 @@ function getNavItems(user: User | null): NavItem[] {
   if (role === "head_office_admin") {
     items.push({ icon: Building2, label: "Clients", path: "/clients" });
     items.push({ icon: CalendarDays, label: "Schedule", path: "/schedule" });
+    items.push({ icon: ClipboardList, label: "AI Correction Audit", path: "/correction-audit" });
   }
 
   if (role === "team_leader") {

@@ -107,6 +107,12 @@ interface BatteryRow {
   manufacturerOriginalValue?: string;
   cellTypeOriginalValue?: string;
   voltageOriginalValue?: string;
+  manufacturerSuggestedValue?: string;
+  cellTypeSuggestedValue?: string;
+  voltageSuggestedValue?: string;
+  manufacturerWasAccepted?: boolean;
+  cellTypeWasAccepted?: boolean;
+  voltageWasAccepted?: boolean;
 }
 
 interface User {
@@ -915,17 +921,19 @@ export default function DepotFormPage() {
                 manufacturerFlagReason: "",
                 manufacturerSuggestionConfidence: "high" as const,
                 manufacturerOriginalValue: value,
+                manufacturerSuggestedValue: data.suggestion!,
+                manufacturerWasAccepted: true,
                 manufacturerManuallyConfirmed: undefined,
               };
             }
             if (field === "cellType") {
               const isModel = cellModels.some((m) => m.modelName === data.suggestion);
               return isModel
-                ? { ...b, cellModel: data.suggestion!, cellModelFlagReason: "", cellTypeSuggestion: undefined, cellTypeSuggestionConfidence: "high" as const, cellTypeOriginalValue: value, cellTypeManuallyConfirmed: undefined }
-                : { ...b, cellType: data.suggestion!, cellModel: "", cellModelFlagReason: "", cellTypeSuggestion: undefined, cellTypeSuggestionConfidence: "high" as const, cellTypeOriginalValue: value, cellTypeManuallyConfirmed: undefined };
+                ? { ...b, cellModel: data.suggestion!, cellModelFlagReason: "", cellTypeSuggestion: undefined, cellTypeSuggestionConfidence: "high" as const, cellTypeOriginalValue: value, cellTypeSuggestedValue: data.suggestion!, cellTypeWasAccepted: true, cellTypeManuallyConfirmed: undefined }
+                : { ...b, cellType: data.suggestion!, cellModel: "", cellModelFlagReason: "", cellTypeSuggestion: undefined, cellTypeSuggestionConfidence: "high" as const, cellTypeOriginalValue: value, cellTypeSuggestedValue: data.suggestion!, cellTypeWasAccepted: true, cellTypeManuallyConfirmed: undefined };
             }
             if (field === "voltage") {
-              return { ...b, voltage: data.suggestion!, customVoltage: "", voltageFlagReason: "", voltageSuggestion: undefined, voltageSuggestionConfidence: "high" as const, voltageOriginalValue: value, voltageManuallyConfirmed: undefined };
+              return { ...b, voltage: data.suggestion!, customVoltage: "", voltageFlagReason: "", voltageSuggestion: undefined, voltageSuggestionConfidence: "high" as const, voltageOriginalValue: value, voltageSuggestedValue: data.suggestion!, voltageWasAccepted: true, voltageManuallyConfirmed: undefined };
             }
             return b;
           })
@@ -935,9 +943,9 @@ export default function DepotFormPage() {
         setBatteries((prev) =>
           prev.map((b) => {
             if (b.id !== batteryId) return b;
-            if (field === "manufacture") return { ...b, manufacturerSuggestion: data.suggestion!, manufacturerSuggestionConfidence: "low" as const };
-            if (field === "cellType") return { ...b, cellTypeSuggestion: data.suggestion!, cellTypeSuggestionConfidence: "low" as const };
-            if (field === "voltage") return { ...b, voltageSuggestion: data.suggestion!, voltageSuggestionConfidence: "low" as const };
+            if (field === "manufacture") return { ...b, manufacturerSuggestion: data.suggestion!, manufacturerSuggestionConfidence: "low" as const, manufacturerOriginalValue: value, manufacturerSuggestedValue: data.suggestion! };
+            if (field === "cellType") return { ...b, cellTypeSuggestion: data.suggestion!, cellTypeSuggestionConfidence: "low" as const, cellTypeOriginalValue: value, cellTypeSuggestedValue: data.suggestion! };
+            if (field === "voltage") return { ...b, voltageSuggestion: data.suggestion!, voltageSuggestionConfidence: "low" as const, voltageOriginalValue: value, voltageSuggestedValue: data.suggestion! };
             return b;
           })
         );
@@ -1115,6 +1123,15 @@ export default function DepotFormPage() {
             manufacturerCorrectionConfidence: b.manufacturerSuggestionConfidence || null,
             cellModelCorrectionConfidence: b.cellTypeSuggestionConfidence || null,
             voltageCorrectionConfidence: b.isLooseCells ? null : (b.voltageSuggestionConfidence || null),
+            manufacturerOriginalValue: b.manufacturerOriginalValue || null,
+            manufacturerSuggestedValue: b.manufacturerSuggestedValue || null,
+            manufacturerWasAccepted: typeof b.manufacturerWasAccepted === "boolean" ? b.manufacturerWasAccepted : null,
+            cellModelOriginalValue: b.cellTypeOriginalValue || null,
+            cellModelSuggestedValue: b.cellTypeSuggestedValue || null,
+            cellModelWasAccepted: typeof b.cellTypeWasAccepted === "boolean" ? b.cellTypeWasAccepted : null,
+            voltageOriginalValue: b.isLooseCells ? null : (b.voltageOriginalValue || null),
+            voltageSuggestedValue: b.isLooseCells ? null : (b.voltageSuggestedValue || null),
+            voltageWasAccepted: b.isLooseCells ? null : (typeof b.voltageWasAccepted === "boolean" ? b.voltageWasAccepted : null),
             rowPhoto: b.rowPhoto || null,
             notes: b.notes || null,
           })),
@@ -1676,6 +1693,7 @@ export default function DepotFormPage() {
                               ...b, manufacture: orig, manufactureCustom: "", manufacturerOriginalValue: undefined,
                               manufacturerFlagReason: MANUAL_UNKNOWN_FLAG_REASON, manufacturerSuggestion: restored,
                               manufacturerSuggestionConfidence: "low", manufacturerManuallyConfirmed: undefined,
+                              manufacturerWasAccepted: false,
                             } : b));
                           }}
                         >
@@ -1701,7 +1719,7 @@ export default function DepotFormPage() {
                               setBatteries((prev) =>
                                 prev.map((b) =>
                                   b.id === battery.id
-                                    ? { ...b, manufacture: accepted, manufactureCustom: "", manufacturerFlagReason: "", manufacturerSuggestion: undefined }
+                                    ? { ...b, manufacture: accepted, manufactureCustom: "", manufacturerFlagReason: "", manufacturerSuggestion: undefined, manufacturerWasAccepted: true }
                                     : b
                                 )
                               );
@@ -1709,7 +1727,7 @@ export default function DepotFormPage() {
                             onDismiss={() => {
                               setBatteries((prev) =>
                                 prev.map((b) =>
-                                  b.id === battery.id ? { ...b, manufacturerSuggestion: undefined } : b
+                                  b.id === battery.id ? { ...b, manufacturerSuggestion: undefined, manufacturerWasAccepted: false } : b
                                 )
                               );
                             }}
@@ -1723,7 +1741,7 @@ export default function DepotFormPage() {
                             <input
                               type="checkbox"
                               className="accent-amber-600 cursor-pointer"
-                              onChange={() => setBatteries((prev) => prev.map((b) => b.id === battery.id ? { ...b, manufacturerManuallyConfirmed: true } : b))}
+                              onChange={() => setBatteries((prev) => prev.map((b) => b.id === battery.id ? { ...b, manufacturerManuallyConfirmed: true, manufacturerWasAccepted: false } : b))}
                             />
                             <span className="text-[10px] text-slate-500 group-hover:text-slate-600 transition-colors">
                               I confirm this value is correct — submit for Itinium review
@@ -1838,6 +1856,7 @@ export default function DepotFormPage() {
                               ...b, cellType: orig, cellModel: "", cellTypeOriginalValue: undefined,
                               cellModelFlagReason: MANUAL_UNKNOWN_FLAG_REASON, cellTypeSuggestion: restored,
                               cellTypeSuggestionConfidence: "low", cellTypeManuallyConfirmed: undefined,
+                              cellTypeWasAccepted: false,
                             } : b));
                           }}
                         >
@@ -1863,11 +1882,12 @@ export default function DepotFormPage() {
                               const isModel = cellModels.some((m) => m.modelName === accepted);
                               if (isModel) {
                                 updateBattery(battery.id, "cellModel", accepted);
+                                setBatteries((prev) => prev.map((b) => b.id === battery.id ? { ...b, cellTypeSuggestion: undefined, cellTypeWasAccepted: true } : b));
                               } else {
                                 setBatteries((prev) =>
                                   prev.map((b) =>
                                     b.id === battery.id
-                                      ? { ...b, cellType: accepted, cellModel: "", cellModelFlagReason: "", cellTypeSuggestion: undefined }
+                                      ? { ...b, cellType: accepted, cellModel: "", cellModelFlagReason: "", cellTypeSuggestion: undefined, cellTypeWasAccepted: true }
                                       : b
                                   )
                                 );
@@ -1876,7 +1896,7 @@ export default function DepotFormPage() {
                             onDismiss={() => {
                               setBatteries((prev) =>
                                 prev.map((b) =>
-                                  b.id === battery.id ? { ...b, cellTypeSuggestion: undefined } : b
+                                  b.id === battery.id ? { ...b, cellTypeSuggestion: undefined, cellTypeWasAccepted: false } : b
                                 )
                               );
                             }}
@@ -1890,7 +1910,7 @@ export default function DepotFormPage() {
                             <input
                               type="checkbox"
                               className="accent-amber-600 cursor-pointer"
-                              onChange={() => setBatteries((prev) => prev.map((b) => b.id === battery.id ? { ...b, cellTypeManuallyConfirmed: true } : b))}
+                              onChange={() => setBatteries((prev) => prev.map((b) => b.id === battery.id ? { ...b, cellTypeManuallyConfirmed: true, cellTypeWasAccepted: false } : b))}
                             />
                             <span className="text-[10px] text-slate-500 group-hover:text-slate-600 transition-colors">
                               I confirm this value is correct — submit for Itinium review
@@ -2028,6 +2048,7 @@ export default function DepotFormPage() {
                                   ...b, voltage: orig, customVoltage: "", voltageOriginalValue: undefined,
                                   voltageFlagReason: MANUAL_UNKNOWN_FLAG_REASON, voltageSuggestion: restored,
                                   voltageSuggestionConfidence: "low", voltageManuallyConfirmed: undefined,
+                                  voltageWasAccepted: false,
                                 } : b));
                               }}
                             >
@@ -2051,7 +2072,7 @@ export default function DepotFormPage() {
                                   setBatteries((prev) =>
                                     prev.map((b) => {
                                       if (b.id !== battery.id) return b;
-                                      const updated = { ...b, voltage: accepted, customVoltage: "", voltageFlagReason: "", voltageSuggestion: undefined };
+                                      const updated = { ...b, voltage: accepted, customVoltage: "", voltageFlagReason: "", voltageSuggestion: undefined, voltageWasAccepted: true };
                                       if (!updated.weightManual) computeAndSetAutoWeight(updated);
                                       return updated;
                                     })
@@ -2060,7 +2081,7 @@ export default function DepotFormPage() {
                                 onDismiss={() => {
                                   setBatteries((prev) =>
                                     prev.map((b) =>
-                                      b.id === battery.id ? { ...b, voltageSuggestion: undefined } : b
+                                      b.id === battery.id ? { ...b, voltageSuggestion: undefined, voltageWasAccepted: false } : b
                                     )
                                   );
                                 }}
@@ -2074,7 +2095,7 @@ export default function DepotFormPage() {
                                 <input
                                   type="checkbox"
                                   className="accent-amber-600 cursor-pointer"
-                                  onChange={() => setBatteries((prev) => prev.map((b) => b.id === battery.id ? { ...b, voltageManuallyConfirmed: true } : b))}
+                                  onChange={() => setBatteries((prev) => prev.map((b) => b.id === battery.id ? { ...b, voltageManuallyConfirmed: true, voltageWasAccepted: false } : b))}
                                 />
                                 <span className="text-[10px] text-slate-500 group-hover:text-slate-600 transition-colors">
                                   I confirm this value is correct — submit for Itinium review

@@ -18,6 +18,7 @@ import kpiRouter from "./kpi";
 import supportRouter from "./support";
 import notificationsRouter from "./notifications";
 import suggestCorrectionRouter from "./suggest-correction";
+import correctionAuditRouter from "./correction-audit";
 
 const router: IRouter = Router();
 
@@ -40,5 +41,6 @@ router.use(locationsRouter);
 router.use(supportRouter);
 router.use(notificationsRouter);
 router.use(suggestCorrectionRouter);
+router.use(correctionAuditRouter);
 
 export default router;
