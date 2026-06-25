@@ -143,6 +143,8 @@ const CSV_TEMPLATE_HEADERS = "Pallet Number,Asset No,Battery Serial,Manufacturer
 
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
+const MANUAL_UNKNOWN_FLAG_REASON = "Unrecognised value — not found in master list";
+const VOLTAGE_VALUES = ["12V", "24V", "36V", "40V", "48V", "80V", "96V"];
 
 function levenshtein(a: string, b: string): number {
   const m = a.length;
@@ -183,6 +185,35 @@ function findClosestMatch(value: string, candidates: string[], minSimilarity = 0
     if (!best || sim > best.sim) best = { candidate: c, sim };
   }
   return best && best.sim >= minSimilarity ? best.candidate : null;
+}
+
+function validateBatteryField(
+  field: "manufacture" | "cellType" | "voltage",
+  value: string,
+  manufacturers: string[],
+  cellModels: CellModelOption[],
+  aliases: Record<string, string>
+): string {
+  const v = value.trim();
+  if (!v) return "";
+  switch (field) {
+    case "manufacture": {
+      const knownLower = new Set(manufacturers.map((m) => m.toLowerCase()));
+      if (knownLower.has(v.toLowerCase())) return "";
+      if (Object.keys(aliases).some((a) => a.toLowerCase() === v.toLowerCase())) return "";
+      return MANUAL_UNKNOWN_FLAG_REASON;
+    }
+    case "cellType": {
+      if (v === "Blocs" || v === "Other") return "";
+      if (cellModels.some((m) => m.cellFamily.toLowerCase() === v.toLowerCase())) return "";
+      if (cellModels.some((m) => m.modelName.toLowerCase() === v.toLowerCase())) return "";
+      return MANUAL_UNKNOWN_FLAG_REASON;
+    }
+    case "voltage": {
+      if (VOLTAGE_VALUES.some((o) => o.toLowerCase() === v.toLowerCase())) return "";
+      return MANUAL_UNKNOWN_FLAG_REASON;
+    }
+  }
 }
 
 function parseCSV(text: string): string[][] {
@@ -904,6 +935,47 @@ export default function DepotFormPage() {
       return;
     }
 
+    // Validate manufacturer, cell type, and voltage against master lists before submitting.
+    // If any value is unrecognised, flag it but do not block — flags are stored for Itinium review.
+    const validatedBatteries = batteries.map((b) => {
+      const updated = { ...b };
+      const effMfr =
+        b.manufacture === "Other" && b.manufactureCustom ? b.manufactureCustom : b.manufacture;
+      if (effMfr.trim() && !b.manufacturerFlagReason) {
+        const reason = validateBatteryField(
+          "manufacture", effMfr, manufacturers, cellModels, manufacturerAliases
+        );
+        if (reason) updated.manufacturerFlagReason = reason;
+      }
+      const effCell = b.cellModel || b.cellType;
+      if (effCell.trim() && !b.cellModelFlagReason) {
+        const reason = validateBatteryField(
+          "cellType", effCell, manufacturers, cellModels, manufacturerAliases
+        );
+        if (reason) updated.cellModelFlagReason = reason;
+      }
+      const effVoltage =
+        b.voltage === "Other" && b.customVoltage ? b.customVoltage : b.voltage;
+      const voltageApplies =
+        !b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other";
+      if (voltageApplies && effVoltage.trim() && !b.voltageFlagReason) {
+        const reason = validateBatteryField(
+          "voltage", effVoltage, manufacturers, cellModels, manufacturerAliases
+        );
+        if (reason) updated.voltageFlagReason = reason;
+      }
+      return updated;
+    });
+    const hasNewFlags = validatedBatteries.some(
+      (b, i) =>
+        b.manufacturerFlagReason !== batteries[i].manufacturerFlagReason ||
+        b.cellModelFlagReason !== batteries[i].cellModelFlagReason ||
+        b.voltageFlagReason !== batteries[i].voltageFlagReason
+    );
+    if (hasNewFlags) {
+      setBatteries(validatedBatteries);
+    }
+
     setSubmitting(true);
     try {
       const res = await fetch("/api/jobs", {
@@ -918,7 +990,7 @@ export default function DepotFormPage() {
           tonnageManualOverride: tonnageManual,
           notes: jobNotes || null,
           draftId: currentDraftId || undefined,
-          batteries: batteries.map((b) => ({
+          batteries: validatedBatteries.map((b) => ({
             palletNumber: b.palletNumber || null,
             assetNumber: b.assetNumber || null,
             batterySerial: b.serialFlagged ? (b.serialFlagReason || "Unknown") : (b.batterySerial || null),
@@ -1430,105 +1502,80 @@ export default function DepotFormPage() {
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-slate-600">
-                      Manufacture
+                      Manufacturer
                     </label>
-                    <Popover
-                      open={mfrPopoverOpen[battery.id] || false}
-                      onOpenChange={(open) =>
-                        setMfrPopoverOpen((prev) => ({ ...prev, [battery.id]: open }))
-                      }
-                    >
-                      <PopoverTrigger asChild>
-                        <button
-                          type="button"
-                          className="flex items-center justify-between w-full h-10 px-3 bg-slate-50 border border-slate-200 rounded-md text-sm text-[#1e293b] hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] focus:ring-offset-0"
-                          data-testid={`select-manufacture-${index}`}
-                        >
-                          <span className="flex items-center gap-2 truncate">
-                            <Factory className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
-                            {battery.manufacture ? (
-                              <span>{battery.manufacture}</span>
-                            ) : (
-                              <span className="text-slate-400">Select manufacturer...</span>
-                            )}
-                          </span>
-                          <ChevronsUpDown className="h-3.5 w-3.5 text-slate-400 flex-shrink-0 ml-2" />
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                        <Command>
-                          <CommandInput placeholder="Search manufacturer..." />
-                          <CommandList>
-                            <CommandEmpty>No manufacturer found.</CommandEmpty>
-                            <CommandGroup>
-                              {manufacturers.map((m) => (
-                                <CommandItem
-                                  key={m}
-                                  value={m}
-                                  onSelect={() => {
-                                    updateBattery(battery.id, "manufacture", m);
-                                    if (m !== "Other") {
-                                      setBatteries((prev) =>
-                                        prev.map((b) =>
-                                          b.id === battery.id ? { ...b, manufactureCustom: "" } : b
-                                        )
-                                      );
-                                    }
-                                    setMfrPopoverOpen((prev) => ({ ...prev, [battery.id]: false }));
-                                  }}
-                                >
-                                  <Check
-                                    className={`mr-2 h-4 w-4 ${
-                                      battery.manufacture === m ? "opacity-100" : "opacity-0"
-                                    }`}
-                                  />
-                                  {m}
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                    {battery.manufacture === "Other" && (
-                      <Input
-                        placeholder="Enter manufacturer name..."
-                        className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9] mt-1.5"
-                        value={battery.manufactureCustom}
-                        onChange={(e) =>
-                          setBatteries((prev) =>
-                            prev.map((b) =>
-                              b.id === battery.id ? { ...b, manufactureCustom: e.target.value } : b
-                            )
+                    <TypeaheadInput
+                      value={battery.manufacture === "Other" && battery.manufactureCustom ? battery.manufactureCustom : battery.manufacture}
+                      options={manufacturers}
+                      placeholder="Type or select manufacturer…"
+                      icon={<Factory className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />}
+                      testId={`input-manufacture-${index}`}
+                      onChange={(v) => {
+                        setBatteries((prev) =>
+                          prev.map((b) =>
+                            b.id === battery.id
+                              ? { ...b, manufacture: v, manufactureCustom: "", manufacturerFlagReason: "" }
+                              : b
                           )
-                        }
-                        data-testid={`input-manufacture-custom-${index}`}
-                      />
-                    )}
+                        );
+                      }}
+                      onBlurValidate={(v) => {
+                        const trimmed = v.trim();
+                        const canonical = manufacturers.find(
+                          (m) => m.toLowerCase() === trimmed.toLowerCase()
+                        );
+                        const reason = validateBatteryField(
+                          "manufacture", trimmed, manufacturers, cellModels, manufacturerAliases
+                        );
+                        setBatteries((prev) =>
+                          prev.map((b) =>
+                            b.id === battery.id
+                              ? {
+                                  ...b,
+                                  manufacture: canonical ?? trimmed,
+                                  manufactureCustom: "",
+                                  manufacturerFlagReason: reason,
+                                }
+                              : b
+                          )
+                        );
+                      }}
+                    />
                     {battery.manufacturerFlagReason && (
                       <div className="space-y-1">
                         <p className="text-[10px] text-amber-600 flex items-center gap-1">
                           <AlertTriangle className="w-3 h-3" />
-                          {battery.manufacturerFlagReason === CSV_UNKNOWN_FLAG_REASON
+                          {battery.manufacturerFlagReason === MANUAL_UNKNOWN_FLAG_REASON
+                            ? `"${battery.manufacture}" was not recognised — it will be reviewed by Itinium.`
+                            : battery.manufacturerFlagReason === CSV_UNKNOWN_FLAG_REASON
                             ? `Flagged — "${battery.manufacture}" is not in Itinium's known list.`
                             : "Flagged — missing from CSV. Fill in to clear."}
                         </p>
-                        {(() => {
-                          if (battery.manufacturerFlagReason !== CSV_UNKNOWN_FLAG_REASON) return null;
-                          const knownMfrs = manufacturers.filter((m) => m.toLowerCase() !== "other");
-                          const suggestion = findClosestMatch(battery.manufacture, knownMfrs);
-                          if (!suggestion) return null;
-                          return (
-                            <button
-                              type="button"
-                              className="text-[10px] font-medium text-[#0ea5e9] hover:text-[#0284c7] hover:underline"
-                              onClick={() => updateBattery(battery.id, "manufacture", suggestion)}
-                              data-testid={`button-mfr-suggestion-${index}`}
-                            >
-                              Did you mean: {suggestion}?
-                            </button>
-                          );
-                        })()}
+                        {(battery.manufacturerFlagReason === CSV_UNKNOWN_FLAG_REASON ||
+                          battery.manufacturerFlagReason === MANUAL_UNKNOWN_FLAG_REASON) &&
+                          (() => {
+                            const knownMfrs = manufacturers.filter((m) => m.toLowerCase() !== "other");
+                            const suggestion = findClosestMatch(battery.manufacture, knownMfrs);
+                            if (!suggestion) return null;
+                            return (
+                              <button
+                                type="button"
+                                className="text-[10px] font-medium text-[#0ea5e9] hover:text-[#0284c7] hover:underline"
+                                onClick={() => {
+                                  setBatteries((prev) =>
+                                    prev.map((b) =>
+                                      b.id === battery.id
+                                        ? { ...b, manufacture: suggestion, manufactureCustom: "", manufacturerFlagReason: "" }
+                                        : b
+                                    )
+                                  );
+                                }}
+                                data-testid={`button-mfr-suggestion-${index}`}
+                              >
+                                Did you mean: {suggestion}?
+                              </button>
+                            );
+                          })()}
                       </div>
                     )}
                   </div>
@@ -1562,6 +1609,16 @@ export default function DepotFormPage() {
                           if (!updated.weightManual) computeAndSetAutoWeight(updated);
                         }
                       }}
+                      onBlurValidate={(committed) => {
+                        const reason = validateBatteryField(
+                          "cellType", committed, manufacturers, cellModels, manufacturerAliases
+                        );
+                        setBatteries((prev) =>
+                          prev.map((b) =>
+                            b.id === battery.id ? { ...b, cellModelFlagReason: reason } : b
+                          )
+                        );
+                      }}
                     />
                     {battery.cellModel && (
                       <p className="text-[10px] text-emerald-600">
@@ -1572,36 +1629,40 @@ export default function DepotFormPage() {
                       <div className="space-y-1">
                         <p className="text-[10px] text-amber-600 flex items-center gap-1">
                           <AlertTriangle className="w-3 h-3" />
-                          {battery.cellModelFlagReason === CSV_UNKNOWN_FLAG_REASON
+                          {battery.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON
+                            ? `"${battery.cellModel || battery.cellType}" was not recognised — it will be reviewed by Itinium.`
+                            : battery.cellModelFlagReason === CSV_UNKNOWN_FLAG_REASON
                             ? `Flagged — "${battery.cellModel}" is not in Itinium's known list.`
                             : "Flagged — missing from CSV. Fill in to clear."}
                         </p>
-                        {(() => {
-                          if (battery.cellModelFlagReason !== CSV_UNKNOWN_FLAG_REASON) return null;
-                          const effMfr = battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture;
-                          const scoped = effMfr
-                            ? cellModels.filter((m) => m.manufacturer.toLowerCase() === effMfr.toLowerCase())
-                            : cellModels;
-                          const candidates = Array.from(new Set(scoped.map((m) => m.modelName)));
-                          let suggestion = findClosestMatch(battery.cellModel, candidates);
-                          if (!suggestion && effMfr) {
-                            suggestion = findClosestMatch(
-                              battery.cellModel,
-                              Array.from(new Set(cellModels.map((m) => m.modelName)))
+                        {(battery.cellModelFlagReason === CSV_UNKNOWN_FLAG_REASON ||
+                          battery.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON) &&
+                          (() => {
+                            const effMfr = battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture;
+                            const scoped = effMfr
+                              ? cellModels.filter((m) => m.manufacturer.toLowerCase() === effMfr.toLowerCase())
+                              : cellModels;
+                            const candidates = Array.from(new Set(scoped.map((m) => m.modelName)));
+                            const searchTerm = battery.cellModel || battery.cellType;
+                            let suggestion = findClosestMatch(searchTerm, candidates);
+                            if (!suggestion && effMfr) {
+                              suggestion = findClosestMatch(
+                                searchTerm,
+                                Array.from(new Set(cellModels.map((m) => m.modelName)))
+                              );
+                            }
+                            if (!suggestion) return null;
+                            return (
+                              <button
+                                type="button"
+                                className="text-[10px] font-medium text-[#0ea5e9] hover:text-[#0284c7] hover:underline"
+                                onClick={() => updateBattery(battery.id, "cellModel", suggestion!)}
+                                data-testid={`button-cellmodel-suggestion-${index}`}
+                              >
+                                Did you mean: {suggestion}?
+                              </button>
                             );
-                          }
-                          if (!suggestion) return null;
-                          return (
-                            <button
-                              type="button"
-                              className="text-[10px] font-medium text-[#0ea5e9] hover:text-[#0284c7] hover:underline"
-                              onClick={() => updateBattery(battery.id, "cellModel", suggestion!)}
-                              data-testid={`button-cellmodel-suggestion-${index}`}
-                            >
-                              Did you mean: {suggestion}?
-                            </button>
-                          );
-                        })()}
+                          })()}
                       </div>
                     )}
                   </div>
@@ -1640,52 +1701,55 @@ export default function DepotFormPage() {
                         <label className="text-xs font-medium text-slate-600">
                           If Complete Battery &mdash; Voltage
                         </label>
-                        <Select
-                          value={battery.voltage}
-                          onValueChange={(val) => {
-                            updateBattery(battery.id, "voltage", val);
-                            if (val !== "Other") {
-                              updateBattery(battery.id, "customVoltage", "");
-                            }
+                        <TypeaheadInput
+                          value={battery.voltage === "Other" && battery.customVoltage ? battery.customVoltage : battery.voltage}
+                          options={VOLTAGE_VALUES}
+                          placeholder="e.g. 48V"
+                          icon={<Zap className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />}
+                          testId={`input-voltage-${index}`}
+                          onChange={(v) => {
+                            setBatteries((prev) =>
+                              prev.map((b) =>
+                                b.id === battery.id
+                                  ? { ...b, voltage: v, customVoltage: "", voltageFlagReason: "" }
+                                  : b
+                              )
+                            );
                           }}
-                        >
-                          <SelectTrigger className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus:ring-[#0ea5e9]">
-                            <div className="flex items-center gap-2">
-                              <Zap className="h-3.5 w-3.5 text-slate-400" />
-                              <SelectValue placeholder="Select voltage..." />
-                            </div>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {VOLTAGE_OPTIONS.map((v) => (
-                              <SelectItem key={v.value} value={v.value}>
-                                {v.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          onBlurValidate={(v) => {
+                            const trimmed = v.trim();
+                            const canonical = VOLTAGE_VALUES.find(
+                              (o) => o.toLowerCase() === trimmed.toLowerCase()
+                            );
+                            const reason = validateBatteryField(
+                              "voltage", trimmed, manufacturers, cellModels, manufacturerAliases
+                            );
+                            setBatteries((prev) =>
+                              prev.map((b) => {
+                                if (b.id !== battery.id) return b;
+                                const updated = {
+                                  ...b,
+                                  voltage: canonical ?? trimmed,
+                                  customVoltage: "",
+                                  voltageFlagReason: reason,
+                                };
+                                if (!updated.weightManual) computeAndSetAutoWeight(updated);
+                                return updated;
+                              })
+                            );
+                          }}
+                        />
+                        {battery.voltageFlagReason && (
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-amber-600 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" />
+                              {battery.voltageFlagReason === MANUAL_UNKNOWN_FLAG_REASON
+                                ? `"${battery.voltage}" is not a standard voltage — it will be reviewed by Itinium.`
+                                : "Voltage flagged — missing from CSV. Fill in to clear."}
+                            </p>
+                          </div>
+                        )}
                       </div>
-                      {battery.voltage === "Other" && (
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-medium text-slate-600">
-                            Custom Voltage
-                          </label>
-                          <Input
-                            placeholder="e.g., 72V"
-                            className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
-                            value={battery.customVoltage}
-                            onChange={(e) => updateBattery(battery.id, "customVoltage", e.target.value)}
-                            data-testid={`input-custom-voltage-${index}`}
-                          />
-                        </div>
-                      )}
-                      {battery.voltageFlagReason && (
-                        <div className="sm:col-span-2 lg:col-span-2">
-                          <p className="text-[10px] text-amber-600 flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" />
-                            Voltage flagged — missing from CSV. Fill in to clear.
-                          </p>
-                        </div>
-                      )}
                     </>
                   )}
 
@@ -2102,26 +2166,158 @@ export default function DepotFormPage() {
   );
 }
 
+function TypeaheadInput({
+  value,
+  onChange,
+  onBlurValidate,
+  placeholder,
+  options,
+  icon,
+  testId,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onBlurValidate: (v: string) => void;
+  placeholder?: string;
+  options: string[];
+  icon?: React.ReactNode;
+  testId?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const filtered = useMemo(() => {
+    const q = value.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((o) => o.toLowerCase().includes(q));
+  }, [value, options]);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div
+        className={`flex items-center h-10 bg-slate-50 border rounded-md px-3 gap-2 transition-colors ${
+          open
+            ? "border-[#0ea5e9] ring-2 ring-[#0ea5e9]/20"
+            : "border-slate-200 hover:border-slate-300"
+        }`}
+      >
+        {icon}
+        <input
+          type="text"
+          className="flex-1 bg-transparent text-sm text-[#1e293b] outline-none placeholder:text-slate-400"
+          value={value}
+          placeholder={placeholder}
+          data-testid={testId}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => {
+            setTimeout(() => {
+              if (!containerRef.current?.contains(document.activeElement)) {
+                setOpen(false);
+                onBlurValidate(value);
+              }
+            }, 120);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setOpen(false);
+              onBlurValidate(value);
+            }
+            if (e.key === "Enter" || e.key === "Tab") {
+              setOpen(false);
+              onBlurValidate(value);
+            }
+          }}
+        />
+        <ChevronDown
+          className={`h-3.5 w-3.5 text-slate-400 flex-shrink-0 transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </div>
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+          {filtered.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onChange(opt);
+                setOpen(false);
+                onBlurValidate(opt);
+              }}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CellModelCombobox({
   cellModels,
   manufacturer,
   value,
   onChange,
+  onBlurValidate,
 }: {
   cellModels: CellModelOption[];
   manufacturer: string;
   value: string;
   onChange: (value: string, isModel: boolean) => void;
+  onBlurValidate?: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef("");
+  const cellModelsRef = useRef(cellModels);
+  const onChangeRef = useRef(onChange);
+  const onBlurValidateRef = useRef(onBlurValidate);
+  const valueRef = useRef(value);
+
+  useEffect(() => { searchRef.current = search; }, [search]);
+  useEffect(() => { cellModelsRef.current = cellModels; });
+  useEffect(() => { onChangeRef.current = onChange; });
+  useEffect(() => { onBlurValidateRef.current = onBlurValidate; });
+  useEffect(() => { valueRef.current = value; });
+
+  function commitTyped(typed: string) {
+    const t = typed.trim();
+    if (!t) {
+      onBlurValidateRef.current?.(valueRef.current);
+      return;
+    }
+    const models = cellModelsRef.current;
+    const model = models.find((m) => m.modelName.toLowerCase() === t.toLowerCase());
+    if (model) {
+      onChangeRef.current(model.modelName, true);
+      onBlurValidateRef.current?.(model.modelName);
+    } else {
+      const family = models.find((m) => m.cellFamily.toLowerCase() === t.toLowerCase());
+      const committed = family ? family.cellFamily : t;
+      onChangeRef.current(committed, false);
+      onBlurValidateRef.current?.(committed);
+    }
+  }
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        const typed = searchRef.current.trim();
+        if (typed) {
+          commitTyped(typed);
+        }
         setOpen(false);
+        setSearch("");
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -2174,8 +2370,26 @@ function CellModelCombobox({
             placeholder="Search cell models (e.g. 5 PzS 775)..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onBlur={() => {
+              setTimeout(() => {
+                if (containerRef.current && !containerRef.current.contains(document.activeElement)) {
+                  const typed = searchRef.current.trim();
+                  if (typed) {
+                    commitTyped(typed);
+                  }
+                  setOpen(false);
+                  setSearch("");
+                }
+              }, 120);
+            }}
             onKeyDown={(e) => {
               if (e.key === "Escape") {
+                setOpen(false);
+                setSearch("");
+              }
+              if (e.key === "Enter" && search.trim()) {
+                e.preventDefault();
+                commitTyped(search);
                 setOpen(false);
                 setSearch("");
               }
