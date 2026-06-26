@@ -574,23 +574,21 @@ export default function HelpPage() {
   }, [sections.length, activeId]);
 
   useEffect(() => {
-    const container = contentRef.current;
-    if (!container) return;
-
     const observer = new IntersectionObserver(
       (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setActiveId(entry.target.id.replace("section-", ""));
-            break;
-          }
+        // Pick the topmost intersecting section
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible.length > 0) {
+          setActiveId(visible[0].target.id.replace("section-", ""));
         }
       },
-      { root: container, rootMargin: "-20% 0px -70% 0px" }
+      { root: null, rootMargin: "0px 0px -60% 0px", threshold: 0 }
     );
 
     sections.forEach((s) => {
-      const el = container.querySelector(`#section-${s.id}`);
+      const el = document.getElementById(`section-${s.id}`);
       if (el) observer.observe(el);
     });
 
@@ -598,7 +596,7 @@ export default function HelpPage() {
   }, [sections]);
 
   function scrollTo(id: string) {
-    const el = contentRef.current?.querySelector(`#section-${id}`);
+    const el = document.getElementById(`section-${id}`);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
       setActiveId(id);
@@ -645,10 +643,10 @@ export default function HelpPage() {
           </div>
         </aside>
 
-        {/* Scrollable content */}
+        {/* Content */}
         <div
           ref={contentRef}
-          className="flex-1 overflow-y-auto space-y-4 pr-1 pb-12"
+          className="flex-1 space-y-4 pr-1 pb-12"
         >
           {sections.map((s) => (
             <div
