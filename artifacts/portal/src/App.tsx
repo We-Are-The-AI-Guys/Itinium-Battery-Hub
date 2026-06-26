@@ -21,6 +21,7 @@ import KpiPage from "@/pages/kpi";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
 import CorrectionAuditPage from "@/pages/correction-audit";
+import HelpPage from "@/pages/help";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -110,7 +111,7 @@ function AppRouter() {
       </Route>
       <Route path="/help">
         <AuthGuard>
-          <PlaceholderPage title="Help & Support" />
+          <HelpPage />
         </AuthGuard>
       </Route>
       <Route path="/lme-pricing">

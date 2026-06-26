@@ -21,6 +21,7 @@ import {
   ImagePlus,
   X as XIcon,
   ClipboardList,
+  BookOpen,
 } from "lucide-react";
 import { NotificationBell } from "@/components/notification-panel";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
@@ -93,6 +94,7 @@ function getNavItems(user: User | null): NavItem[] {
 
 const linkNavItems: NavItem[] = [
   { icon: Plus, label: "New Collection", path: "/collection/new" },
+  { icon: BookOpen, label: "User Guide", path: "/help" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];
 
