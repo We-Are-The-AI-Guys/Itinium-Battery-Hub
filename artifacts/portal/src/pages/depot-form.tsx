@@ -1711,7 +1711,7 @@ export default function DepotFormPage() {
 
                   <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
                     <label className="text-xs font-medium text-slate-600">
-                      Type of Cells / Cell Model
+                      Cell Type / Cell Model
                     </label>
                     <CellModelCombobox
                       cellModels={cellModels}
