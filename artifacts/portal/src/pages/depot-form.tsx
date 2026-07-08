@@ -158,7 +158,7 @@ function createEmptyBattery(): BatteryRow {
   };
 }
 
-const CSV_TEMPLATE_HEADERS = "Pallet Number,Asset No,Battery Serial,Manufacturer,Loose Cells Qty,Voltage,Cell Type,Cell Model,Notes";
+const CSV_TEMPLATE_HEADERS = "Pallet Number,Asset No,Battery Serial,Manufacturer,Loose Cells Qty,Voltage,Cell Type,Notes";
 
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
@@ -573,7 +573,6 @@ export default function DepotFormPage() {
           ["batterySerial", ["batteryserial", "batteryserialno", "serial", "serialno"]],
           ["manufacture", ["manufacturer", "manufacture", "mfr"]],
           ["cellType", ["celltype", "celltypefamily", "type", "cellfamily"]],
-          ["cellModel", ["cellmodel", "model", "cellmodelname"]],
           ["voltage", ["voltage", "volt", "v"]],
           ["looseCellsQty", ["loosecellsqty", "loosecells", "cellqty", "qty"]],
           ["estimatedWeightKg", ["estweightkg", "estimatedweightkg", "weightkg", "weight"]],
@@ -602,20 +601,12 @@ export default function DepotFormPage() {
             mfrByNorm.set(normalizeForMatch(alias), canonical);
           }
         }
-        const modelsByNorm = new Map<string, typeof cellModels>();
-        for (const m of cellModels) {
-          const key = normalizeForMatch(m.modelName);
-          const list = modelsByNorm.get(key) ?? [];
-          list.push(m);
-          modelsByNorm.set(key, list);
-        }
         let lastPalletNumber = "";
         const imported: BatteryRow[] = dataRows.map((row) => {
           const rawPallet = colMap["palletNumber"] !== undefined ? row[colMap["palletNumber"]]?.trim() || "" : "";
           if (rawPallet) lastPalletNumber = rawPallet;
           const looseQty = colMap["looseCellsQty"] !== undefined ? row[colMap["looseCellsQty"]] || "" : "";
           const rawMfr = colMap["manufacture"] !== undefined ? row[colMap["manufacture"]] || "" : "";
-          const rawCellModel = colMap["cellModel"] !== undefined ? row[colMap["cellModel"]] || "" : "";
           const rawCellType = colMap["cellType"] !== undefined ? row[colMap["cellType"]] || "" : "";
 
           const mfrTrim = rawMfr.trim();
@@ -625,30 +616,7 @@ export default function DepotFormPage() {
             if (canonical) normalizedMfr = canonical;
           }
 
-          const modelTrim = rawCellModel.trim();
-          const cellTypeTrim = rawCellType.trim();
-          let normalizedCellModel = modelTrim;
-          let normalizedCellType = cellTypeTrim;
-          if (modelTrim) {
-            const strictMatch = cellModels.find(
-              (m) =>
-                m.modelName === modelTrim &&
-                (!normalizedMfr || m.manufacturer.toLowerCase() === normalizedMfr.toLowerCase())
-            );
-            if (!strictMatch) {
-              const candidates = modelsByNorm.get(normalizeForMatch(modelTrim));
-              if (candidates && candidates.length > 0) {
-                const matched =
-                  (normalizedMfr
-                    ? candidates.find(
-                        (m) => m.manufacturer.toLowerCase() === normalizedMfr.toLowerCase()
-                      )
-                    : undefined) ?? candidates[0];
-                normalizedCellModel = matched.modelName;
-                normalizedCellType = matched.cellFamily;
-              }
-            }
-          }
+          const normalizedCellType = rawCellType.trim();
 
           return {
             id: crypto.randomUUID(),
@@ -658,7 +626,7 @@ export default function DepotFormPage() {
             manufacture: normalizedMfr,
             manufactureCustom: "",
             cellType: normalizedCellType,
-            cellModel: normalizedCellModel,
+            cellModel: "",
             voltage: colMap["voltage"] !== undefined ? row[colMap["voltage"]] || "" : "",
             customVoltage: "",
             looseCellsQty: looseQty,
@@ -700,7 +668,6 @@ export default function DepotFormPage() {
     }[] = [];
     rows.forEach((b, i) => {
       const fields: { label: string; target?: "manufacture" | "cellModel"; suggestion?: string }[] = [];
-      const cellModelApplies = b.cellType !== "Blocs" && b.cellType !== "Other";
       const voltageApplies = !b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other";
       if (!b.manufacture.trim()) {
         fields.push({ label: "Manufacturer" });
@@ -710,32 +677,6 @@ export default function DepotFormPage() {
           target: "manufacture",
           suggestion: findClosestMatch(b.manufacture, knownManufacturers) ?? undefined,
         });
-      }
-      if (cellModelApplies && !b.cellModel.trim()) {
-        fields.push({ label: "Cell Model" });
-      } else if (cellModelApplies && b.cellModel.trim() && cellModels.length > 0) {
-        const mfr = b.manufacture.trim();
-        const modelMatches = cellModels.some(
-          (m) =>
-            m.modelName.toLowerCase() === b.cellModel.trim().toLowerCase() &&
-            (!mfr || m.manufacturer.toLowerCase() === mfr.toLowerCase())
-        );
-        if (!modelMatches) {
-          const candidatePool = mfr
-            ? cellModels.filter((m) => m.manufacturer.toLowerCase() === mfr.toLowerCase())
-            : cellModels;
-          const candidates = Array.from(new Set(candidatePool.map((m) => m.modelName)));
-          const suggestion =
-            findClosestMatch(b.cellModel, candidates) ??
-            (mfr ? findClosestMatch(b.cellModel, Array.from(new Set(cellModels.map((m) => m.modelName)))) ?? undefined : undefined);
-          fields.push({
-            label: mfr
-              ? `Unknown cell model "${b.cellModel.trim()}" for ${mfr}`
-              : `Unknown cell model "${b.cellModel.trim()}"`,
-            target: "cellModel",
-            suggestion: suggestion ?? undefined,
-          });
-        }
       }
       if (voltageApplies && !b.voltage.trim()) fields.push({ label: "Voltage" });
       if (fields.length > 0) issues.push({ rowNum: i + 2, rowId: b.id, fields });
@@ -781,7 +722,6 @@ export default function DepotFormPage() {
     );
     const finalRows = applyFlags
       ? rows.map((b) => {
-          const cellModelApplies = b.cellType !== "Blocs" && b.cellType !== "Other";
           const voltageApplies = !b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other";
           let manufacturerFlagReason = b.manufacturerFlagReason;
           if (!b.manufacture.trim()) {
@@ -789,23 +729,11 @@ export default function DepotFormPage() {
           } else if (manufacturers.length > 0 && !knownManufacturers.has(b.manufacture.trim().toLowerCase())) {
             manufacturerFlagReason = CSV_UNKNOWN_FLAG_REASON;
           }
-          let cellModelFlagReason = b.cellModelFlagReason;
-          if (cellModelApplies && !b.cellModel.trim()) {
-            cellModelFlagReason = CSV_FLAG_REASON;
-          } else if (cellModelApplies && b.cellModel.trim() && cellModels.length > 0) {
-            const mfr = b.manufacture.trim();
-            const modelMatches = cellModels.some((m) =>
-              m.modelName.toLowerCase() === b.cellModel.trim().toLowerCase() &&
-              (!mfr || m.manufacturer.toLowerCase() === mfr.toLowerCase())
-            );
-            if (!modelMatches) cellModelFlagReason = CSV_UNKNOWN_FLAG_REASON;
-          }
           const voltageFlagReason =
             voltageApplies && !b.voltage.trim() ? CSV_FLAG_REASON : b.voltageFlagReason;
           return {
             ...b,
             manufacturerFlagReason,
-            cellModelFlagReason,
             voltageFlagReason,
           };
         })
@@ -2450,7 +2378,7 @@ export default function DepotFormPage() {
                 <>
                   {pendingCsvImport.issues.length} of {pendingCsvImport.rows.length} row(s) in your CSV are missing
                   or have unknown values for fields Itinium needs to price this
-                  collection (Manufacturer, Cell Model, Voltage). Apply a suggested
+                  collection (Manufacturer, Voltage). Apply a suggested
                   match where shown, go back and fix the CSV, or import anyway —
                   affected rows will be flagged for the Itinium team to review.
                 </>
