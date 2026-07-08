@@ -61,7 +61,6 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 
-const SAFE_LOAD_FACTOR = 1.35;
 
 interface CellModelOption {
   id: number;
@@ -941,7 +940,7 @@ export default function DepotFormPage() {
     if (looseCellsMissingWeight) {
       toast({
         title: "Missing weight for loose cells",
-        description: "Estimated weight is required for all loose cell rows. Please enter the total weight.",
+        description: "Weight could not be calculated for one or more loose cell rows. Please check the Cell Type and Cell Qty fields.",
         variant: "destructive",
       });
       return;
@@ -2077,54 +2076,6 @@ export default function DepotFormPage() {
                       />
                     </div>
                   )}
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-600">
-                      {battery.isLooseCells ? `Safe Load (kg) — net × ${SAFE_LOAD_FACTOR}, required` : `Safe Load (kg) — net × ${SAFE_LOAD_FACTOR}`}
-                    </label>
-                    <Input
-                      type="number"
-                      step="0.001"
-                      min="0"
-                      placeholder="Auto or enter manually"
-                      className={`h-10 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9] ${
-                        battery.estimatedWeightKg && !battery.weightManual
-                          ? "bg-emerald-50 border-emerald-200"
-                          : "bg-slate-50"
-                      }`}
-                      value={battery.estimatedWeightKg}
-                      onChange={(e) => {
-                        setBatteries((prev) =>
-                          prev.map((b) =>
-                            b.id === battery.id
-                              ? { ...b, estimatedWeightKg: e.target.value, weightManual: true }
-                              : b
-                          )
-                        );
-                      }}
-                    />
-                    {battery.estimatedWeightKg && !battery.weightManual && (
-                      <p className="text-[10px] text-emerald-600">Auto-populated from reference</p>
-                    )}
-                    {battery.weightManual && battery.cellType && (
-                      <button
-                        type="button"
-                        className="text-[10px] text-[#0ea5e9] hover:underline"
-                        onClick={() => {
-                          setBatteries((prev) =>
-                            prev.map((b) =>
-                              b.id === battery.id
-                                ? { ...b, weightManual: false, estimatedWeightKg: "" }
-                                : b
-                            )
-                          );
-                          computeAndSetAutoWeight({ ...battery, weightManual: false });
-                        }}
-                      >
-                        Reset to default
-                      </button>
-                    )}
-                  </div>
 
                   <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
                     <label className="text-xs font-medium text-slate-600">
