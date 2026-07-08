@@ -618,6 +618,27 @@ export default function DepotFormPage() {
 
           const normalizedCellType = rawCellType.trim();
 
+          const rawVoltage = colMap["voltage"] !== undefined ? (row[colMap["voltage"]] || "").trim() : "";
+          let normalizedVoltage = "";
+          let customVoltage = "";
+          if (rawVoltage) {
+            const numMatch = rawVoltage.match(/\d+(?:\.\d+)?/);
+            const num = numMatch ? parseFloat(numMatch[0]) : NaN;
+            const canonical =
+              !isNaN(num) && Number.isInteger(num)
+                ? VOLTAGE_VALUES.find((v) => parseInt(v, 10) === num)
+                : undefined;
+            if (canonical) {
+              normalizedVoltage = canonical;
+            } else if (!isNaN(num) && num > 0) {
+              normalizedVoltage = "Other";
+              customVoltage = `${num}V`;
+            } else {
+              normalizedVoltage = "Other";
+              customVoltage = rawVoltage;
+            }
+          }
+
           return {
             id: crypto.randomUUID(),
             palletNumber: lastPalletNumber,
@@ -627,8 +648,8 @@ export default function DepotFormPage() {
             manufactureCustom: "",
             cellType: normalizedCellType,
             cellModel: "",
-            voltage: colMap["voltage"] !== undefined ? row[colMap["voltage"]] || "" : "",
-            customVoltage: "",
+            voltage: normalizedVoltage,
+            customVoltage,
             looseCellsQty: looseQty,
             estimatedWeightKg: colMap["estimatedWeightKg"] !== undefined ? row[colMap["estimatedWeightKg"]] || "" : "",
             weightManual: !!(colMap["estimatedWeightKg"] !== undefined && row[colMap["estimatedWeightKg"]]),
