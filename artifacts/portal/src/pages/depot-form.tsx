@@ -934,13 +934,15 @@ export default function DepotFormPage() {
       return;
     }
 
-    const looseCellsMissingWeight = batteries.some(
-      (b) => b.isLooseCells && (!b.estimatedWeightKg || parseFloat(b.estimatedWeightKg) <= 0)
+    const looseCellsMissingInputs = batteries.some(
+      (b) =>
+        b.isLooseCells &&
+        (!b.cellType.trim() || !b.looseCellsQty.trim() || parseInt(b.looseCellsQty, 10) <= 0)
     );
-    if (looseCellsMissingWeight) {
+    if (looseCellsMissingInputs) {
       toast({
-        title: "Missing weight for loose cells",
-        description: "Weight could not be calculated for one or more loose cell rows. Please check the Cell Type and Cell Qty fields.",
+        title: "Missing details for loose cells",
+        description: "Please complete the Cell Type and Cell Qty fields for all loose cell rows.",
         variant: "destructive",
       });
       return;
