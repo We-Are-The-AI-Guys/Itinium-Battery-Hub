@@ -88,8 +88,6 @@ interface BatteryRow {
   weightManual: boolean;
   notes: string;
   isLooseCells: boolean;
-  serialFlagged: boolean;
-  serialFlagReason: string;
   manufacturerFlagReason: string;
   cellModelFlagReason: string;
   voltageFlagReason: string;
@@ -148,8 +146,6 @@ function createEmptyBattery(): BatteryRow {
     weightManual: false,
     notes: "",
     isLooseCells: false,
-    serialFlagged: false,
-    serialFlagReason: "",
     manufacturerFlagReason: "",
     cellModelFlagReason: "",
     voltageFlagReason: "",
@@ -533,8 +529,6 @@ export default function DepotFormPage() {
         id: crypto.randomUUID(),
         assetNumber: "",
         batterySerial: "",
-        serialFlagged: false,
-        serialFlagReason: "",
         rowPhoto: "",
       };
       const idx = prev.findIndex((b) => b.id === id);
@@ -654,8 +648,6 @@ export default function DepotFormPage() {
             weightManual: !!(colMap["estimatedWeightKg"] !== undefined && row[colMap["estimatedWeightKg"]]),
             notes: colMap["notes"] !== undefined ? row[colMap["notes"]] || "" : "",
             isLooseCells: !!(looseQty && parseInt(looseQty, 10) > 0),
-            serialFlagged: false,
-            serialFlagReason: "",
             manufacturerFlagReason: "",
             cellModelFlagReason: "",
             voltageFlagReason: "",
@@ -911,7 +903,7 @@ export default function DepotFormPage() {
 
   async function onSubmit() {
     const hasAtLeastOneIdentifier = batteries.some(
-      (b) => b.batterySerial.trim() || b.assetNumber.trim() || b.serialFlagged
+      (b) => b.batterySerial.trim() || b.assetNumber.trim()
     );
     if (!hasAtLeastOneIdentifier) {
       toast({
@@ -943,18 +935,6 @@ export default function DepotFormPage() {
       toast({
         title: "Missing details for loose cells",
         description: "Please complete the Cell Type and Cell Qty fields for all loose cell rows.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const flaggedMissingPhoto = batteries.some(
-      (b) => b.serialFlagged && b.serialFlagReason !== "N/A (no serial fitted)" && !b.rowPhoto
-    );
-    if (flaggedMissingPhoto) {
-      toast({
-        title: "Photo required",
-        description: "A photo is required for batteries with unknown or damaged serial numbers.",
         variant: "destructive",
       });
       return;
@@ -1059,14 +1039,14 @@ export default function DepotFormPage() {
           batteries: validatedBatteries.map((b) => ({
             palletNumber: b.palletNumber || null,
             assetNumber: b.assetNumber || null,
-            batterySerial: b.serialFlagged ? (b.serialFlagReason || "Unknown") : (b.batterySerial || null),
+            batterySerial: b.batterySerial || null,
             manufacture: b.manufacture === "Other" ? (b.manufactureCustom || "Other") : (b.manufacture || null),
             cellType: b.cellModel || b.cellType || null,
             voltage: b.isLooseCells ? null : ((b.voltage === "Other" ? b.customVoltage : b.voltage) || null),
             looseCellsQty: b.looseCellsQty || null,
             estimatedWeightKg: b.estimatedWeightKg || null,
             isLooseCells: b.isLooseCells,
-            serialFlagReason: b.serialFlagged ? (b.serialFlagReason || null) : null,
+            serialFlagReason: null,
             manufacturerFlagReason: b.manufacturerFlagReason || null,
             cellModelFlagReason: b.cellModelFlagReason || null,
             voltageFlagReason: b.isLooseCells ? null : (b.voltageFlagReason || null),
@@ -1419,7 +1399,7 @@ export default function DepotFormPage() {
 
           <div className="divide-y divide-slate-100">
             {batteries.map((battery, index) => {
-              const hasAnyFlag = battery.serialFlagged || !!battery.manufacturerFlagReason || !!battery.cellModelFlagReason || !!battery.voltageFlagReason;
+              const hasAnyFlag = !!battery.manufacturerFlagReason || !!battery.cellModelFlagReason || !!battery.voltageFlagReason;
               return (
               <div
                 key={battery.id}
@@ -1507,76 +1487,12 @@ export default function DepotFormPage() {
                       </div>
                       <Input
                         placeholder="e.g., BSN-ABCD-001"
-                        className={`pl-9 h-10 border-slate-200 text-sm focus-visible:ring-[#0ea5e9] ${battery.serialFlagged ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-slate-50 text-[#1e293b]"}`}
-                        value={battery.serialFlagged ? (battery.serialFlagReason || "Flagged") : battery.batterySerial}
+                        className="pl-9 h-10 border-slate-200 text-sm focus-visible:ring-[#0ea5e9] bg-slate-50 text-[#1e293b]"
+                        value={battery.batterySerial}
                         onChange={(e) => updateBattery(battery.id, "batterySerial", e.target.value)}
-                        disabled={battery.serialFlagged}
                       />
                     </div>
-                    {!battery.serialFlagged ? (
-                      <button
-                        type="button"
-                        className="text-[10px] text-amber-600 hover:text-amber-800 hover:underline flex items-center gap-1"
-                        onClick={() => {
-                          setBatteries((prev) =>
-                            prev.map((b) =>
-                              b.id === battery.id
-                                ? { ...b, serialFlagged: true, serialFlagReason: "Unknown serial", batterySerial: "" }
-                                : b
-                            )
-                          );
-                        }}
-                      >
-                        <AlertTriangle className="w-3 h-3" />
-                        Serial unknown or damaged?
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="text-[10px] text-[#0ea5e9] hover:underline"
-                        onClick={() => {
-                          setBatteries((prev) =>
-                            prev.map((b) =>
-                              b.id === battery.id
-                                ? { ...b, serialFlagged: false, serialFlagReason: "", rowPhoto: "" }
-                                : b
-                            )
-                          );
-                        }}
-                      >
-                        Clear flag — enter serial manually
-                      </button>
-                    )}
                   </div>
-
-                  {battery.serialFlagged && (
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-amber-700">
-                        Reason
-                      </label>
-                      <Select
-                        value={battery.serialFlagReason}
-                        onValueChange={(val) => {
-                          setBatteries((prev) =>
-                            prev.map((b) =>
-                              b.id === battery.id
-                                ? { ...b, serialFlagReason: val }
-                                : b
-                            )
-                          );
-                        }}
-                      >
-                        <SelectTrigger className="h-10 bg-amber-50 border-amber-200 text-sm text-amber-900 focus:ring-amber-400">
-                          <SelectValue placeholder="Select reason..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Unknown serial">Unknown serial</SelectItem>
-                          <SelectItem value="Damaged — unreadable">Damaged — unreadable</SelectItem>
-                          <SelectItem value="N/A (no serial fitted)">N/A (no serial fitted)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
 
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-slate-600">
@@ -2092,12 +2008,9 @@ export default function DepotFormPage() {
                   </div>
 
                   <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
-                    <label className={`text-xs font-medium ${battery.serialFlagged && battery.serialFlagReason !== "N/A (no serial fitted)" ? "text-amber-700" : "text-slate-600"}`}>
-                      Row Photo {battery.serialFlagged && battery.serialFlagReason !== "N/A (no serial fitted)" && "(Required)"}
+                    <label className="text-xs font-medium text-slate-600">
+                      Row Photo
                     </label>
-                    {battery.serialFlagged && battery.serialFlagReason !== "N/A (no serial fitted)" && !battery.rowPhoto && (
-                      <p className="text-[10px] text-amber-600">A photo is required for batteries without a readable serial number</p>
-                    )}
                     {battery.rowPhoto ? (
                       <div className="flex items-center gap-3">
                         <div className="relative w-16 h-16 rounded-lg bg-slate-200 border border-slate-300 group overflow-hidden">
@@ -2147,11 +2060,7 @@ export default function DepotFormPage() {
                           };
                           input.click();
                         }}
-                        className={`flex items-center gap-2 px-4 py-2.5 border-2 border-dashed rounded-lg text-sm transition-colors ${
-                          battery.serialFlagged && battery.serialFlagReason !== "N/A (no serial fitted)"
-                            ? "border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700"
-                            : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500"
-                        }`}
+                        className="flex items-center gap-2 px-4 py-2.5 border-2 border-dashed rounded-lg text-sm transition-colors border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-500"
                       >
                         <Camera className="w-4 h-4" />
                         Upload Photo
