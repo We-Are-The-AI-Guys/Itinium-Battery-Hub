@@ -609,7 +609,36 @@ export default function DepotFormPage() {
             if (canonical) normalizedMfr = canonical;
           }
 
-          const normalizedCellType = rawCellType.trim();
+          const rawCellTrim = rawCellType.trim();
+          let normalizedCellType = rawCellTrim;
+          let normalizedCellModel = "";
+          if (rawCellTrim) {
+            const normCell = normalizeForMatch(rawCellTrim);
+            const modelMatches = cellModels.filter(
+              (m) => normalizeForMatch(m.modelName) === normCell
+            );
+            const preferred =
+              modelMatches.find(
+                (m) =>
+                  normalizedMfr &&
+                  m.manufacturer.toLowerCase() === normalizedMfr.toLowerCase()
+              ) || modelMatches[0];
+            if (preferred) {
+              normalizedCellModel = preferred.modelName;
+              normalizedCellType = preferred.cellFamily;
+            } else {
+              const familyMatch = cellModels.find(
+                (m) => normalizeForMatch(m.cellFamily) === normCell
+              );
+              if (familyMatch) {
+                normalizedCellType = familyMatch.cellFamily;
+              } else if (normCell === "blocs") {
+                normalizedCellType = "Blocs";
+              } else if (normCell === "other") {
+                normalizedCellType = "Other";
+              }
+            }
+          }
 
           const rawVoltage = colMap["voltage"] !== undefined ? (row[colMap["voltage"]] || "").trim() : "";
           let normalizedVoltage = "";
@@ -640,7 +669,7 @@ export default function DepotFormPage() {
             manufacture: normalizedMfr,
             manufactureCustom: "",
             cellType: normalizedCellType,
-            cellModel: "",
+            cellModel: normalizedCellModel,
             voltage: normalizedVoltage,
             customVoltage,
             looseCellsQty: looseQty,
