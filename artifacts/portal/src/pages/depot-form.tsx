@@ -328,6 +328,8 @@ export default function DepotFormPage() {
   const [manufacturerAliases, setManufacturerAliases] = useState<Record<string, string>>({});
   const [mfrPopoverOpen, setMfrPopoverOpen] = useState<Record<string, boolean>>({});
   const [cellModels, setCellModels] = useState<CellModelOption[]>([]);
+  const [cellModelsStatus, setCellModelsStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [queuedCsvFile, setQueuedCsvFile] = useState<File | null>(null);
   const [collectionPointPresets, setCollectionPointPresets] = useState<CollectionPointPreset[]>([]);
   const [showCPDropdown, setShowCPDropdown] = useState(false);
   const cpInputRef = useRef<HTMLInputElement>(null);
@@ -403,13 +405,23 @@ export default function DepotFormPage() {
     }
   }, []);
 
+  async function loadCellModels(): Promise<boolean> {
+    setCellModelsStatus("loading");
+    try {
+      const res = await fetch("/api/cell-models", { credentials: "include" });
+      if (!res.ok) throw new Error(`Failed to load cell models (${res.status})`);
+      const data = await res.json();
+      setCellModels(data?.models || []);
+      setCellModelsStatus("ready");
+      return true;
+    } catch {
+      setCellModelsStatus("error");
+      return false;
+    }
+  }
+
   useEffect(() => {
-    fetch("/api/cell-models", { credentials: "include" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.models) setCellModels(data.models);
-      })
-      .catch(() => {});
+    loadCellModels();
 
     function handleClickOutside(e: MouseEvent) {
       if (
@@ -549,6 +561,23 @@ export default function DepotFormPage() {
   }
 
   function handleCsvImport(file: File) {
+    if (cellModelsStatus === "loading") {
+      setQueuedCsvFile(file);
+      toast({
+        title: "Preparing import",
+        description: "Waiting for the cell model catalogue to finish loading — your file will be imported automatically.",
+      });
+      return;
+    }
+    if (cellModelsStatus === "error") {
+      setQueuedCsvFile(file);
+      toast({
+        title: "Retrying catalogue load",
+        description: "The cell model catalogue failed to load earlier. Retrying before importing your file…",
+      });
+      loadCellModels();
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       try {
@@ -698,6 +727,23 @@ export default function DepotFormPage() {
     };
     reader.readAsText(file);
   }
+
+  useEffect(() => {
+    if (!queuedCsvFile) return;
+    if (cellModelsStatus === "ready") {
+      const file = queuedCsvFile;
+      setQueuedCsvFile(null);
+      handleCsvImport(file);
+    } else if (cellModelsStatus === "error") {
+      setQueuedCsvFile(null);
+      toast({
+        title: "Cell model catalogue unavailable",
+        description:
+          "The cell model catalogue could not be loaded, so imported rows would be missing weights. The import was cancelled — please check your connection and try again.",
+        variant: "destructive",
+      });
+    }
+  }, [cellModelsStatus, queuedCsvFile]);
 
   function validateImportRows(rows: BatteryRow[]) {
     const knownManufacturers = manufacturers.filter((m) => m.toLowerCase() !== "other");
