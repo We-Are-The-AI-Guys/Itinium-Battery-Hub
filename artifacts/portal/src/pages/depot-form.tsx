@@ -316,7 +316,7 @@ export default function DepotFormPage() {
       rowId: string;
       fields: {
         label: string;
-        target?: "manufacture" | "cellModel";
+        target: "manufacture" | "cellModel" | "voltage";
         suggestion?: string;
       }[];
     }[];
@@ -769,33 +769,55 @@ export default function DepotFormPage() {
     const issues: {
       rowNum: number;
       rowId: string;
-      fields: { label: string; target?: "manufacture" | "cellModel"; suggestion?: string }[];
+      fields: { label: string; target: "manufacture" | "cellModel" | "voltage"; suggestion?: string }[];
     }[] = [];
     rows.forEach((b, i) => {
-      const fields: { label: string; target?: "manufacture" | "cellModel"; suggestion?: string }[] = [];
+      const fields: { label: string; target: "manufacture" | "cellModel" | "voltage"; suggestion?: string }[] = [];
       const voltageApplies = !b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other";
       if (!b.manufacture.trim()) {
-        fields.push({ label: "Manufacturer" });
+        fields.push({ label: "Manufacturer is missing", target: "manufacture" });
       } else if (knownManufacturers.length > 0 && !knownManufacturersLower.has(b.manufacture.trim().toLowerCase())) {
         fields.push({
-          label: `Unknown manufacturer "${b.manufacture.trim()}"`,
+          label: `We don't recognise the manufacturer "${b.manufacture.trim()}"`,
           target: "manufacture",
           suggestion: findClosestMatch(b.manufacture, knownManufacturers) ?? undefined,
         });
       }
-      if (voltageApplies && !b.voltage.trim()) fields.push({ label: "Voltage" });
+      const cellTypeTrim = b.cellType.trim();
+      if (
+        cellTypeTrim &&
+        cellTypeTrim !== "Blocs" &&
+        cellTypeTrim !== "Other" &&
+        cellModels.length > 0 &&
+        !cellModels.some((m) => m.cellFamily.toLowerCase() === cellTypeTrim.toLowerCase()) &&
+        !cellModels.some((m) => m.modelName.toLowerCase() === cellTypeTrim.toLowerCase()) &&
+        !(b.cellModel.trim() && cellModels.some((m) => m.modelName.toLowerCase() === b.cellModel.trim().toLowerCase()))
+      ) {
+        const modelNames = Array.from(new Set(cellModels.map((m) => m.modelName)));
+        fields.push({
+          label: `We don't recognise the cell type "${cellTypeTrim}"`,
+          target: "cellModel",
+          suggestion: findClosestMatch(cellTypeTrim, modelNames) ?? undefined,
+        });
+      }
+      if (voltageApplies && !b.voltage.trim()) {
+        fields.push({ label: "Voltage is missing", target: "voltage" });
+      }
       if (fields.length > 0) issues.push({ rowNum: i + 2, rowId: b.id, fields });
     });
     return issues;
   }
 
-  function applyCsvSuggestion(rowId: string, target: "manufacture" | "cellModel", value: string) {
+  function applyCsvSuggestion(rowId: string, target: "manufacture" | "cellModel" | "voltage", value: string) {
     setPendingCsvImport((prev) => {
       if (!prev) return prev;
       const updatedRows = prev.rows.map((r) => {
         if (r.id !== rowId) return r;
         if (target === "manufacture") {
           return { ...r, manufacture: value, manufactureCustom: "" };
+        }
+        if (target === "voltage") {
+          return { ...r, voltage: value, customVoltage: "" };
         }
         const mfr = r.manufacture.trim();
         const matchedModel =
@@ -836,9 +858,23 @@ export default function DepotFormPage() {
           }
           const voltageFlagReason =
             voltageApplies && !b.voltage.trim() ? CSV_FLAG_REASON : b.voltageFlagReason;
+          const cellTypeTrim = b.cellType.trim();
+          let cellModelFlagReason = b.cellModelFlagReason;
+          if (
+            cellTypeTrim &&
+            cellTypeTrim !== "Blocs" &&
+            cellTypeTrim !== "Other" &&
+            cellModels.length > 0 &&
+            !cellModels.some((m) => m.cellFamily.toLowerCase() === cellTypeTrim.toLowerCase()) &&
+            !cellModels.some((m) => m.modelName.toLowerCase() === cellTypeTrim.toLowerCase()) &&
+            !(b.cellModel.trim() && cellModels.some((m) => m.modelName.toLowerCase() === b.cellModel.trim().toLowerCase()))
+          ) {
+            cellModelFlagReason = CSV_UNKNOWN_FLAG_REASON;
+          }
           return {
             ...b,
             manufacturerFlagReason,
+            cellModelFlagReason,
             voltageFlagReason,
           };
         })
@@ -2353,51 +2389,102 @@ export default function DepotFormPage() {
               {pendingCsvImport && (
                 <>
                   {pendingCsvImport.issues.length} of {pendingCsvImport.rows.length} row(s) in your CSV are missing
-                  or have unknown values for fields Itinium needs to price this
-                  collection (Manufacturer, Voltage). Apply a suggested
-                  match where shown, go back and fix the CSV, or import anyway —
-                  affected rows will be flagged for the Itinium team to review.
+                  some details we need to price this collection. You can fill
+                  them in right here — each row disappears from this list once
+                  it's complete, and the import finishes automatically. If
+                  you're not sure about something, you can still import anyway
+                  and the Itinium team will review it.
                 </>
               )}
             </DialogDescription>
           </DialogHeader>
 
           {pendingCsvImport && (
-            <div className="max-h-72 overflow-y-auto border border-amber-200 rounded-md bg-amber-50/40">
-              <table className="w-full text-sm">
-                <thead className="bg-amber-100/60 text-xs text-amber-900 sticky top-0">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-semibold">CSV Row</th>
-                    <th className="px-3 py-2 text-left font-semibold">Missing or unknown fields</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-amber-100">
-                  {pendingCsvImport.issues.map((issue) => (
-                    <tr key={issue.rowNum}>
-                      <td className="px-3 py-2 text-amber-900 font-mono text-xs align-top">#{issue.rowNum}</td>
-                      <td className="px-3 py-2 text-amber-800">
-                        <ul className="space-y-1">
-                          {issue.fields.map((f, idx) => (
-                            <li key={idx} className="flex flex-wrap items-center gap-2">
-                              <span>{f.label}</span>
-                              {f.target && f.suggestion && (
-                                <button
-                                  type="button"
-                                  className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0ea5e9] hover:text-[#0284c7] hover:underline"
-                                  onClick={() => applyCsvSuggestion(issue.rowId, f.target!, f.suggestion!)}
-                                  data-testid={`button-csv-suggestion-${issue.rowNum}-${f.target}`}
+            <div className="max-h-[50vh] overflow-y-auto border border-amber-200 rounded-md bg-amber-50/40 divide-y divide-amber-100">
+              {pendingCsvImport.issues.map((issue) => {
+                const row = pendingCsvImport.rows.find((r) => r.id === issue.rowId);
+                return (
+                  <div key={issue.rowId} className="px-3 py-3">
+                    <p className="text-xs font-semibold text-amber-900 mb-2">
+                      CSV row #{issue.rowNum}
+                      {row?.batterySerial ? (
+                        <span className="font-normal text-amber-700"> — serial {row.batterySerial}</span>
+                      ) : null}
+                    </p>
+                    <div className="space-y-2">
+                      {issue.fields.map((f, idx) => (
+                        <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+                          <span className="text-xs text-amber-800 sm:w-56 flex-shrink-0">{f.label}</span>
+                          <div className="flex-1 min-w-0 max-w-xs">
+                            {f.target === "manufacture" && (
+                              <Select
+                                onValueChange={(v) => applyCsvSuggestion(issue.rowId, "manufacture", v)}
+                              >
+                                <SelectTrigger
+                                  className="h-9 bg-white text-sm"
+                                  data-testid={`select-csv-fix-manufacturer-${issue.rowNum}`}
                                 >
-                                  Did you mean: {f.suggestion}?
-                                </button>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                                  <SelectValue placeholder="Choose a manufacturer..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {manufacturers
+                                    .filter((m) => m.toLowerCase() !== "other")
+                                    .map((m) => (
+                                      <SelectItem key={m} value={m}>
+                                        {m}
+                                      </SelectItem>
+                                    ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            {f.target === "cellModel" && (
+                              <div data-testid={`combobox-csv-fix-cellmodel-${issue.rowNum}`}>
+                                <CellModelCombobox
+                                  cellModels={cellModels}
+                                  manufacturer={row?.manufacture ?? ""}
+                                  value=""
+                                  onChange={(v, isModel) => {
+                                    if (isModel) applyCsvSuggestion(issue.rowId, "cellModel", v);
+                                  }}
+                                />
+                              </div>
+                            )}
+                            {f.target === "voltage" && (
+                              <Select
+                                onValueChange={(v) => applyCsvSuggestion(issue.rowId, "voltage", v)}
+                              >
+                                <SelectTrigger
+                                  className="h-9 bg-white text-sm"
+                                  data-testid={`select-csv-fix-voltage-${issue.rowNum}`}
+                                >
+                                  <SelectValue placeholder="Choose a voltage..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {VOLTAGE_VALUES.map((v) => (
+                                    <SelectItem key={v} value={v}>
+                                      {v}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </div>
+                          {f.suggestion && (
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0ea5e9] hover:text-[#0284c7] hover:underline flex-shrink-0"
+                              onClick={() => applyCsvSuggestion(issue.rowId, f.target, f.suggestion!)}
+                              data-testid={`button-csv-suggestion-${issue.rowNum}-${f.target}`}
+                            >
+                              Did you mean: {f.suggestion}?
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 

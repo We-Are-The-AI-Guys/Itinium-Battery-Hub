@@ -183,7 +183,7 @@ describe("CSV import when the cell-model catalogue fails to load", () => {
 
     await uploadCsvViaButton();
 
-    await screen.findByText("Retrying catalogue load");
+    await screen.findByText("Retrying data load");
 
     await waitFor(() => {
       expect(cellModelDeferreds.length).toBeGreaterThanOrEqual(2);
@@ -192,7 +192,7 @@ describe("CSV import when the cell-model catalogue fails to load", () => {
       cellModelDeferreds[1].resolve(jsonResponse(500, { message: "boom" }));
     });
 
-    const errorTitle = await screen.findByText("Cell model catalogue unavailable");
+    const errorTitle = await screen.findByText("Reference data unavailable");
     expect(
       screen.getByText(/The import was cancelled/)
     ).toBeInTheDocument();
