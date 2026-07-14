@@ -153,6 +153,8 @@ function createEmptyBattery(): BatteryRow {
   };
 }
 
+const SAFE_LOAD_FACTOR = 1.4;
+
 const CSV_TEMPLATE_HEADERS = "Pallet Number,Asset No,Battery Serial,Manufacturer,Loose Cells Qty,Voltage,Cell Type,Notes";
 
 const CSV_FLAG_REASON = "Missing from CSV import";
@@ -529,6 +531,51 @@ export default function DepotFormPage() {
       prev.map((b) => (b.id === battery.id && !b.weightManual ? { ...b, estimatedWeightKg: weight } : b))
     );
   }
+
+  function canComputeWeight(b: BatteryRow): boolean {
+    if (b.isLooseCells) {
+      return !!(b.cellType && b.looseCellsQty && parseInt(b.looseCellsQty, 10) > 0);
+    }
+    if (b.cellType === "Blocs") return !!(b.looseCellsQty && parseInt(b.looseCellsQty, 10) > 0);
+    if (b.cellType === "Other") return true;
+    if (b.cellModel && b.voltage) return cellModels.length > 0;
+    if (b.cellType && b.voltage) {
+      return b.voltage !== "Other" || !!b.customVoltage;
+    }
+    return false;
+  }
+
+  function weightSignature(b: BatteryRow): string {
+    return [
+      b.isLooseCells ? 1 : 0,
+      b.cellType,
+      b.cellModel,
+      b.voltage,
+      b.customVoltage,
+      b.looseCellsQty,
+      b.manufacture,
+      b.manufactureCustom,
+      cellModels.length,
+    ].join("|");
+  }
+
+  const weightRetryAttempt = useRef<Record<string, string>>({});
+
+  // Safety net: if a row is fully specified but its auto weight never resolved
+  // (e.g. a lookup raced an edit, failed transiently, or fired before the
+  // cell-model catalogue loaded), re-trigger the lookup so no completed row
+  // silently contributes zero to the total load.
+  useEffect(() => {
+    for (const b of batteries) {
+      if (b.weightManual || b.estimatedWeightKg) continue;
+      if (!canComputeWeight(b)) continue;
+      const sig = weightSignature(b);
+      if (weightRetryAttempt.current[b.id] === sig) continue;
+      weightRetryAttempt.current[b.id] = sig;
+      computeAndSetAutoWeight(b);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batteries, cellModels]);
 
   function getSelectedLocationName(): string {
     if (selectedLocationId) {
@@ -1069,6 +1116,23 @@ export default function DepotFormPage() {
       return;
     }
 
+    const rowsMissingWeight = batteries
+      .map((b, i) => ({ b, i }))
+      .filter(({ b }) => {
+        const w = parseFloat(b.estimatedWeightKg);
+        return !(isFinite(w) && w > 0);
+      });
+    if (rowsMissingWeight.length > 0) {
+      toast({
+        title: "Missing battery weight",
+        description: `No estimated weight for row${rowsMissingWeight.length > 1 ? "s" : ""} ${rowsMissingWeight
+          .map(({ i }) => i + 1)
+          .join(", ")}. Please complete the battery details or enter the weight manually so the load total is accurate.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (currentLoad < minTonnage) {
       toast({
         title: "Below minimum tonnage",
@@ -1283,7 +1347,7 @@ export default function DepotFormPage() {
     const w = parseFloat(b.estimatedWeightKg);
     return sum + (isNaN(w) ? 0 : w);
   }, 0);
-  const autoTonnage = totalWeightKg / 1000;
+  const autoTonnage = (totalWeightKg * SAFE_LOAD_FACTOR) / 1000;
   const currentLoad = tonnageManual && tonnageOverride ? parseFloat(tonnageOverride) || 0 : autoTonnage;
   const minTonnage = 9.5;
   const maxCapacity = 26.0;
@@ -1361,7 +1425,7 @@ export default function DepotFormPage() {
           </div>
           {loadState === "red-low" && (
             <p className="text-xs font-medium text-red-700 mb-2">
-              Below minimum {targetMin}t (grace from {minTonnage}t). Cannot submit until at least {minTonnage}t.
+              This load is currently under 10 tonnes, so a transportation charge will apply. For clarification or assistance please contact the Itinium team.
             </p>
           )}
           {loadState === "red-high" && (
@@ -1405,6 +1469,9 @@ export default function DepotFormPage() {
               Max: {maxCapacity}t
             </p>
           </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Includes 1.4&times; safe vehicle loading factor
+          </p>
         </section>
 
         <section
@@ -2264,7 +2331,7 @@ export default function DepotFormPage() {
           ) : (
             <div className="flex items-center gap-3">
               <span className="text-2xl font-bold text-[#0f2744]">{autoTonnage.toFixed(3)}t</span>
-              <span className="text-sm text-emerald-600">Auto-calculated from battery weights</span>
+              <span className="text-sm text-emerald-600">Auto-calculated from battery weights (includes 1.4&times; safe vehicle loading factor)</span>
             </div>
           )}
         </section>

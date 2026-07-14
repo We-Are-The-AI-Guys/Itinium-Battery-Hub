@@ -12,7 +12,7 @@ import { notifyAdminsNewJob, notifyAdminsFlaggedBatteries, notifySubmitterStatus
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
 
-const SAFE_LOAD_FACTOR = 1.35;
+const SAFE_LOAD_FACTOR = 1.4;
 
 const router: IRouter = Router();
 

@@ -164,7 +164,7 @@ describe("CSV import while the cell-model catalogue is still loading", () => {
     ).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getAllByText(/0\.239t/).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/0\.334t/).length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.queryByText(/^0\.000t/)).not.toBeInTheDocument();
   });
