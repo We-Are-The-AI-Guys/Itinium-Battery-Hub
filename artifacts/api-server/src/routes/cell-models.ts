@@ -6,10 +6,43 @@ import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewa
 
 const router: IRouter = Router();
 
+const testHooksEnabled = process.env.NODE_ENV !== "production";
+let catalogueTestMode: { mode: "normal" | "delay" | "error"; delayMs: number; expiresAt: number } = {
+  mode: "normal",
+  delayMs: 0,
+  expiresAt: 0,
+};
+
+if (testHooksEnabled) {
+  router.post("/cell-models/__test-mode", requireAuth, (req, res) => {
+    const { mode, delayMs } = req.body || {};
+    if (mode !== "normal" && mode !== "delay" && mode !== "error") {
+      res.status(400).json({ message: "mode must be one of: normal, delay, error" });
+      return;
+    }
+    catalogueTestMode = {
+      mode,
+      delayMs: Math.min(Math.max(Number(delayMs) || 0, 0), 30000),
+      expiresAt: mode === "normal" ? 0 : Date.now() + 60000,
+    };
+    res.json({ ok: true, testMode: catalogueTestMode });
+  });
+}
+
 router.get(
   "/cell-models",
   requireAuth,
   async (req: AuthenticatedRequest, res) => {
+    if (testHooksEnabled && catalogueTestMode.mode !== "normal") {
+      if (Date.now() > catalogueTestMode.expiresAt) {
+        catalogueTestMode = { mode: "normal", delayMs: 0, expiresAt: 0 };
+      } else if (catalogueTestMode.mode === "error") {
+        res.status(500).json({ message: "Simulated catalogue failure (test mode)" });
+        return;
+      } else if (catalogueTestMode.mode === "delay") {
+        await new Promise((resolve) => setTimeout(resolve, catalogueTestMode.delayMs));
+      }
+    }
     try {
       const { search, family, manufacturer } = req.query;
       let query = db.select().from(cellModelsTable).$dynamic();
