@@ -326,6 +326,7 @@ export default function DepotFormPage() {
   const [tonnageManual, setTonnageManual] = useState(false);
   const [manufacturers, setManufacturers] = useState<string[]>(DEFAULT_MANUFACTURERS);
   const [manufacturerAliases, setManufacturerAliases] = useState<Record<string, string>>({});
+  const [manufacturersStatus, setManufacturersStatus] = useState<"loading" | "ready" | "error">("loading");
   const [mfrPopoverOpen, setMfrPopoverOpen] = useState<Record<string, boolean>>({});
   const [cellModels, setCellModels] = useState<CellModelOption[]>([]);
   const [cellModelsStatus, setCellModelsStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -365,13 +366,7 @@ export default function DepotFormPage() {
         }
       })
       .catch(() => {});
-    fetch("/api/manufacturers", { credentials: "include" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.manufacturers?.length) setManufacturers(data.manufacturers);
-        if (data?.aliases) setManufacturerAliases(data.aliases);
-      })
-      .catch(() => {});
+    loadManufacturers();
 
     fetch("/api/collection-points", { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
@@ -404,6 +399,22 @@ export default function DepotFormPage() {
         .catch(() => {});
     }
   }, []);
+
+  async function loadManufacturers(): Promise<boolean> {
+    setManufacturersStatus("loading");
+    try {
+      const res = await fetch("/api/manufacturers", { credentials: "include" });
+      if (!res.ok) throw new Error(`Failed to load manufacturers (${res.status})`);
+      const data = await res.json();
+      if (data?.manufacturers?.length) setManufacturers(data.manufacturers);
+      if (data?.aliases) setManufacturerAliases(data.aliases);
+      setManufacturersStatus("ready");
+      return true;
+    } catch {
+      setManufacturersStatus("error");
+      return false;
+    }
+  }
 
   async function loadCellModels(): Promise<boolean> {
     setCellModelsStatus("loading");
@@ -561,21 +572,22 @@ export default function DepotFormPage() {
   }
 
   function handleCsvImport(file: File) {
-    if (cellModelsStatus === "loading") {
+    if (cellModelsStatus === "loading" || manufacturersStatus === "loading") {
       setQueuedCsvFile(file);
       toast({
         title: "Preparing import",
-        description: "Waiting for the cell model catalogue to finish loading — your file will be imported automatically.",
+        description: "Waiting for reference data to finish loading — your file will be imported automatically.",
       });
       return;
     }
-    if (cellModelsStatus === "error") {
+    if (cellModelsStatus === "error" || manufacturersStatus === "error") {
       setQueuedCsvFile(file);
       toast({
-        title: "Retrying catalogue load",
-        description: "The cell model catalogue failed to load earlier. Retrying before importing your file…",
+        title: "Retrying data load",
+        description: "Some reference data failed to load earlier. Retrying before importing your file…",
       });
-      loadCellModels();
+      if (cellModelsStatus === "error") loadCellModels();
+      if (manufacturersStatus === "error") loadManufacturers();
       return;
     }
     const reader = new FileReader();
@@ -730,20 +742,26 @@ export default function DepotFormPage() {
 
   useEffect(() => {
     if (!queuedCsvFile) return;
-    if (cellModelsStatus === "ready") {
+    if (cellModelsStatus === "loading" || manufacturersStatus === "loading") return;
+    if (cellModelsStatus === "ready" && manufacturersStatus === "ready") {
       const file = queuedCsvFile;
       setQueuedCsvFile(null);
       handleCsvImport(file);
-    } else if (cellModelsStatus === "error") {
+    } else {
       setQueuedCsvFile(null);
+      const failed =
+        cellModelsStatus === "error" && manufacturersStatus === "error"
+          ? "The cell model catalogue and manufacturer list"
+          : cellModelsStatus === "error"
+            ? "The cell model catalogue"
+            : "The manufacturer list";
       toast({
-        title: "Cell model catalogue unavailable",
-        description:
-          "The cell model catalogue could not be loaded, so imported rows would be missing weights. The import was cancelled — please check your connection and try again.",
+        title: "Reference data unavailable",
+        description: `${failed} could not be loaded, so imported rows could be missing weights or wrongly flagged. The import was cancelled — please check your connection and try again.`,
         variant: "destructive",
       });
     }
-  }, [cellModelsStatus, queuedCsvFile]);
+  }, [cellModelsStatus, manufacturersStatus, queuedCsvFile]);
 
   function validateImportRows(rows: BatteryRow[]) {
     const knownManufacturers = manufacturers.filter((m) => m.toLowerCase() !== "other");
