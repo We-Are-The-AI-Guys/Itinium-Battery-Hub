@@ -13,9 +13,12 @@ async function bootstrap() {
   }
 
   try {
-    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_job_batteries_pallet_number ON job_batteries (pallet_number) WHERE pallet_number IS NOT NULL`);
+    // Pallet numbers are reused across collections and shared within a job,
+    // so they must not be globally unique. Drop the old index if present
+    // (self-heals production on next deploy).
+    await db.execute(sql`DROP INDEX IF EXISTS idx_job_batteries_pallet_number`);
   } catch (err) {
-    console.error("Bootstrap: failed to create pallet_number unique index:", err);
+    console.error("Bootstrap: failed to drop pallet_number unique index:", err);
   }
 
   try {

@@ -934,6 +934,21 @@ router.post(
       }
     } catch (error) {
       console.error("Job creation error:", error);
+      const pgErr = (error as { cause?: { code?: string; detail?: string; constraint?: string } })?.cause
+        ?? (error as { code?: string; detail?: string; constraint?: string });
+      if (pgErr?.code === "23505") {
+        const detailMatch = typeof pgErr.detail === "string"
+          ? pgErr.detail.match(/Key \((.+?)\)=\((.+?)\)/)
+          : null;
+        const fieldLabel = detailMatch
+          ? detailMatch[1].replace(/_/g, " ")
+          : "a value";
+        const message = detailMatch
+          ? `Submission failed: the ${fieldLabel} "${detailMatch[2]}" conflicts with an existing record. Please review and try again.`
+          : "Submission failed: a value in this submission conflicts with an existing record. Please review and try again.";
+        res.status(409).json({ message });
+        return;
+      }
       res.status(500).json({ message: "Internal server error" });
     }
   }
