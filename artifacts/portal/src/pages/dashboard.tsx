@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { Link, Redirect, useLocation } from "wouter";
-import { LogOut, Plus, Battery, TrendingUp, FileText, Trash2, Clock, ChevronRight } from "lucide-react";
+import { LogOut, Plus, Battery, TrendingUp, FileText, Trash2, Clock, ChevronRight, BookOpen, Settings, HelpCircle } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/auth-context";
+import { SupportModal } from "@/components/sidebar-layout";
 
 interface JobDraft {
   id: number;
@@ -34,6 +35,7 @@ export default function DashboardPage() {
   const [drafts, setDrafts] = useState<JobDraft[]>([]);
   const [deletingDraftId, setDeletingDraftId] = useState<number | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/job-drafts", { credentials: "include" })
@@ -87,6 +89,32 @@ export default function DashboardPage() {
             <span className="hidden sm:inline text-sm text-[#64748b] ml-2">Battery Collection Portal</span>
           </div>
           <div className="flex items-center gap-4">
+            <nav className="flex items-center gap-1">
+              <Link
+                href="/help"
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-[#475569] hover:text-[#0f2744] hover:bg-slate-100 rounded-md transition-colors"
+                data-testid="link-user-guide"
+              >
+                <BookOpen className="w-4 h-4" />
+                <span className="hidden md:inline">User Guide</span>
+              </Link>
+              <Link
+                href="/settings"
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-[#475569] hover:text-[#0f2744] hover:bg-slate-100 rounded-md transition-colors"
+                data-testid="link-settings"
+              >
+                <Settings className="w-4 h-4" />
+                <span className="hidden md:inline">Settings</span>
+              </Link>
+              <button
+                onClick={() => setSupportOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-[#475569] hover:text-[#0f2744] hover:bg-slate-100 rounded-md transition-colors"
+                data-testid="button-help-support"
+              >
+                <HelpCircle className="w-4 h-4" />
+                <span className="hidden md:inline">Help &amp; Support</span>
+              </button>
+            </nav>
             {user && (
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-[#0f2744] text-white flex items-center justify-center text-sm font-semibold" data-testid="text-user-initials">
@@ -230,6 +258,12 @@ export default function DashboardPage() {
           </div>
         )}
       </main>
+
+      <SupportModal
+        open={supportOpen}
+        onClose={() => setSupportOpen(false)}
+        user={user}
+      />
     </div>
   );
 }

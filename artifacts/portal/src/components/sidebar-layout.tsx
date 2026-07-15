@@ -62,6 +62,8 @@ function getNavItems(user: User | null): NavItem[] {
 
   if (role === "head_office_admin" || role === "accounts" || role === "team_leader") {
     items.push({ icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" });
+  } else {
+    items.push({ icon: LayoutDashboard, label: "Dashboard", path: "/" });
   }
 
   if (role === "head_office_admin" || role === "accounts" || role === "team_leader") {
@@ -135,7 +137,7 @@ interface SupportModalProps {
   user: User | null;
 }
 
-function SupportModal({ open, onClose, user }: SupportModalProps) {
+export function SupportModal({ open, onClose, user }: SupportModalProps) {
   const [issueType, setIssueType] = useState("Bug Report");
   const [priority, setPriority] = useState("P3");
   const [title, setTitle] = useState("");
@@ -501,6 +503,7 @@ export function SidebarLayout({
 
   function isActive(path: string) {
     if (path === "/dashboard") return location === "/dashboard" || location === "/" || location === "";
+    if (path === "/") return location === "/" || location === "";
     return location.startsWith(path);
   }
 
