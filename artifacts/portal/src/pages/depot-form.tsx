@@ -1469,9 +1469,6 @@ export default function DepotFormPage() {
               Max: {maxCapacity}t
             </p>
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-            Includes 1.4&times; safe vehicle loading factor
-          </p>
         </section>
 
         <section
@@ -2326,7 +2323,7 @@ export default function DepotFormPage() {
           ) : (
             <div className="flex items-center gap-3">
               <span className="text-2xl font-bold text-[#0f2744]">{autoTonnage.toFixed(3)}t</span>
-              <span className="text-sm text-emerald-600">Auto-calculated from battery weights (includes 1.4&times; safe vehicle loading factor)</span>
+              <span className="text-sm text-emerald-600">Auto-calculated from battery weights</span>
             </div>
           )}
         </section>
