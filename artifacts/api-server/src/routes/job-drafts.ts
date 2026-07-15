@@ -1,10 +1,35 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { jobDraftsTable, usersTable } from "@workspace/db/schema";
-import { eq, and, or, desc } from "drizzle-orm";
+import { jobDraftsTable, usersTable, locationsTable } from "@workspace/db/schema";
+import { eq, and, or, desc, isNull, inArray } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/auth";
 
 const router: IRouter = Router();
+
+// A draft belongs to a team leader's client if it is tagged with that client
+// directly, or — for legacy/unscoped drafts with no client — if the user who
+// saved it, or the location it references, belongs to that client.
+function teamLeaderDraftCondition(clientId: number) {
+  const clientSaverIds = db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.clientId, clientId));
+  const clientLocationIds = db
+    .select({ id: locationsTable.id })
+    .from(locationsTable)
+    .where(eq(locationsTable.clientId, clientId));
+
+  return or(
+    eq(jobDraftsTable.clientId, clientId),
+    and(
+      isNull(jobDraftsTable.clientId),
+      or(
+        inArray(jobDraftsTable.savedById, clientSaverIds),
+        inArray(jobDraftsTable.locationId, clientLocationIds)
+      )
+    )
+  );
+}
 
 router.get(
   "/job-drafts",
@@ -39,7 +64,7 @@ router.get(
         drafts = await db
           .select()
           .from(jobDraftsTable)
-          .where(eq(jobDraftsTable.clientId, user.clientId))
+          .where(teamLeaderDraftCondition(user.clientId))
           .orderBy(desc(jobDraftsTable.updatedAt));
       } else {
         drafts = await db
@@ -179,7 +204,25 @@ async function canUserAccessDraft(
 
   const role = user.role;
   if (role === "head_office_admin" || role === "accounts") return true;
-  if (role === "team_leader") return draft.clientId === user.clientId;
+  if (role === "team_leader") {
+    if (!user.clientId) return false;
+    if (draft.clientId === user.clientId) return true;
+    if (draft.clientId !== null) return false;
+    // Legacy/unscoped draft: fall back to the saver's client or the draft's location.
+    const [saver] = await db
+      .select({ clientId: usersTable.clientId })
+      .from(usersTable)
+      .where(eq(usersTable.id, draft.savedById));
+    if (saver?.clientId === user.clientId) return true;
+    if (draft.locationId !== null) {
+      const [loc] = await db
+        .select({ clientId: locationsTable.clientId })
+        .from(locationsTable)
+        .where(eq(locationsTable.id, draft.locationId));
+      if (loc?.clientId === user.clientId) return true;
+    }
+    return false;
+  }
   if (role === "depot_user") {
     return draft.depot === user.depot && draft.clientId === user.clientId;
   }
