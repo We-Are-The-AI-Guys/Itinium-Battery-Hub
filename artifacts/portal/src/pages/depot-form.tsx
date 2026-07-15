@@ -1845,7 +1845,7 @@ export default function DepotFormPage() {
 
                   <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
                     <label className="text-xs font-medium text-slate-600">
-                      Cell Type / Cell Model
+                      Cell Type
                     </label>
                     <CellModelCombobox
                       cellModels={cellModels}
@@ -1897,11 +1897,6 @@ export default function DepotFormPage() {
                         }
                       }}
                     />
-                    {battery.cellModel && (
-                      <p className="text-[10px] text-emerald-600">
-                        Cell model selected &mdash; weight = {(() => { const effMfr = battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture; return (cellModels.find(m => m.modelName === battery.cellModel && (!effMfr || m.manufacturer === effMfr)) || cellModels.find(m => m.modelName === battery.cellModel))?.weightPerCellKg || "?"; })()} kg/cell
-                      </p>
-                    )}
                     {battery.cellTypeOriginalValue && !battery.cellModelFlagReason && (
                       <div className="flex items-center gap-2 px-2.5 py-1.5 bg-sky-50 border border-sky-200 rounded-md mt-1">
                         <Lightbulb className="w-3 h-3 text-sky-500 flex-shrink-0" />

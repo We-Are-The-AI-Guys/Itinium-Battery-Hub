@@ -159,10 +159,6 @@ describe("CSV import while the cell-model catalogue is still loading", () => {
     });
     expect(screen.getByDisplayValue("EnerSys / Hawker")).toBeInTheDocument();
 
-    expect(
-      screen.getByText(/weight = 19\.900 kg\/cell/)
-    ).toBeInTheDocument();
-
     await waitFor(() => {
       expect(screen.getAllByText(/0\.334t/).length).toBeGreaterThanOrEqual(1);
     });
