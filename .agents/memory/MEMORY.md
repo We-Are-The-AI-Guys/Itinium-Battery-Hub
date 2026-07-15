@@ -1,1 +1,2 @@
 - [API server bootstrap applies hidden DDL](api-server-bootstrap-ddl.md) — constraint errors may come from startup-created indexes absent from Drizzle schema; check pg_indexes and index.ts bootstrap.
+- [API server restart staleness](api-server-restart-staleness.md) — first requests after restart may hit the old process; restart again/retry before assuming a code bug.

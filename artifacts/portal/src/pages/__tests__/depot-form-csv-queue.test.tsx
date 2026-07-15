@@ -101,7 +101,7 @@ function trackDynamicInputs() {
   );
 }
 
-async function uploadCsvViaButton() {
+async function uploadCsvViaButton(csvContent: string = CSV_CONTENT) {
   const uploadButton = screen.getByTestId("button-upload-csv");
   fireEvent.click(uploadButton);
 
@@ -110,7 +110,7 @@ async function uploadCsvViaButton() {
     .find((el) => el.type === "file" && !document.contains(el));
   expect(fileInput, "dynamically created file input").toBeTruthy();
 
-  const file = new File([CSV_CONTENT], "batteries.csv", { type: "text/csv" });
+  const file = new File([csvContent], "batteries.csv", { type: "text/csv" });
   Object.defineProperty(fileInput!, "files", { value: [file] });
   await act(async () => {
     fileInput!.onchange?.({ target: fileInput } as unknown as Event);
@@ -163,6 +163,36 @@ describe("CSV import while the cell-model catalogue is still loading", () => {
       expect(screen.getAllByText(/0\.334t/).length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.queryByText(/^0\.000t/)).not.toBeInTheDocument();
+  });
+});
+
+describe("CSV import with an empty Manufacturer column", () => {
+  it("imports the row, defaults the manufacturer to Unknown, and flags it for Itinium review", async () => {
+    renderPage();
+
+    await screen.findByTestId("button-upload-csv");
+    expect(cellModelDeferreds.length).toBeGreaterThanOrEqual(1);
+
+    const csv = [
+      "Pallet Number,Asset No,Battery Serial,Manufacturer,Cell Type,Voltage",
+      "P200,ASSET-UT2,SER-UT2,,4PzS460,24",
+    ].join("\n");
+    await uploadCsvViaButton(csv);
+
+    await screen.findByText("Preparing import");
+    await act(async () => {
+      cellModelDeferreds[0].resolve(jsonResponse(200, { models: CELL_MODELS }));
+    });
+
+    await screen.findByText("CSV imported");
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("SER-UT2")).toBeInTheDocument();
+    });
+    expect(screen.getByDisplayValue("Unknown")).toBeInTheDocument();
+    expect(
+      screen.getByText(/manufacturer missing from CSV, defaulted to TAB weights/i)
+    ).toBeInTheDocument();
   });
 });
 

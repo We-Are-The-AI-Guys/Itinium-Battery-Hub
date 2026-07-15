@@ -733,11 +733,12 @@ router.post(
 
       for (const b of batteryInputs) {
         const mfrStr = (b.manufacture || "").trim();
+        const isUnknownMfr = mfrStr.toLowerCase() === "unknown";
         const cellTypeStr = (b.cellType || "").trim();
         const cellModelApplies = cellTypeStr !== "Blocs" && cellTypeStr !== "Other";
 
         if (!b.manufacturerFlagReason) {
-          if (!mfrStr) {
+          if (!mfrStr || isUnknownMfr) {
             b.manufacturerFlagReason = CSV_FLAG_REASON;
           } else if (!knownManufacturers.has(mfrStr.toLowerCase())) {
             b.manufacturerFlagReason = CSV_UNKNOWN_FLAG_REASON;
@@ -748,10 +749,12 @@ router.post(
           if (!cellTypeStr) {
             b.cellModelFlagReason = CSV_FLAG_REASON;
           } else if (allCellModels.length > 0) {
+            // "Unknown" manufacturers default to TAB weights, so match the
+            // cell model against any manufacturer's catalogue.
             const matches = allCellModels.some(
               (m) =>
                 m.modelName.toLowerCase() === cellTypeStr.toLowerCase() &&
-                (!mfrStr || m.manufacturer.toLowerCase() === mfrStr.toLowerCase())
+                (!mfrStr || isUnknownMfr || m.manufacturer.toLowerCase() === mfrStr.toLowerCase())
             );
             if (!matches) b.cellModelFlagReason = CSV_UNKNOWN_FLAG_REASON;
           }
@@ -792,13 +795,9 @@ router.post(
           })
           .returning();
 
-        const uniqueCellKeys = [...new Set(
-          batteryInputs
-            .filter(b => b.manufacture && b.cellType)
-            .map(b => `${b.manufacture}|${b.cellType}`)
-        )];
+        const anyCellType = batteryInputs.some(b => b.cellType);
         const pbLookup = new Map<string, string>();
-        if (uniqueCellKeys.length > 0) {
+        if (anyCellType) {
           for (const cm of allCellModels) {
             if (cm.pbContentKgPerCell != null) {
               const key = `${cm.manufacturer}|${cm.modelName}`;
@@ -810,7 +809,13 @@ router.post(
 
         const batteryRows = batteryInputs.map((b) => {
           const pbKey = `${b.manufacture}|${b.cellType}`;
-          const pbContentKg = pbLookup.get(pbKey) || null;
+          // "Unknown" manufacturers default to TAB figures (client convention).
+          const mfrTrimmed = (b.manufacture || "").trim();
+          const isUnknownMfr = !mfrTrimmed || mfrTrimmed.toLowerCase() === "unknown";
+          const pbContentKg =
+            pbLookup.get(pbKey) ||
+            (isUnknownMfr && b.cellType ? pbLookup.get(`TAB|${b.cellType}`) : null) ||
+            null;
           let valueGbp: string | null = null;
           if (pbContentKg && latestLmeGbpPrice !== null) {
             const val = (parseFloat(pbContentKg) * latestLmeGbpPrice) / 1000;

@@ -214,6 +214,9 @@ function validateBatteryField(
   if (!v) return "";
   switch (field) {
     case "manufacture": {
+      // "Unknown" is the auto-default for missing CSV manufacturers (TAB
+      // weights apply); it must never block submission — the server flags it.
+      if (v.toLowerCase() === "unknown") return "";
       const knownLower = new Set(manufacturers.map((m) => m.toLowerCase()));
       if (knownLower.has(v.toLowerCase())) return "";
       if (Object.keys(aliases).some((a) => a.toLowerCase() === v.toLowerCase())) return "";
@@ -511,9 +514,14 @@ export default function DepotFormPage() {
     } else if (battery.cellType === "Other") {
       weight = await fetchWeightFromApi("Other", null);
     } else if (battery.cellModel && battery.voltage) {
-      const effMfr = battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture;
+      const rawEffMfr = battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture;
+      // "Unknown" manufacturers default to TAB weights (client convention).
+      const effMfr = rawEffMfr.trim().toLowerCase() === "unknown" ? "" : rawEffMfr;
       const matchedModel =
-        cellModels.find((m) => m.modelName === battery.cellModel && (!effMfr || m.manufacturer === effMfr)) ||
+        (effMfr
+          ? cellModels.find((m) => m.modelName === battery.cellModel && m.manufacturer === effMfr)
+          : undefined) ||
+        cellModels.find((m) => m.modelName === battery.cellModel && m.manufacturer === "TAB") ||
         cellModels.find((m) => m.modelName === battery.cellModel);
       const voltageNum = parseInt(String(battery.voltage).replace(/[^0-9]/g, ""), 10);
       if (matchedModel && !isNaN(voltageNum) && voltageNum > 0 && voltageNum % 2 === 0) {
@@ -692,9 +700,15 @@ export default function DepotFormPage() {
 
           const mfrTrim = rawMfr.trim();
           let normalizedMfr = mfrTrim;
+          let mfrAutoUnknown = false;
           if (mfrTrim) {
             const canonical = mfrByNorm.get(normalizeForMatch(mfrTrim));
             if (canonical) normalizedMfr = canonical;
+          } else {
+            // Empty manufacturer: default to "Unknown" + TAB weights and flag
+            // the row for Itinium review instead of blocking the import.
+            normalizedMfr = "Unknown";
+            mfrAutoUnknown = true;
           }
 
           const rawCellTrim = rawCellType.trim();
@@ -709,8 +723,11 @@ export default function DepotFormPage() {
               modelMatches.find(
                 (m) =>
                   normalizedMfr &&
+                  !mfrAutoUnknown &&
                   m.manufacturer.toLowerCase() === normalizedMfr.toLowerCase()
-              ) || modelMatches[0];
+              ) ||
+              modelMatches.find((m) => m.manufacturer === "TAB") ||
+              modelMatches[0];
             if (preferred) {
               normalizedCellModel = preferred.modelName;
               normalizedCellType = preferred.cellFamily;
@@ -765,7 +782,7 @@ export default function DepotFormPage() {
             weightManual: !!(colMap["estimatedWeightKg"] !== undefined && row[colMap["estimatedWeightKg"]]),
             notes: colMap["notes"] !== undefined ? row[colMap["notes"]] || "" : "",
             isLooseCells: !!(looseQty && parseInt(looseQty, 10) > 0),
-            manufacturerFlagReason: "",
+            manufacturerFlagReason: mfrAutoUnknown ? CSV_FLAG_REASON : "",
             cellModelFlagReason: "",
             voltageFlagReason: "",
             rowPhoto: "",
@@ -821,9 +838,15 @@ export default function DepotFormPage() {
     rows.forEach((b, i) => {
       const fields: { label: string; target: "manufacture" | "cellModel" | "voltage"; suggestion?: string }[] = [];
       const voltageApplies = !b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other";
-      if (!b.manufacture.trim()) {
-        fields.push({ label: "Manufacturer is missing", target: "manufacture" });
-      } else if (knownManufacturers.length > 0 && !knownManufacturersLower.has(b.manufacture.trim().toLowerCase())) {
+      const mfrVal = b.manufacture.trim();
+      // Empty manufacturers are auto-mapped to "Unknown" (TAB weights) at
+      // import time and flagged for Itinium review — never block on them.
+      if (
+        mfrVal &&
+        mfrVal.toLowerCase() !== "unknown" &&
+        knownManufacturers.length > 0 &&
+        !knownManufacturersLower.has(mfrVal.toLowerCase())
+      ) {
         fields.push({
           label: `We don't recognise the manufacturer "${b.manufacture.trim()}"`,
           target: "manufacture",
@@ -898,9 +921,10 @@ export default function DepotFormPage() {
       ? rows.map((b) => {
           const voltageApplies = !b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other";
           let manufacturerFlagReason = b.manufacturerFlagReason;
-          if (!b.manufacture.trim()) {
+          const mfrVal = b.manufacture.trim();
+          if (!mfrVal || mfrVal.toLowerCase() === "unknown") {
             manufacturerFlagReason = CSV_FLAG_REASON;
-          } else if (manufacturers.length > 0 && !knownManufacturers.has(b.manufacture.trim().toLowerCase())) {
+          } else if (manufacturers.length > 0 && !knownManufacturers.has(mfrVal.toLowerCase())) {
             manufacturerFlagReason = CSV_UNKNOWN_FLAG_REASON;
           }
           const voltageFlagReason =
@@ -1768,6 +1792,8 @@ export default function DepotFormPage() {
                             ? `"${battery.manufacture}" was not recognised — it will be reviewed by Itinium.`
                             : battery.manufacturerFlagReason === CSV_UNKNOWN_FLAG_REASON
                             ? `Flagged — "${battery.manufacture}" is not in Itinium's known list.`
+                            : battery.manufacture.trim().toLowerCase() === "unknown"
+                            ? "Flagged — manufacturer missing from CSV, defaulted to TAB weights. Itinium will review."
                             : "Flagged — missing from CSV. Fill in to clear."}
                         </p>
                         {battery.manufacturerFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.manufacturerSuggestion && (
