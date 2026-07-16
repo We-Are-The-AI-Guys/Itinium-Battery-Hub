@@ -330,14 +330,43 @@ export default function JobDetailPage() {
     };
   }
 
-  function recalculateAll() {
+  async function recalculateAll() {
     const rate = getEffectiveLmeRate();
-    const updated = batteries.map((b) => {
-      const { pb, value } = recalculateBattery(b, rate);
-      return { ...b, pbContentKg: pb || b.pbContentKg, valueGbp: value || b.valueGbp };
-    });
-    setBatteries(updated);
-    toast({ title: "Recalculated", description: "£ Value recalculated for all batteries using " + (parseFloat(financials.cblLmeValue) > 0 ? "CBL LME Value" : "latest LME price") + "." });
+    try {
+      const res = await fetch(`/api/jobs/${params.id}/recalculate-pb`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(rate !== null ? { lmeGbpRate: rate } : {}),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const byId = new Map<number, { pbContentKg: string | null; valueGbp: string | null }>(
+          (data.batteries || []).map((b: { id: number; pbContentKg: string | null; valueGbp: string | null }) => [
+            b.id,
+            { pbContentKg: b.pbContentKg, valueGbp: b.valueGbp },
+          ])
+        );
+        setBatteries((prev) =>
+          prev.map((b) => {
+            const upd = byId.get(b.id);
+            return upd ? { ...b, pbContentKg: upd.pbContentKg, valueGbp: upd.valueGbp } : b;
+          })
+        );
+        toast({
+          title: "Recalculated",
+          description:
+            "Pb content re-derived from the cell model catalogue and £ Value recalculated using " +
+            (parseFloat(financials.cblLmeValue) > 0 ? "CBL LME Value" : "latest LME price") +
+            ".",
+        });
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast({ title: "Error", description: err.message || "Failed to recalculate.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Failed to recalculate.", variant: "destructive" });
+    }
   }
 
   useEffect(() => {

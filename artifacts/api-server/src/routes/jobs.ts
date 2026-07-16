@@ -20,6 +20,56 @@ function normalizeCellKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+interface PbCatalogueEntry {
+  manufacturer: string;
+  modelName: string;
+  pbContentKgPerCell: string | null;
+  cellsCount: number;
+}
+
+// Derive a battery's total Pb content (kg) from the cell model catalogue
+// using the same matching rules as job submission: exact manufacturer match
+// first, then TAB, then any manufacturer (Pb per model is manufacturer-
+// agnostic in practice). Returns null when the catalogue has no Pb data.
+function derivePbContentKg(
+  catalogue: PbCatalogueEntry[],
+  manufacture: string | null,
+  cellType: string | null
+): string | null {
+  const cellStr = (cellType || "").trim();
+  if (!cellStr || cellStr === "Blocs" || cellStr === "Other") return null;
+  const normCell = normalizeCellKey(cellStr);
+  const matches = catalogue.filter(
+    (m) => m.pbContentKgPerCell != null && normalizeCellKey(m.modelName) === normCell
+  );
+  if (matches.length === 0) return null;
+  const mfr = (manufacture || "").trim();
+  const isUnknownMfr = !mfr || mfr.toLowerCase() === "unknown";
+  const chosen =
+    (!isUnknownMfr
+      ? matches.find((m) => m.manufacturer.toLowerCase() === mfr.toLowerCase())
+      : undefined) ||
+    matches.find((m) => m.manufacturer === "TAB") ||
+    matches[0];
+  const totalPb = parseFloat(chosen.pbContentKgPerCell!) * chosen.cellsCount;
+  return isFinite(totalPb) ? totalPb.toFixed(3) : null;
+}
+
+// Effective LME rate for a job: the job's CBL LME value if set (>0),
+// otherwise the latest LME GBP price. Returns null when neither exists.
+async function getEffectiveLmeRateForJob(cblLmeValue: string | null): Promise<number | null> {
+  const cbl = cblLmeValue ? parseFloat(cblLmeValue) : NaN;
+  if (isFinite(cbl) && cbl > 0) return cbl;
+  const [latestLme] = await db
+    .select({ gbpPrice: lmePricesTable.gbpPrice })
+    .from(lmePricesTable)
+    .orderBy(desc(lmePricesTable.createdAt))
+    .limit(1);
+  if (!latestLme) return null;
+  const gbp = parseFloat(latestLme.gbpPrice);
+  return isFinite(gbp) && gbp > 0 ? gbp : null;
+}
+
 const router: IRouter = Router();
 
 function buildJobsWhere(query: Record<string, unknown>) {
@@ -1237,6 +1287,47 @@ router.patch(
           if (existing.cellModelFlagReason) clearedAnyFlag = true;
         }
       }
+
+      // When the cell type or manufacturer is corrected, re-derive Pb content
+      // (and £ value) from the catalogue — unless the caller explicitly set
+      // pbContentKg themselves. Leave existing values untouched when the
+      // catalogue has no Pb data for the corrected model.
+      if (
+        (cellType !== undefined || manufacture !== undefined) &&
+        pbContentKg === undefined
+      ) {
+        const finalCellType =
+          (updates.cellType as string | null | undefined) !== undefined
+            ? (updates.cellType as string | null)
+            : existing.cellType;
+        const finalMfr =
+          (updates.manufacture as string | null | undefined) !== undefined
+            ? (updates.manufacture as string | null)
+            : existing.manufacture;
+        const pbCatalogue = await db
+          .select({
+            manufacturer: cellModelsTable.manufacturer,
+            modelName: cellModelsTable.modelName,
+            pbContentKgPerCell: cellModelsTable.pbContentKgPerCell,
+            cellsCount: cellModelsTable.cellsCount,
+          })
+          .from(cellModelsTable);
+        const derivedPb = derivePbContentKg(pbCatalogue, finalMfr, finalCellType);
+        if (derivedPb !== null) {
+          updates.pbContentKg = derivedPb;
+          if (valueGbp === undefined) {
+            const [parentJob] = await db
+              .select({ cblLmeValue: jobsTable.cblLmeValue })
+              .from(jobsTable)
+              .where(eq(jobsTable.id, jobId));
+            const rate = await getEffectiveLmeRateForJob(parentJob?.cblLmeValue ?? null);
+            if (rate !== null) {
+              const val = (parseFloat(derivedPb) * rate) / 1000;
+              if (isFinite(val)) updates.valueGbp = val.toFixed(2);
+            }
+          }
+        }
+      }
       if (voltage !== undefined) {
         const v = toTrimmedStr(voltage);
         updates.voltage = v;
@@ -1286,6 +1377,80 @@ router.patch(
       }
     } catch (error) {
       console.error("Battery admin update error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+router.post(
+  "/jobs/:id/recalculate-pb",
+  requireAuth,
+  requireRole("team_leader", "accounts", "head_office_admin"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const jobId = parseInt(String(req.params.id), 10);
+      if (isNaN(jobId)) {
+        res.status(400).json({ message: "Invalid job ID" });
+        return;
+      }
+      const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+      if (!job) {
+        res.status(404).json({ message: "Job not found" });
+        return;
+      }
+
+      // Optional override from the client (e.g. an unsaved CBL LME value);
+      // falls back to the job's stored CBL LME value, then the latest LME price.
+      let rate: number | null = null;
+      const bodyRate = req.body?.lmeGbpRate;
+      if (bodyRate !== undefined && bodyRate !== null && bodyRate !== "") {
+        const parsed = parseFloat(String(bodyRate));
+        if (isFinite(parsed) && parsed > 0) rate = parsed;
+      }
+      if (rate === null) rate = await getEffectiveLmeRateForJob(job.cblLmeValue);
+
+      const batteries = await db
+        .select()
+        .from(jobBatteriesTable)
+        .where(eq(jobBatteriesTable.jobId, jobId));
+      const pbCatalogue = await db
+        .select({
+          manufacturer: cellModelsTable.manufacturer,
+          modelName: cellModelsTable.modelName,
+          pbContentKgPerCell: cellModelsTable.pbContentKgPerCell,
+          cellsCount: cellModelsTable.cellsCount,
+        })
+        .from(cellModelsTable);
+
+      let updatedCount = 0;
+      const updatedBatteries = [];
+      for (const b of batteries) {
+        // Re-derive Pb from the current cell type; keep the stored value when
+        // the catalogue has no Pb data for it (stays 0.000 without errors).
+        const derivedPb = derivePbContentKg(pbCatalogue, b.manufacture, b.cellType);
+        const pbStr = derivedPb ?? b.pbContentKg;
+        const pbNum = pbStr ? parseFloat(pbStr) : NaN;
+        let valueStr = b.valueGbp;
+        if (rate !== null && isFinite(pbNum) && pbNum > 0) {
+          const val = (pbNum * rate) / 1000;
+          if (isFinite(val)) valueStr = val.toFixed(2);
+        }
+        if (pbStr !== b.pbContentKg || valueStr !== b.valueGbp) {
+          const [updated] = await db
+            .update(jobBatteriesTable)
+            .set({ pbContentKg: pbStr, valueGbp: valueStr })
+            .where(eq(jobBatteriesTable.id, b.id))
+            .returning();
+          updatedBatteries.push(updated);
+          updatedCount++;
+        } else {
+          updatedBatteries.push(b);
+        }
+      }
+
+      res.json({ batteries: updatedBatteries, updated: updatedCount, lmeGbpRate: rate });
+    } catch (error) {
+      console.error("Job Pb recalculation error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   }
