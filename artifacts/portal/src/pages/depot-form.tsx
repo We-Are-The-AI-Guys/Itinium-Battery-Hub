@@ -224,8 +224,9 @@ function validateBatteryField(
     }
     case "cellType": {
       if (v === "Blocs" || v === "Other") return "";
-      if (cellModels.some((m) => m.cellFamily.toLowerCase() === v.toLowerCase())) return "";
-      if (cellModels.some((m) => m.modelName.toLowerCase() === v.toLowerCase())) return "";
+      const normV = normalizeForMatch(v);
+      if (cellModels.some((m) => normalizeForMatch(m.cellFamily) === normV)) return "";
+      if (cellModels.some((m) => normalizeForMatch(m.modelName) === normV)) return "";
       return MANUAL_UNKNOWN_FLAG_REASON;
     }
     case "voltage": {
@@ -874,9 +875,9 @@ export default function DepotFormPage() {
         cellTypeTrim !== "Blocs" &&
         cellTypeTrim !== "Other" &&
         cellModels.length > 0 &&
-        !cellModels.some((m) => m.cellFamily.toLowerCase() === cellTypeTrim.toLowerCase()) &&
-        !cellModels.some((m) => m.modelName.toLowerCase() === cellTypeTrim.toLowerCase()) &&
-        !(b.cellModel.trim() && cellModels.some((m) => m.modelName.toLowerCase() === b.cellModel.trim().toLowerCase()))
+        !cellModels.some((m) => normalizeForMatch(m.cellFamily) === normalizeForMatch(cellTypeTrim)) &&
+        !cellModels.some((m) => normalizeForMatch(m.modelName) === normalizeForMatch(cellTypeTrim)) &&
+        !(b.cellModel.trim() && cellModels.some((m) => normalizeForMatch(m.modelName) === normalizeForMatch(b.cellModel.trim())))
       ) {
         const modelNames = Array.from(new Set(cellModels.map((m) => m.modelName)));
         fields.push({
@@ -951,9 +952,9 @@ export default function DepotFormPage() {
             cellTypeTrim !== "Blocs" &&
             cellTypeTrim !== "Other" &&
             cellModels.length > 0 &&
-            !cellModels.some((m) => m.cellFamily.toLowerCase() === cellTypeTrim.toLowerCase()) &&
-            !cellModels.some((m) => m.modelName.toLowerCase() === cellTypeTrim.toLowerCase()) &&
-            !(b.cellModel.trim() && cellModels.some((m) => m.modelName.toLowerCase() === b.cellModel.trim().toLowerCase()))
+            !cellModels.some((m) => normalizeForMatch(m.cellFamily) === normalizeForMatch(cellTypeTrim)) &&
+            !cellModels.some((m) => normalizeForMatch(m.modelName) === normalizeForMatch(cellTypeTrim)) &&
+            !(b.cellModel.trim() && cellModels.some((m) => normalizeForMatch(m.modelName) === normalizeForMatch(b.cellModel.trim())))
           ) {
             cellModelFlagReason = CSV_UNKNOWN_FLAG_REASON;
           }
@@ -2763,12 +2764,17 @@ function CellModelCombobox({
       return;
     }
     const models = cellModelsRef.current;
-    const model = models.find((m) => m.modelName.toLowerCase() === t.toLowerCase());
+    const normT = t.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const model = models.find(
+      (m) => m.modelName.toLowerCase().replace(/[^a-z0-9]/g, "") === normT
+    );
     if (model) {
       onChangeRef.current(model.modelName, true);
       onBlurValidateRef.current?.(model.modelName);
     } else {
-      const family = models.find((m) => m.cellFamily.toLowerCase() === t.toLowerCase());
+      const family = models.find(
+        (m) => m.cellFamily.toLowerCase().replace(/[^a-z0-9]/g, "") === normT
+      );
       const committed = family ? family.cellFamily : t;
       onChangeRef.current(committed, false);
       onBlurValidateRef.current?.(committed);

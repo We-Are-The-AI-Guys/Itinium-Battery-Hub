@@ -14,6 +14,12 @@ const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
 
 const SAFE_LOAD_FACTOR = 1.4;
 
+// Match cell model names ignoring spacing, case and punctuation, mirroring
+// the portal's normalizeForMatch so both ends agree on what "matches".
+function normalizeCellKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 const router: IRouter = Router();
 
 function buildJobsWhere(query: Record<string, unknown>) {
@@ -745,15 +751,36 @@ router.post(
           }
         }
 
+        if (cellModelApplies && cellTypeStr && allCellModels.length > 0) {
+          // Match ignoring spacing/case/punctuation and canonicalise to the
+          // catalogue's exact model name so downstream Pb/weight lookups hit.
+          const normCell = normalizeCellKey(cellTypeStr);
+          const modelMatches = allCellModels.filter(
+            (m) => normalizeCellKey(m.modelName) === normCell
+          );
+          const preferred =
+            modelMatches.find(
+              (m) =>
+                mfrStr && !isUnknownMfr && m.manufacturer.toLowerCase() === mfrStr.toLowerCase()
+            ) ||
+            modelMatches.find((m) => m.manufacturer === "TAB") ||
+            modelMatches[0];
+          if (preferred) {
+            b.cellType = preferred.modelName;
+          }
+        }
+
         if (!b.cellModelFlagReason && cellModelApplies) {
-          if (!cellTypeStr) {
+          const finalCellType = (b.cellType || "").trim();
+          if (!finalCellType) {
             b.cellModelFlagReason = CSV_FLAG_REASON;
           } else if (allCellModels.length > 0) {
             // "Unknown" manufacturers default to TAB weights, so match the
             // cell model against any manufacturer's catalogue.
+            const normCell = normalizeCellKey(finalCellType);
             const matches = allCellModels.some(
               (m) =>
-                m.modelName.toLowerCase() === cellTypeStr.toLowerCase() &&
+                normalizeCellKey(m.modelName) === normCell &&
                 (!mfrStr || isUnknownMfr || m.manufacturer.toLowerCase() === mfrStr.toLowerCase())
             );
             if (!matches) b.cellModelFlagReason = CSV_UNKNOWN_FLAG_REASON;
@@ -800,7 +827,7 @@ router.post(
         if (anyCellType) {
           for (const cm of allCellModels) {
             if (cm.pbContentKgPerCell != null) {
-              const key = `${cm.manufacturer}|${cm.modelName}`;
+              const key = `${cm.manufacturer.toLowerCase()}|${normalizeCellKey(cm.modelName)}`;
               const totalPb = parseFloat(cm.pbContentKgPerCell) * cm.cellsCount;
               pbLookup.set(key, totalPb.toFixed(3));
             }
@@ -808,13 +835,13 @@ router.post(
         }
 
         const batteryRows = batteryInputs.map((b) => {
-          const pbKey = `${b.manufacture}|${b.cellType}`;
           // "Unknown" manufacturers default to TAB figures (client convention).
           const mfrTrimmed = (b.manufacture || "").trim();
           const isUnknownMfr = !mfrTrimmed || mfrTrimmed.toLowerCase() === "unknown";
+          const cellKey = b.cellType ? normalizeCellKey(b.cellType) : "";
           const pbContentKg =
-            pbLookup.get(pbKey) ||
-            (isUnknownMfr && b.cellType ? pbLookup.get(`TAB|${b.cellType}`) : null) ||
+            (cellKey ? pbLookup.get(`${mfrTrimmed.toLowerCase()}|${cellKey}`) : null) ||
+            (isUnknownMfr && cellKey ? pbLookup.get(`tab|${cellKey}`) : null) ||
             null;
           let valueGbp: string | null = null;
           if (pbContentKg && latestLmeGbpPrice !== null) {
@@ -1180,7 +1207,30 @@ router.patch(
         }
       }
       if (cellType !== undefined) {
-        const v = toTrimmedStr(cellType);
+        let v = toTrimmedStr(cellType);
+        // Canonicalise to the catalogue's exact model name so spacing/case
+        // variants ("5EPzS775" vs "5 EPzS 775") resolve consistently and
+        // downstream Pb/weight lookups hit.
+        if (v !== null && v !== "Blocs" && v !== "Other") {
+          const catalogue = await db
+            .select({
+              manufacturer: cellModelsTable.manufacturer,
+              modelName: cellModelsTable.modelName,
+            })
+            .from(cellModelsTable);
+          const normV = normalizeCellKey(v);
+          const modelMatches = catalogue.filter(
+            (m) => normalizeCellKey(m.modelName) === normV
+          );
+          const effMfr = (typeof manufacture === "string" ? manufacture.trim() : "") || (existing.manufacture || "").trim();
+          const preferred =
+            modelMatches.find(
+              (m) => effMfr && m.manufacturer.toLowerCase() === effMfr.toLowerCase()
+            ) ||
+            modelMatches.find((m) => m.manufacturer === "TAB") ||
+            modelMatches[0];
+          if (preferred) v = preferred.modelName;
+        }
         updates.cellType = v;
         if (v !== null) {
           updates.cellModelFlagReason = null;
