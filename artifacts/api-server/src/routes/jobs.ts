@@ -839,9 +839,22 @@ router.post(
       }
 
       const result = await db.transaction(async (tx) => {
-        const jobCount = await tx.select({ count: count() }).from(jobsTable);
-        const nextNum = (jobCount[0]?.count || 0) + 1;
-        const reference = `JOB-${new Date().getFullYear()}-${String(nextNum).padStart(5, "0")}`;
+        // Serialise reference generation so two simultaneous submissions
+        // can't compute the same running number (lock releases at commit).
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('job_reference_seq'))`);
+        // Global running sequence: continue from the highest numeric suffix
+        // across all existing references (old JOB-YYYY-NNNNN and new
+        // JOB-MMYY-NNNNN formats both end in a 5-digit number).
+        const maxSeqResult = await tx.execute(
+          sql`SELECT COALESCE(MAX((regexp_match(reference, '(\\d{5})$'))[1]::int), 0) AS max_seq FROM jobs`
+        );
+        const maxSeq = Number((maxSeqResult.rows?.[0] as { max_seq?: unknown })?.max_seq) || 0;
+        const nextNum = maxSeq + 1;
+        const now = new Date();
+        const mmyy =
+          String(now.getMonth() + 1).padStart(2, "0") +
+          String(now.getFullYear() % 100).padStart(2, "0");
+        const reference = `JOB-${mmyy}-${String(nextNum).padStart(5, "0")}`;
 
         let latestLmeGbpPrice: number | null = null;
         const [latestLme] = await tx
