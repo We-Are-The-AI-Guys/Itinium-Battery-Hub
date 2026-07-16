@@ -8,6 +8,9 @@ export const locationsTable = pgTable("locations", {
   clientId: integer("client_id").notNull().references(() => clientsTable.id),
   name: varchar("name", { length: 255 }).notNull(),
   address: varchar("address", { length: 500 }),
+  siteContacts: text("site_contacts"),
+  siteHours: varchar("site_hours", { length: 255 }),
+  specialInstructions: text("special_instructions"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [

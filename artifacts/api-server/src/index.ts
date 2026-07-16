@@ -184,6 +184,12 @@ async function bootstrap() {
 
   try {
     await db.execute(sql`ALTER TABLE job_drafts ALTER COLUMN form_data TYPE JSONB USING form_data::jsonb`);
+    await db.execute(sql`ALTER TABLE locations ADD COLUMN IF NOT EXISTS site_contacts TEXT`);
+    await db.execute(sql`ALTER TABLE locations ADD COLUMN IF NOT EXISTS site_hours VARCHAR(255)`);
+    await db.execute(sql`ALTER TABLE locations ADD COLUMN IF NOT EXISTS special_instructions TEXT`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS site_contacts TEXT`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS site_hours VARCHAR(255)`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS special_instructions TEXT`);
   } catch {
   }
 

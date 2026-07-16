@@ -599,6 +599,183 @@ router.get(
 );
 
 router.get(
+  "/jobs/:id/collection-sheet.pdf",
+  requireAuth,
+  requireRole("team_leader", "accounts", "head_office_admin"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const jobId = parseInt(String(req.params.id), 10);
+      if (isNaN(jobId)) {
+        res.status(400).json({ message: "Invalid job ID" });
+        return;
+      }
+
+      const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+      if (!job) {
+        res.status(404).json({ message: "Job not found" });
+        return;
+      }
+
+      const batteries = await db
+        .select()
+        .from(jobBatteriesTable)
+        .where(eq(jobBatteriesTable.jobId, jobId));
+
+      let locationAddress: string | null = null;
+      if (job.locationId) {
+        const [loc] = await db
+          .select({ address: locationsTable.address })
+          .from(locationsTable)
+          .where(eq(locationsTable.id, job.locationId));
+        if (loc) locationAddress = loc.address;
+      }
+
+      const palletKeys = new Set<string>();
+      let unnumbered = 0;
+      for (const b of batteries) {
+        const p = (b.palletNumber || "").trim();
+        if (p) palletKeys.add(p.toLowerCase());
+        else unnumbered++;
+      }
+      const palletCount = palletKeys.size + unnumbered;
+
+      const tonnageNum = job.tonnage ? parseFloat(job.tonnage) : NaN;
+      const tonnageLabel = isFinite(tonnageNum)
+        ? `c ${(Math.round(tonnageNum * 10) / 10).toLocaleString("en-GB", { maximumFractionDigits: 1 })}t`
+        : "";
+      const summaryLine = `${palletCount} pallet${palletCount === 1 ? "" : "s"}${tonnageLabel ? ` ${tonnageLabel}` : ""}`;
+
+      const collectionLabel = job.collectionDate
+        ? new Date(`${job.collectionDate}T00:00:00Z`).toLocaleDateString("en-GB", {
+            day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
+          })
+        : "—";
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="collection-sheet-${job.reference.toLowerCase().replace(/[^a-z0-9]/g, "-")}.pdf"`
+      );
+
+      const { doc, finalize } = createBrandedDoc(
+        `Collection Sheet — ${job.reference}`,
+        `${job.clientName} | ${job.depot}`
+      );
+      doc.pipe(res);
+
+      const pageW = doc.page.width;
+      const contentW = pageW - 80;
+      const NAVY = "#0f2744";
+
+      function ensureRoom(needed = 30) {
+        if (doc.y + needed > doc.page.height - 60) {
+          doc.addPage();
+        }
+      }
+
+      doc.fontSize(18).fillColor(NAVY).font("Helvetica-Bold")
+        .text("Collection Sheet", 40, doc.y);
+      doc.moveDown(0.2);
+      doc.fontSize(13).fillColor("#0ea5e9").font("Helvetica-Bold").text(summaryLine, 40);
+      doc.moveDown(0.3);
+      doc.fontSize(9).fillColor("#475569").font("Helvetica")
+        .text(`Job Reference: ${job.reference}    |    Collection Date: ${collectionLabel}`, 40);
+      doc.moveDown(0.8);
+
+      const siteAddress = [locationAddress, job.collectionPoint].filter(Boolean).join(" — ") || job.depot;
+
+      function infoBlock(label: string, value: string) {
+        ensureRoom(40);
+        doc.fontSize(9).fillColor("#64748b").font("Helvetica-Bold").text(label.toUpperCase(), 40);
+        doc.fontSize(10).fillColor("#1e293b").font("Helvetica").text(value, 40, doc.y + 2, { width: contentW });
+        doc.moveDown(0.6);
+      }
+
+      infoBlock("Site Address", siteAddress);
+      infoBlock("Site Contacts", job.siteContacts || "—");
+      infoBlock("Site Hours", job.siteHours || "—");
+
+      ensureRoom(50);
+      const instrY = doc.y;
+      doc.rect(40, instrY, contentW, 0.5).fill("#e2e8f0");
+      doc.y = instrY + 8;
+      doc.fontSize(10).fillColor(NAVY).font("Helvetica-Bold").text("SPECIAL / LOADING INSTRUCTIONS", 40);
+      doc.fontSize(10).fillColor("#1e293b").font("Helvetica")
+        .text(job.specialInstructions || "None", 40, doc.y + 2, { width: contentW });
+      doc.moveDown(1);
+
+      const cols = [
+        { label: "Pallet", x: 40, w: 55 },
+        { label: "Asset", x: 99, w: 75 },
+        { label: "Serial", x: 178, w: 85 },
+        { label: "Manufacturer", x: 267, w: 85 },
+        { label: "Cell Type", x: 356, w: 85 },
+        { label: "Voltage", x: 445, w: 50 },
+        { label: "Loose Qty", x: 499, w: 56, align: "right" as const },
+      ];
+
+      function drawTableHeader() {
+        const hy = doc.y;
+        doc.rect(40, hy - 4, contentW, 22).fill("#f1f5f9");
+        doc.fontSize(8.5).fillColor(NAVY).font("Helvetica-Bold");
+        for (const c of cols) {
+          doc.text(c.label, c.x, hy + 2, { width: c.w, align: c.align, lineBreak: false });
+        }
+        doc.y = hy + 22;
+        doc.font("Helvetica").fillColor("#1e293b");
+      }
+
+      ensureRoom(60);
+      drawTableHeader();
+
+      let rowIdx = 0;
+      for (const b of batteries) {
+        if (doc.y + 20 > doc.page.height - 60) {
+          doc.addPage();
+          drawTableHeader();
+        }
+        const ry = doc.y;
+        if (rowIdx % 2 === 1) {
+          doc.rect(40, ry - 2, contentW, 18).fill("#f8fafc");
+        }
+        const looseQty = b.isLooseCells ? (b.looseCellsQty ? String(b.looseCellsQty) : "—") : "—";
+        doc.fontSize(8.5).fillColor("#1e293b").font("Helvetica");
+        doc.text(b.palletNumber || "—", cols[0].x, ry, { width: cols[0].w, lineBreak: false });
+        doc.text(b.assetNumber || "—", cols[1].x, ry, { width: cols[1].w, lineBreak: false });
+        doc.text(b.batterySerial || "—", cols[2].x, ry, { width: cols[2].w, lineBreak: false });
+        doc.text(b.manufacture || "—", cols[3].x, ry, { width: cols[3].w, lineBreak: false });
+        doc.text(b.cellType || "—", cols[4].x, ry, { width: cols[4].w, lineBreak: false });
+        doc.text(b.voltage || "—", cols[5].x, ry, { width: cols[5].w, lineBreak: false });
+        doc.text(looseQty, cols[6].x, ry, { width: cols[6].w, align: "right", lineBreak: false });
+        doc.y = ry + 18;
+        rowIdx++;
+      }
+
+      if (batteries.length === 0) {
+        doc.fontSize(9).fillColor("#94a3b8").text("No battery items recorded.", 40);
+      }
+
+      ensureRoom(40);
+      doc.moveDown(1);
+      doc.fontSize(8).fillColor("#94a3b8").font("Helvetica")
+        .text(
+          "This collection sheet is issued by Itinium Ltd for the transport company carrying out the above collection. Please follow all site instructions and confirm pallet counts on arrival.",
+          40, doc.y, { width: contentW }
+        );
+
+      finalize();
+    } catch (error) {
+      console.error("Collection sheet PDF error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Internal server error" });
+      } else {
+        res.end();
+      }
+    }
+  }
+);
+
+router.get(
   "/jobs/:id",
   requireAuth,
   requireRole("team_leader", "accounts", "head_office_admin"),
@@ -700,14 +877,26 @@ router.post(
         clientName = req.user!.fullName || "Unknown";
       }
 
+      let locationSiteContacts: string | null = null;
+      let locationSiteHours: string | null = null;
+      let locationSpecialInstructions: string | null = null;
       if (resolvedLocationId) {
         const [location] = await db
-          .select({ name: locationsTable.name, clientId: locationsTable.clientId })
+          .select({
+            name: locationsTable.name,
+            clientId: locationsTable.clientId,
+            siteContacts: locationsTable.siteContacts,
+            siteHours: locationsTable.siteHours,
+            specialInstructions: locationsTable.specialInstructions,
+          })
           .from(locationsTable)
           .where(eq(locationsTable.id, resolvedLocationId));
         if (location) {
           depot = location.name;
           if (!resolvedClientId) resolvedClientId = location.clientId;
+          locationSiteContacts = location.siteContacts;
+          locationSiteHours = location.siteHours;
+          locationSpecialInstructions = location.specialInstructions;
         }
       }
 
@@ -882,6 +1071,9 @@ router.post(
             notes: notes || null,
             submittedById: req.user!.id,
             lmeRateUsed: latestLmeGbpPrice !== null ? String(latestLmeGbpPrice) : null,
+            siteContacts: locationSiteContacts,
+            siteHours: locationSiteHours,
+            specialInstructions: locationSpecialInstructions,
           })
           .returning();
 
@@ -1067,6 +1259,7 @@ router.patch(
         cblDate, totalInvoiceValue, grossProfit, itiniumInvoiceNo,
         tonnage, lmeRateUsed, calculatedValue, invoiceStatus,
         invoiceReceivedDate, dueDate, datePaid,
+        siteContacts, siteHours, specialInstructions,
       } = req.body;
 
       const toDecimal = (v: unknown): string | null =>
@@ -1089,6 +1282,9 @@ router.patch(
       if (tonnage !== undefined) updates.tonnage = toDecimal(tonnage);
       if (lmeRateUsed !== undefined) updates.lmeRateUsed = toDecimal(lmeRateUsed);
       if (calculatedValue !== undefined) updates.calculatedValue = toDecimal(calculatedValue);
+      if (siteContacts !== undefined) updates.siteContacts = toStr(siteContacts);
+      if (siteHours !== undefined) updates.siteHours = toStr(siteHours);
+      if (specialInstructions !== undefined) updates.specialInstructions = toStr(specialInstructions);
       const isValidDate = (v: unknown): boolean => {
         if (!v || typeof v !== "string") return false;
         const match = /^\d{4}-\d{2}-\d{2}$/.test(v);

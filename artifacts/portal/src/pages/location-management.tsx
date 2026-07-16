@@ -15,6 +15,9 @@ interface LocationData {
   clientId: number;
   name: string;
   address: string | null;
+  siteContacts: string | null;
+  siteHours: string | null;
+  specialInstructions: string | null;
   isActive: boolean;
   createdAt: string;
 }
@@ -29,12 +32,12 @@ export default function LocationManagementPage() {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: "", address: "" });
+  const [createForm, setCreateForm] = useState({ name: "", address: "", siteContacts: "", siteHours: "", specialInstructions: "" });
   const [createError, setCreateError] = useState("");
   const [creating, setCreating] = useState(false);
 
   const [editingLocation, setEditingLocation] = useState<LocationData | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", address: "" });
+  const [editForm, setEditForm] = useState({ name: "", address: "", siteContacts: "", siteHours: "", specialInstructions: "" });
   const [editError, setEditError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -78,11 +81,14 @@ export default function LocationManagementPage() {
         body: JSON.stringify({
           name: createForm.name.trim(),
           address: createForm.address.trim() || null,
+          siteContacts: createForm.siteContacts.trim() || null,
+          siteHours: createForm.siteHours.trim() || null,
+          specialInstructions: createForm.specialInstructions.trim() || null,
         }),
       });
       if (res.ok) {
         setShowCreateModal(false);
-        setCreateForm({ name: "", address: "" });
+        setCreateForm({ name: "", address: "", siteContacts: "", siteHours: "", specialInstructions: "" });
         fetchLocations();
       } else {
         const data = await res.json();
@@ -97,7 +103,13 @@ export default function LocationManagementPage() {
 
   function openEditModal(loc: LocationData) {
     setEditingLocation(loc);
-    setEditForm({ name: loc.name, address: loc.address || "" });
+    setEditForm({
+      name: loc.name,
+      address: loc.address || "",
+      siteContacts: loc.siteContacts || "",
+      siteHours: loc.siteHours || "",
+      specialInstructions: loc.specialInstructions || "",
+    });
     setEditError("");
   }
 
@@ -117,6 +129,9 @@ export default function LocationManagementPage() {
         body: JSON.stringify({
           name: editForm.name.trim(),
           address: editForm.address.trim() || null,
+          siteContacts: editForm.siteContacts.trim() || null,
+          siteHours: editForm.siteHours.trim() || null,
+          specialInstructions: editForm.specialInstructions.trim() || null,
         }),
       });
       if (res.ok) {
@@ -278,6 +293,33 @@ export default function LocationManagementPage() {
                   onChange={(e) => setCreateForm({ ...createForm, address: e.target.value })}
                 />
               </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-slate-700">Site Contacts</label>
+                <Input
+                  placeholder="e.g. John Smith 07700 900123"
+                  className="border-slate-200 focus-visible:ring-[#0ea5e9]"
+                  value={createForm.siteContacts}
+                  onChange={(e) => setCreateForm({ ...createForm, siteContacts: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-slate-700">Site Hours</label>
+                <Input
+                  placeholder="e.g. Mon–Fri 07:00–16:00"
+                  className="border-slate-200 focus-visible:ring-[#0ea5e9]"
+                  value={createForm.siteHours}
+                  onChange={(e) => setCreateForm({ ...createForm, siteHours: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-slate-700">Special / Loading Instructions</label>
+                <Input
+                  placeholder="e.g. Report to gatehouse on arrival"
+                  className="border-slate-200 focus-visible:ring-[#0ea5e9]"
+                  value={createForm.specialInstructions}
+                  onChange={(e) => setCreateForm({ ...createForm, specialInstructions: e.target.value })}
+                />
+              </div>
             </div>
             <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => setShowCreateModal(false)} className="border-slate-200 text-slate-700 hover:bg-slate-100">Cancel</Button>
@@ -319,6 +361,30 @@ export default function LocationManagementPage() {
                   className="border-slate-200 focus-visible:ring-[#0ea5e9]"
                   value={editForm.address}
                   onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-slate-700">Site Contacts</label>
+                <Input
+                  className="border-slate-200 focus-visible:ring-[#0ea5e9]"
+                  value={editForm.siteContacts}
+                  onChange={(e) => setEditForm({ ...editForm, siteContacts: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-slate-700">Site Hours</label>
+                <Input
+                  className="border-slate-200 focus-visible:ring-[#0ea5e9]"
+                  value={editForm.siteHours}
+                  onChange={(e) => setEditForm({ ...editForm, siteHours: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-slate-700">Special / Loading Instructions</label>
+                <Input
+                  className="border-slate-200 focus-visible:ring-[#0ea5e9]"
+                  value={editForm.specialInstructions}
+                  onChange={(e) => setEditForm({ ...editForm, specialInstructions: e.target.value })}
                 />
               </div>
             </div>

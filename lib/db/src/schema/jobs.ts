@@ -38,6 +38,9 @@ export const jobsTable = pgTable("jobs", {
   dueDate: date("due_date"),
   datePaid: date("date_paid"),
   daysToPay: integer("days_to_pay"),
+  siteContacts: text("site_contacts"),
+  siteHours: varchar("site_hours", { length: 255 }),
+  specialInstructions: text("special_instructions"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_jobs_status").on(table.status),

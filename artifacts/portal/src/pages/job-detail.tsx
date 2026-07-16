@@ -70,6 +70,9 @@ interface JobData {
   dueDate: string | null;
   datePaid: string | null;
   daysToPay: number | null;
+  siteContacts: string | null;
+  siteHours: string | null;
+  specialInstructions: string | null;
 }
 
 interface BatteryData {
@@ -191,6 +194,14 @@ export default function JobDetailPage() {
     datePaid: "",
   });
 
+  const [siteDetails, setSiteDetails] = useState({
+    siteContacts: "",
+    siteHours: "",
+    specialInstructions: "",
+  });
+  const [savingSiteDetails, setSavingSiteDetails] = useState(false);
+  const [downloadingCollectionSheet, setDownloadingCollectionSheet] = useState(false);
+
   const loadJob = useCallback(() => {
     setLoadError(null);
     setLoading(true);
@@ -250,6 +261,12 @@ export default function JobDetailPage() {
             dueDate: data.job.dueDate || "",
             datePaid: data.job.datePaid || "",
           });
+
+          setSiteDetails({
+            siteContacts: data.job.siteContacts || "",
+            siteHours: data.job.siteHours || "",
+            specialInstructions: data.job.specialInstructions || "",
+          });
         } else if (result.status === 404) {
           setLoadError("not_found");
         } else {
@@ -298,6 +315,49 @@ export default function JobDetailPage() {
       });
     } finally {
       setDownloadingInvoice(false);
+    }
+  }
+
+  async function handleDownloadCollectionSheet() {
+    if (!job) return;
+    setDownloadingCollectionSheet(true);
+    try {
+      await downloadFromApi(
+        `${API_BASE}/api/jobs/${job.id}/collection-sheet.pdf`,
+        `collection-sheet-${job.reference.toLowerCase().replace(/[^a-z0-9]/g, "-")}.pdf`
+      );
+    } catch (e) {
+      toast({
+        title: "Collection sheet download failed",
+        description: e instanceof Error ? e.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingCollectionSheet(false);
+    }
+  }
+
+  async function saveSiteDetails() {
+    setSavingSiteDetails(true);
+    try {
+      const res = await fetch(`/api/jobs/${params.id}/admin`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(siteDetails),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setJob(data.job);
+        toast({ title: "Saved", description: "Collection sheet details updated." });
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast({ title: "Error", description: err.message || "Failed to save.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Error", description: "Network error.", variant: "destructive" });
+    } finally {
+      setSavingSiteDetails(false);
     }
   }
 
@@ -542,6 +602,16 @@ export default function JobDetailPage() {
           </button>
 
           <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-[#0ea5e9] border-[#0ea5e9]/40 hover:bg-[#0ea5e9] hover:text-white transition-colors"
+              onClick={handleDownloadCollectionSheet}
+              disabled={downloadingCollectionSheet}
+            >
+              <Truck className="w-3.5 h-3.5 mr-1.5" />
+              {downloadingCollectionSheet ? "Preparing…" : "Collection Sheet PDF"}
+            </Button>
             {(userRole === "accounts" || userRole === "head_office_admin") && (
               <Button
                 size="sm"
@@ -639,6 +709,50 @@ export default function JobDetailPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="border-l-4 border-[#0f2744] px-6 py-4 bg-slate-50/50 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <Truck className="w-5 h-5 text-[#0f2744]" />
+              <h3 className="font-bold text-[#0f2744] text-lg">Collection Sheet Details</h3>
+              <span className="text-sm text-slate-500">(Shown on the transport company PDF)</span>
+            </div>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="text-xs font-medium text-slate-500 uppercase mb-1 block">Site Contacts</label>
+                <Input
+                  value={siteDetails.siteContacts}
+                  onChange={(e) => setSiteDetails((prev) => ({ ...prev, siteContacts: e.target.value }))}
+                  placeholder="e.g. John Smith 07700 900123"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-500 uppercase mb-1 block">Site Hours</label>
+                <Input
+                  value={siteDetails.siteHours}
+                  onChange={(e) => setSiteDetails((prev) => ({ ...prev, siteHours: e.target.value }))}
+                  placeholder="e.g. Mon–Fri 07:00–16:00"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-xs font-medium text-slate-500 uppercase mb-1 block">Special / Loading Instructions</label>
+                <Input
+                  value={siteDetails.specialInstructions}
+                  onChange={(e) => setSiteDetails((prev) => ({ ...prev, specialInstructions: e.target.value }))}
+                  placeholder='Leave blank for "None"'
+                />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button size="sm" onClick={saveSiteDetails} disabled={savingSiteDetails}>
+                <Save className="w-3.5 h-3.5 mr-1.5" />
+                {savingSiteDetails ? "Saving…" : "Save Collection Sheet Details"}
+              </Button>
             </div>
           </div>
         </div>
