@@ -492,12 +492,27 @@ export default function DepotFormPage() {
           if (battery.cellType === "Blocs" || battery.cellType === "Other") {
             perCell = await fetchWeightFromApi(battery.cellType, null);
           } else {
-            // PZS/PZB/PZV references are keyed by voltage; derive per-cell
-            // weight by dividing any reference entry by its cell count
-            // (each cell = 2V, so a 12V battery contains 6 cells, etc).
-            const ref = await fetchWeightFromApi(battery.cellType, "12V");
-            if (ref) {
-              perCell = (parseFloat(ref) / 6).toFixed(3);
+            // Prefer the cell model catalogue: per-cell weights are stored
+            // directly against each model (same manufacturer/TAB preference
+            // as full batteries — "Unknown" manufacturers use TAB weights).
+            const rawEffMfr = battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture;
+            const effMfr = rawEffMfr.trim().toLowerCase() === "unknown" ? "" : rawEffMfr;
+            const modelKey = battery.cellModel || battery.cellType;
+            const modelMatches = cellModels.filter((m) => m.modelName === modelKey);
+            const matchedModel =
+              (effMfr ? modelMatches.find((m) => m.manufacturer === effMfr) : undefined) ||
+              modelMatches.find((m) => m.manufacturer === "TAB") ||
+              modelMatches[0];
+            if (matchedModel) {
+              perCell = matchedModel.weightPerCellKg;
+            } else {
+              // Legacy PZS/PZB/PZV references are keyed by voltage; derive
+              // per-cell weight by dividing any reference entry by its cell
+              // count (each cell = 2V, so a 12V battery contains 6 cells).
+              const ref = await fetchWeightFromApi(battery.cellType, "12V");
+              if (ref) {
+                perCell = (parseFloat(ref) / 6).toFixed(3);
+              }
             }
           }
           if (perCell) {
@@ -1147,11 +1162,26 @@ export default function DepotFormPage() {
         return !(isFinite(w) && w > 0);
       });
     if (rowsMissingWeight.length > 0) {
+      const looseRows = rowsMissingWeight.filter(({ b }) => b.isLooseCells);
+      const otherRows = rowsMissingWeight.filter(({ b }) => !b.isLooseCells);
+      const parts: string[] = [];
+      if (otherRows.length > 0) {
+        parts.push(
+          `No estimated weight for row${otherRows.length > 1 ? "s" : ""} ${otherRows
+            .map(({ i }) => i + 1)
+            .join(", ")} — complete the battery details or enter the weight manually.`
+        );
+      }
+      if (looseRows.length > 0) {
+        parts.push(
+          `Loose cell row${looseRows.length > 1 ? "s" : ""} ${looseRows
+            .map(({ i }) => i + 1)
+            .join(", ")}: we couldn't work out a weight from the Cell Type and Cell Qty — check they are correct, or enter the estimated weight manually.`
+        );
+      }
       toast({
         title: "Missing battery weight",
-        description: `No estimated weight for row${rowsMissingWeight.length > 1 ? "s" : ""} ${rowsMissingWeight
-          .map(({ i }) => i + 1)
-          .join(", ")}. Please complete the battery details or enter the weight manually so the load total is accurate.`,
+        description: parts.join(" "),
         variant: "destructive",
       });
       return;
