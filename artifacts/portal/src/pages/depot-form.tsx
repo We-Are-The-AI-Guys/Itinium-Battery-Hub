@@ -187,6 +187,33 @@ function normalizeForMatch(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+// Parse loose-cell breakdowns written in a notes field, e.g.
+// "36 X 5PZS775 + 1 X 6PZS930" -> [{qty: 36, model: "5PZS775"}, {qty: 1, model: "6PZS930"}].
+// Only returns segments when the whole note reads as quantity-x-model
+// groups; anything else returns [] so free-text notes are never misread.
+function parseLooseCellNoteSegments(notes: string): { qty: number; model: string }[] {
+  const text = (notes || "").trim();
+  if (!text) return [];
+  const segmentRe = /(\d+)\s*[xX×]\s*([A-Za-z0-9][A-Za-z0-9 .\/-]*?)(?=\s*(?:[+,;&]|\band\b|$))/g;
+  const segments: { qty: number; model: string }[] = [];
+  let consumed = 0;
+  let match: RegExpExecArray | null;
+  while ((match = segmentRe.exec(text)) !== null) {
+    const qty = parseInt(match[1], 10);
+    const model = match[2].trim();
+    // Model names must contain letters ("5PZS775"); reject pure numbers.
+    if (!isFinite(qty) || qty <= 0 || !model || !/[A-Za-z]/.test(model)) return [];
+    // Reject if there is meaningful text between segments (free-form notes).
+    const between = text.slice(consumed, match.index).replace(/[\s+,;&]|and/gi, "");
+    if (between) return [];
+    segments.push({ qty, model });
+    consumed = match.index + match[0].length;
+  }
+  const trailing = text.slice(consumed).replace(/[\s+,;&.]/g, "");
+  if (trailing) return [];
+  return segments;
+}
+
 function findClosestMatch(value: string, candidates: string[], minSimilarity = 0.6): string | null {
   const v = value.trim().toLowerCase();
   if (!v) return null;
@@ -805,14 +832,58 @@ export default function DepotFormPage() {
           };
         });
 
-        const issues = validateImportRows(imported);
+        // Loose-cell rows sometimes arrive with the real breakdown written in
+        // the notes (e.g. "36 X 5PZS775 + 1 X 6PZS930") and a placeholder
+        // quantity of 1. Expand those into one loose-cell row per segment so
+        // quantities, weights and Pb are calculated from the true cell counts.
+        const expanded: BatteryRow[] = [];
+        for (const row of imported) {
+          const segments = row.isLooseCells ? parseLooseCellNoteSegments(row.notes) : [];
+          const parsedTotal = segments.reduce((sum, s) => sum + s.qty, 0);
+          const currentQty = parseInt(row.looseCellsQty, 10) || 0;
+          if (segments.length === 0 || (parsedTotal === currentQty && segments.length === 1)) {
+            expanded.push(row);
+            continue;
+          }
+          // Only split when every segment resolves to a known cell model —
+          // otherwise the note is probably free text and the row is left
+          // untouched for manual review.
+          const resolved = segments.map((seg) => {
+            const normSeg = normalizeForMatch(seg.model);
+            const segMatches = cellModels.filter((m) => normalizeForMatch(m.modelName) === normSeg);
+            const preferredSeg =
+              segMatches.find(
+                (m) => row.manufacture && m.manufacturer.toLowerCase() === row.manufacture.toLowerCase()
+              ) ||
+              segMatches.find((m) => m.manufacturer === "TAB") ||
+              segMatches[0];
+            return { seg, model: preferredSeg };
+          });
+          if (resolved.some((r) => !r.model)) {
+            expanded.push(row);
+            continue;
+          }
+          resolved.forEach(({ seg, model }, idx) => {
+            expanded.push({
+              ...row,
+              id: idx === 0 ? row.id : crypto.randomUUID(),
+              looseCellsQty: String(seg.qty),
+              cellModel: model!.modelName,
+              cellType: model!.cellFamily,
+              estimatedWeightKg: "",
+              weightManual: false,
+            });
+          });
+        }
+
+        const issues = validateImportRows(expanded);
 
         if (issues.length > 0) {
-          setPendingCsvImport({ rows: imported, issues });
+          setPendingCsvImport({ rows: expanded, issues });
           return;
         }
 
-        commitCsvImport(imported);
+        commitCsvImport(expanded);
       } catch {
         toast({ title: "CSV import failed", description: "Could not parse the CSV file. Please check the format.", variant: "destructive" });
       }

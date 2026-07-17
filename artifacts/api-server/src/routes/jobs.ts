@@ -27,17 +27,46 @@ interface PbCatalogueEntry {
   cellsCount: number;
 }
 
+// Actual number of cells in a battery: each cell is 2V, so a complete
+// battery has voltage/2 cells (24V => 12 cells). Loose-cell rows carry an
+// explicit quantity instead. Returns null when it cannot be determined.
+function deriveActualCellCount(opts: {
+  isLooseCells?: boolean | null;
+  looseCellsQty?: number | string | null;
+  voltage?: string | null;
+}): number | null {
+  if (opts.isLooseCells) {
+    const qty = parseInt(String(opts.looseCellsQty ?? ""), 10);
+    return isFinite(qty) && qty > 0 ? qty : null;
+  }
+  // Accept only a single clean numeric token ("24", "24V", "24.0V"). Reject
+  // multi-number strings like "12/24V" — digit concatenation would wildly
+  // inflate the cell count.
+  const tokens = String(opts.voltage ?? "").match(/\d+(?:\.\d+)?/g);
+  if (!tokens || tokens.length !== 1) return null;
+  const voltageNum = parseFloat(tokens[0]);
+  if (Number.isInteger(voltageNum) && voltageNum > 0 && voltageNum % 2 === 0) {
+    return voltageNum / 2;
+  }
+  return null;
+}
+
 // Derive a battery's total Pb content (kg) from the cell model catalogue
 // using the same matching rules as job submission: exact manufacturer match
 // first, then TAB, then any manufacturer (Pb per model is manufacturer-
-// agnostic in practice). Returns null when the catalogue has no Pb data.
+// agnostic in practice). Total Pb = Pb-per-cell x actual cell count, where
+// the actual cell count comes from the battery's voltage (voltage/2 cells,
+// each cell being 2V) or, for loose cells, the recorded quantity. Returns
+// null when the catalogue has no Pb data or the cell count is unknown.
 function derivePbContentKg(
   catalogue: PbCatalogueEntry[],
   manufacture: string | null,
-  cellType: string | null
+  cellType: string | null,
+  cellCount: number | null
 ): string | null {
   const cellStr = (cellType || "").trim();
   if (!cellStr || cellStr === "Blocs" || cellStr === "Other") return null;
+  if (cellCount === null || !isFinite(cellCount) || cellCount <= 0) return null;
   const normCell = normalizeCellKey(cellStr);
   const matches = catalogue.filter(
     (m) => m.pbContentKgPerCell != null && normalizeCellKey(m.modelName) === normCell
@@ -51,7 +80,7 @@ function derivePbContentKg(
       : undefined) ||
     matches.find((m) => m.manufacturer === "TAB") ||
     matches[0];
-  const totalPb = parseFloat(chosen.pbContentKgPerCell!) * chosen.cellsCount;
+  const totalPb = parseFloat(chosen.pbContentKgPerCell!) * cellCount;
   return isFinite(totalPb) ? totalPb.toFixed(3) : null;
 }
 
@@ -1082,7 +1111,12 @@ router.post(
           const pbContentKg = derivePbContentKg(
             allCellModels,
             b.manufacture || null,
-            b.cellType || null
+            b.cellType || null,
+            deriveActualCellCount({
+              isLooseCells: b.isLooseCells,
+              looseCellsQty: b.looseCellsQty,
+              voltage: b.voltage,
+            })
           );
           let valueGbp: string | null = null;
           if (pbContentKg && latestLmeGbpPrice !== null) {
@@ -1483,12 +1517,12 @@ router.patch(
         }
       }
 
-      // When the cell type or manufacturer is corrected, re-derive Pb content
-      // (and £ value) from the catalogue — unless the caller explicitly set
-      // pbContentKg themselves. Leave existing values untouched when the
-      // catalogue has no Pb data for the corrected model.
+      // When the cell type, manufacturer or voltage is corrected, re-derive
+      // Pb content (and £ value) from the catalogue — unless the caller
+      // explicitly set pbContentKg themselves. Leave existing values
+      // untouched when the catalogue has no Pb data for the corrected model.
       if (
-        (cellType !== undefined || manufacture !== undefined) &&
+        (cellType !== undefined || manufacture !== undefined || voltage !== undefined) &&
         pbContentKg === undefined
       ) {
         const finalCellType =
@@ -1499,6 +1533,8 @@ router.patch(
           (updates.manufacture as string | null | undefined) !== undefined
             ? (updates.manufacture as string | null)
             : existing.manufacture;
+        const finalVoltage =
+          voltage !== undefined ? toTrimmedStr(voltage) : existing.voltage;
         const pbCatalogue = await db
           .select({
             manufacturer: cellModelsTable.manufacturer,
@@ -1507,7 +1543,16 @@ router.patch(
             cellsCount: cellModelsTable.cellsCount,
           })
           .from(cellModelsTable);
-        const derivedPb = derivePbContentKg(pbCatalogue, finalMfr, finalCellType);
+        const derivedPb = derivePbContentKg(
+          pbCatalogue,
+          finalMfr,
+          finalCellType,
+          deriveActualCellCount({
+            isLooseCells: existing.isLooseCells,
+            looseCellsQty: existing.looseCellsQty,
+            voltage: finalVoltage,
+          })
+        );
         if (derivedPb !== null) {
           updates.pbContentKg = derivedPb;
           if (valueGbp === undefined) {
@@ -1622,7 +1667,16 @@ router.post(
       for (const b of batteries) {
         // Re-derive Pb from the current cell type; keep the stored value when
         // the catalogue has no Pb data for it (stays 0.000 without errors).
-        const derivedPb = derivePbContentKg(pbCatalogue, b.manufacture, b.cellType);
+        const derivedPb = derivePbContentKg(
+          pbCatalogue,
+          b.manufacture,
+          b.cellType,
+          deriveActualCellCount({
+            isLooseCells: b.isLooseCells,
+            looseCellsQty: b.looseCellsQty,
+            voltage: b.voltage,
+          })
+        );
         const pbStr = derivedPb ?? b.pbContentKg;
         const pbNum = pbStr ? parseFloat(pbStr) : NaN;
         let valueStr = b.valueGbp;
