@@ -1,4 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import {
+  rankCellTypeSuggestions,
+  manufacturerMatches,
+  type CellModelLite,
+} from "@/lib/cell-type-suggestions";
 import { useParams, useLocation } from "wouter";
 import {
   ChevronLeft,
@@ -201,6 +206,25 @@ export default function JobDetailPage() {
   });
   const [savingSiteDetails, setSavingSiteDetails] = useState(false);
   const [downloadingCollectionSheet, setDownloadingCollectionSheet] = useState(false);
+  const [cellModels, setCellModels] = useState<CellModelLite[]>([]);
+
+  const hasFlaggedCellTypes = batteries.some((b) => b.cellModelFlagReason);
+
+  useEffect(() => {
+    if (!hasFlaggedCellTypes || cellModels.length > 0) return;
+    let cancelled = false;
+    fetch("/api/cell-models", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.models) setCellModels(data.models);
+      })
+      .catch(() => {
+        // Suggestions are a convenience — the plain edit box still works.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasFlaggedCellTypes, cellModels.length]);
 
   const loadJob = useCallback(() => {
     setLoadError(null);
@@ -704,6 +728,7 @@ export default function JobDetailPage() {
                         battery={b}
                         index={i}
                         onSaveField={updateBatteryAdmin}
+                        cellModels={cellModels}
                       />
                     ))}
                   </tbody>
@@ -1074,11 +1099,73 @@ function CollectionBatteryRow({
   battery,
   index,
   onSaveField,
+  cellModels,
 }: {
   battery: BatteryData;
   index: number;
   onSaveField: (id: number, updates: Record<string, string | boolean | null>) => void;
+  cellModels: CellModelLite[];
 }) {
+  const cellTypeSuggestions = useMemo(() => {
+    if (!battery.cellModelFlagReason || cellModels.length === 0) return [];
+    return rankCellTypeSuggestions(
+      battery.cellType || "",
+      battery.manufacture,
+      cellModels
+    );
+  }, [battery.cellModelFlagReason, battery.cellType, battery.manufacture, cellModels]);
+
+  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
+  const aiRequestedFor = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!battery.cellModelFlagReason || cellModels.length === 0) return;
+    if (cellTypeSuggestions.length > 0) return;
+    const typed = (battery.cellType || "").trim();
+    const mfr = (battery.manufacture || "").trim();
+    if (!typed || !mfr || mfr.toLowerCase() === "unknown") return;
+    const reqKey = `${typed}|${mfr}`;
+    if (aiRequestedFor.current === reqKey) return;
+    aiRequestedFor.current = reqKey;
+    setAiSuggestion(null);
+
+    const candidates = Array.from(
+      new Set(
+        cellModels
+          .filter((m) => manufacturerMatches(mfr, m.manufacturer))
+          .map((m) => m.modelName)
+      )
+    ).slice(0, 300);
+    if (candidates.length === 0) return;
+
+    let cancelled = false;
+    fetch("/api/suggest-correction", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ field: "cellType", value: typed, candidates }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.suggestion) setAiSuggestion(data.suggestion);
+      })
+      .catch(() => {
+        // AI fallback is best-effort only.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [battery.cellModelFlagReason, battery.cellType, battery.manufacture, cellModels, cellTypeSuggestions.length]);
+
+  const suggestionChips =
+    cellTypeSuggestions.length > 0
+      ? cellTypeSuggestions.map((s) => ({
+          label: s.modelName,
+          hint: s.manufacturer,
+        }))
+      : aiSuggestion
+      ? [{ label: aiSuggestion, hint: "AI suggestion" }]
+      : [];
   const hasAnyFlag = !!(
     battery.serialFlagReason ||
     battery.manufacturerFlagReason ||
@@ -1124,6 +1211,7 @@ function CollectionBatteryRow({
               initialValue={battery.cellType}
               placeholder="Cell model"
               onSave={(v) => onSaveField(battery.id, { cellType: v })}
+              suggestions={suggestionChips}
             />
             {battery.isLooseCells && (
               <Badge variant="outline" className="text-xs bg-sky-50 text-sky-700 border-sky-200">Loose</Badge>
@@ -1199,11 +1287,13 @@ function InlineFlagEdit({
   placeholder,
   onSave,
   extraAction,
+  suggestions,
 }: {
   initialValue: string | null;
   placeholder: string;
   onSave: (value: string) => void;
   extraAction?: { label: string; onClick: () => void };
+  suggestions?: { label: string; hint?: string }[];
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(initialValue || "");
@@ -1212,16 +1302,41 @@ function InlineFlagEdit({
     setValue(initialValue || "");
   }, [initialValue]);
 
+  const suggestionChips =
+    suggestions && suggestions.length > 0 ? (
+      <div className="flex items-center gap-1 flex-wrap w-full">
+        <span className="text-[10px] text-slate-500">Suggested:</span>
+        {suggestions.map((s) => (
+          <button
+            key={`${s.label}|${s.hint || ""}`}
+            type="button"
+            onClick={() => {
+              setValue(s.label);
+              setEditing(true);
+            }}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-sky-200 bg-sky-50 text-[10px] text-sky-800 hover:bg-sky-100"
+            title={s.hint ? `From ${s.hint}` : undefined}
+          >
+            {s.label}
+            {s.hint && <span className="text-sky-500">· {s.hint}</span>}
+          </button>
+        ))}
+      </div>
+    ) : null;
+
   if (!editing) {
     return (
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-dashed border-amber-300 bg-white text-[11px] text-amber-800 hover:bg-amber-50"
-        title={`Click to set ${placeholder.toLowerCase()}`}
-      >
-        {initialValue || `Set ${placeholder.toLowerCase()}`}
-      </button>
+      <div className="flex flex-col gap-1 items-start">
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-dashed border-amber-300 bg-white text-[11px] text-amber-800 hover:bg-amber-50"
+          title={`Click to set ${placeholder.toLowerCase()}`}
+        >
+          {initialValue || `Set ${placeholder.toLowerCase()}`}
+        </button>
+        {suggestionChips}
+      </div>
     );
   }
 
@@ -1284,6 +1399,7 @@ function InlineFlagEdit({
       >
         Cancel
       </Button>
+      {suggestionChips}
     </div>
   );
 }
