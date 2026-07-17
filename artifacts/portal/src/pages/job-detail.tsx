@@ -4,6 +4,7 @@ import {
   manufacturerMatches,
   type CellModelLite,
 } from "@/lib/cell-type-suggestions";
+import { rankManufacturerSuggestions } from "@/lib/manufacturer-suggestions";
 import { useParams, useLocation } from "wouter";
 import {
   ChevronLeft,
@@ -207,8 +208,34 @@ export default function JobDetailPage() {
   const [savingSiteDetails, setSavingSiteDetails] = useState(false);
   const [downloadingCollectionSheet, setDownloadingCollectionSheet] = useState(false);
   const [cellModels, setCellModels] = useState<CellModelLite[]>([]);
+  const [manufacturerList, setManufacturerList] = useState<{
+    manufacturers: string[];
+    aliases: Record<string, string>;
+  } | null>(null);
 
   const hasFlaggedCellTypes = batteries.some((b) => b.cellModelFlagReason);
+  const hasFlaggedManufacturers = batteries.some((b) => b.manufacturerFlagReason);
+
+  useEffect(() => {
+    if (!hasFlaggedManufacturers || manufacturerList) return;
+    let cancelled = false;
+    fetch("/api/manufacturers", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && Array.isArray(data?.manufacturers)) {
+          setManufacturerList({
+            manufacturers: data.manufacturers,
+            aliases: data.aliases || {},
+          });
+        }
+      })
+      .catch(() => {
+        // Suggestions are a convenience — the plain edit box still works.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasFlaggedManufacturers, manufacturerList]);
 
   useEffect(() => {
     if (!hasFlaggedCellTypes || cellModels.length > 0) return;
@@ -729,6 +756,7 @@ export default function JobDetailPage() {
                         index={i}
                         onSaveField={updateBatteryAdmin}
                         cellModels={cellModels}
+                        manufacturerList={manufacturerList}
                       />
                     ))}
                   </tbody>
@@ -1100,11 +1128,13 @@ function CollectionBatteryRow({
   index,
   onSaveField,
   cellModels,
+  manufacturerList,
 }: {
   battery: BatteryData;
   index: number;
   onSaveField: (id: number, updates: Record<string, string | boolean | null>) => void;
   cellModels: CellModelLite[];
+  manufacturerList: { manufacturers: string[]; aliases: Record<string, string> } | null;
 }) {
   const cellTypeSuggestions = useMemo(() => {
     if (!battery.cellModelFlagReason || cellModels.length === 0) return [];
@@ -1157,6 +1187,58 @@ function CollectionBatteryRow({
     };
   }, [battery.cellModelFlagReason, battery.cellType, battery.manufacture, cellModels, cellTypeSuggestions.length]);
 
+  const manufacturerSuggestions = useMemo(() => {
+    if (!battery.manufacturerFlagReason || !manufacturerList) return [];
+    return rankManufacturerSuggestions(
+      battery.manufacture || "",
+      manufacturerList.manufacturers,
+      manufacturerList.aliases
+    );
+  }, [battery.manufacturerFlagReason, battery.manufacture, manufacturerList]);
+
+  const [aiMfrSuggestion, setAiMfrSuggestion] = useState<string | null>(null);
+  const aiMfrRequestedFor = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!battery.manufacturerFlagReason || !manufacturerList) return;
+    if (manufacturerSuggestions.length > 0) return;
+    const typed = (battery.manufacture || "").trim();
+    if (!typed || typed.toLowerCase() === "unknown") return;
+    if (aiMfrRequestedFor.current === typed) return;
+    aiMfrRequestedFor.current = typed;
+    setAiMfrSuggestion(null);
+
+    const candidates = manufacturerList.manufacturers.filter(
+      (m) => m.toLowerCase() !== "other"
+    );
+    if (candidates.length === 0) return;
+
+    let cancelled = false;
+    fetch("/api/suggest-correction", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ field: "manufacture", value: typed, candidates }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.suggestion) setAiMfrSuggestion(data.suggestion);
+      })
+      .catch(() => {
+        // AI fallback is best-effort only.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [battery.manufacturerFlagReason, battery.manufacture, manufacturerList, manufacturerSuggestions.length]);
+
+  const manufacturerChips =
+    manufacturerSuggestions.length > 0
+      ? manufacturerSuggestions.map((s) => ({ label: s.name }))
+      : aiMfrSuggestion
+      ? [{ label: aiMfrSuggestion, hint: "AI suggestion" }]
+      : [];
+
   const suggestionChips =
     cellTypeSuggestions.length > 0
       ? cellTypeSuggestions.map((s) => ({
@@ -1199,6 +1281,7 @@ function CollectionBatteryRow({
             initialValue={battery.manufacture}
             placeholder="Manufacturer"
             onSave={(v) => onSaveField(battery.id, { manufacture: v })}
+            suggestions={manufacturerChips}
           />
         ) : (
           battery.manufacture || "—"
