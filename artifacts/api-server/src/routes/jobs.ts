@@ -1014,13 +1014,12 @@ router.post(
           if (!finalCellType) {
             b.cellModelFlagReason = CSV_FLAG_REASON;
           } else if (allCellModels.length > 0) {
-            // "Unknown" manufacturers default to TAB weights, so match the
-            // cell model against any manufacturer's catalogue.
+            // Cell type is valid if it exists anywhere in the catalogue,
+            // regardless of manufacturer — Pb/weight lookups fall back to
+            // TAB figures when the manufacturer doesn't carry the model.
             const normCell = normalizeCellKey(finalCellType);
             const matches = allCellModels.some(
-              (m) =>
-                normalizeCellKey(m.modelName) === normCell &&
-                (!mfrStr || isUnknownMfr || m.manufacturer.toLowerCase() === mfrStr.toLowerCase())
+              (m) => normalizeCellKey(m.modelName) === normCell
             );
             if (!matches) b.cellModelFlagReason = CSV_UNKNOWN_FLAG_REASON;
           }
@@ -1077,27 +1076,14 @@ router.post(
           })
           .returning();
 
-        const anyCellType = batteryInputs.some(b => b.cellType);
-        const pbLookup = new Map<string, string>();
-        if (anyCellType) {
-          for (const cm of allCellModels) {
-            if (cm.pbContentKgPerCell != null) {
-              const key = `${cm.manufacturer.toLowerCase()}|${normalizeCellKey(cm.modelName)}`;
-              const totalPb = parseFloat(cm.pbContentKgPerCell) * cm.cellsCount;
-              pbLookup.set(key, totalPb.toFixed(3));
-            }
-          }
-        }
-
         const batteryRows = batteryInputs.map((b) => {
-          // "Unknown" manufacturers default to TAB figures (client convention).
-          const mfrTrimmed = (b.manufacture || "").trim();
-          const isUnknownMfr = !mfrTrimmed || mfrTrimmed.toLowerCase() === "unknown";
-          const cellKey = b.cellType ? normalizeCellKey(b.cellType) : "";
-          const pbContentKg =
-            (cellKey ? pbLookup.get(`${mfrTrimmed.toLowerCase()}|${cellKey}`) : null) ||
-            (isUnknownMfr && cellKey ? pbLookup.get(`tab|${cellKey}`) : null) ||
-            null;
+          // Same fallback as flag correction: exact manufacturer, then TAB
+          // (client convention for Unknown/unlisted manufacturers), then any.
+          const pbContentKg = derivePbContentKg(
+            allCellModels,
+            b.manufacture || null,
+            b.cellType || null
+          );
           let valueGbp: string | null = null;
           if (pbContentKg && latestLmeGbpPrice !== null) {
             const val = (parseFloat(pbContentKg) * latestLmeGbpPrice) / 1000;
