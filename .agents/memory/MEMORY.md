@@ -1,2 +1,3 @@
 - [API server bootstrap applies hidden DDL](api-server-bootstrap-ddl.md) — constraint errors may come from startup-created indexes absent from Drizzle schema; check pg_indexes and index.ts bootstrap.
 - [API server restart staleness](api-server-restart-staleness.md) — first requests after restart may hit the old process; restart again/retry before assuming a code bug.
+- [Battery weight & Pb conventions](battery-weight-pb.md) — client supplied no real cell weights (catalogue weights = Pb figures); ×1.4 safe-load factor is intended; Pb = per-cell × (voltage/2 or loose qty).
