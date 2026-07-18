@@ -20,6 +20,7 @@ import {
   ClipboardCheck,
   RefreshCw,
   Download,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -213,11 +214,15 @@ export default function JobDetailPage() {
     aliases: Record<string, string>;
   } | null>(null);
 
+  // Reviewers can edit cell type / manufacturer on any row (including
+  // resolved and never-flagged ones) to fix later-discovered mistakes.
+  const canEditResolved = userRole === "accounts" || userRole === "head_office_admin";
+
   const hasFlaggedCellTypes = batteries.some((b) => b.cellModelFlagReason);
   const hasFlaggedManufacturers = batteries.some((b) => b.manufacturerFlagReason);
 
   useEffect(() => {
-    if (!hasFlaggedManufacturers || manufacturerList) return;
+    if ((!hasFlaggedManufacturers && !canEditResolved) || manufacturerList) return;
     let cancelled = false;
     fetch("/api/manufacturers", { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
@@ -235,10 +240,10 @@ export default function JobDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [hasFlaggedManufacturers, manufacturerList]);
+  }, [hasFlaggedManufacturers, canEditResolved, manufacturerList]);
 
   useEffect(() => {
-    if (!hasFlaggedCellTypes || cellModels.length > 0) return;
+    if ((!hasFlaggedCellTypes && !canEditResolved) || cellModels.length > 0) return;
     let cancelled = false;
     fetch("/api/cell-models", { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
@@ -251,7 +256,7 @@ export default function JobDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [hasFlaggedCellTypes, cellModels.length]);
+  }, [hasFlaggedCellTypes, canEditResolved, cellModels.length]);
 
   const loadJob = useCallback(() => {
     setLoadError(null);
@@ -757,6 +762,7 @@ export default function JobDetailPage() {
                         onSaveField={updateBatteryAdmin}
                         cellModels={cellModels}
                         manufacturerList={manufacturerList}
+                        canEdit={canEditResolved}
                       />
                     ))}
                   </tbody>
@@ -1129,21 +1135,23 @@ function CollectionBatteryRow({
   onSaveField,
   cellModels,
   manufacturerList,
+  canEdit,
 }: {
   battery: BatteryData;
   index: number;
   onSaveField: (id: number, updates: Record<string, string | boolean | null>) => void;
   cellModels: CellModelLite[];
   manufacturerList: { manufacturers: string[]; aliases: Record<string, string> } | null;
+  canEdit: boolean;
 }) {
   const cellTypeSuggestions = useMemo(() => {
-    if (!battery.cellModelFlagReason || cellModels.length === 0) return [];
+    if ((!battery.cellModelFlagReason && !canEdit) || cellModels.length === 0) return [];
     return rankCellTypeSuggestions(
       battery.cellType || "",
       battery.manufacture,
       cellModels
     );
-  }, [battery.cellModelFlagReason, battery.cellType, battery.manufacture, cellModels]);
+  }, [battery.cellModelFlagReason, battery.cellType, battery.manufacture, cellModels, canEdit]);
 
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
   const aiRequestedFor = useRef<string | null>(null);
@@ -1188,13 +1196,13 @@ function CollectionBatteryRow({
   }, [battery.cellModelFlagReason, battery.cellType, battery.manufacture, cellModels, cellTypeSuggestions.length]);
 
   const manufacturerSuggestions = useMemo(() => {
-    if (!battery.manufacturerFlagReason || !manufacturerList) return [];
+    if ((!battery.manufacturerFlagReason && !canEdit) || !manufacturerList) return [];
     return rankManufacturerSuggestions(
       battery.manufacture || "",
       manufacturerList.manufacturers,
       manufacturerList.aliases
     );
-  }, [battery.manufacturerFlagReason, battery.manufacture, manufacturerList]);
+  }, [battery.manufacturerFlagReason, battery.manufacture, manufacturerList, canEdit]);
 
   const [aiMfrSuggestion, setAiMfrSuggestion] = useState<string | null>(null);
   const aiMfrRequestedFor = useRef<string | null>(null);
@@ -1283,6 +1291,14 @@ function CollectionBatteryRow({
             onSave={(v) => onSaveField(battery.id, { manufacture: v })}
             suggestions={manufacturerChips}
           />
+        ) : canEdit ? (
+          <InlineFlagEdit
+            initialValue={battery.manufacture}
+            placeholder="Manufacturer"
+            onSave={(v) => onSaveField(battery.id, { manufacture: v })}
+            suggestions={manufacturerChips}
+            subtle
+          />
         ) : (
           battery.manufacture || "—"
         )}
@@ -1295,6 +1311,19 @@ function CollectionBatteryRow({
               placeholder="Cell model"
               onSave={(v) => onSaveField(battery.id, { cellType: v })}
               suggestions={suggestionChips}
+            />
+            {battery.isLooseCells && (
+              <Badge variant="outline" className="text-xs bg-sky-50 text-sky-700 border-sky-200">Loose</Badge>
+            )}
+          </div>
+        ) : canEdit ? (
+          <div className="flex items-center gap-1.5">
+            <InlineFlagEdit
+              initialValue={battery.cellType}
+              placeholder="Cell model"
+              onSave={(v) => onSaveField(battery.id, { cellType: v })}
+              suggestions={suggestionChips}
+              subtle
             />
             {battery.isLooseCells && (
               <Badge variant="outline" className="text-xs bg-sky-50 text-sky-700 border-sky-200">Loose</Badge>
@@ -1371,12 +1400,14 @@ function InlineFlagEdit({
   onSave,
   extraAction,
   suggestions,
+  subtle,
 }: {
   initialValue: string | null;
   placeholder: string;
   onSave: (value: string) => void;
   extraAction?: { label: string; onClick: () => void };
   suggestions?: { label: string; hint?: string }[];
+  subtle?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(initialValue || "");
@@ -1408,6 +1439,19 @@ function InlineFlagEdit({
     ) : null;
 
   if (!editing) {
+    if (subtle) {
+      return (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="group inline-flex items-center gap-1.5 rounded px-1 py-0.5 -mx-1 hover:bg-slate-100"
+          title={`Edit ${placeholder.toLowerCase()}`}
+        >
+          <span>{initialValue || "—"}</span>
+          <Pencil className="w-3 h-3 text-slate-300 group-hover:text-slate-500" />
+        </button>
+      );
+    }
     return (
       <div className="flex flex-col gap-1 items-start">
         <button

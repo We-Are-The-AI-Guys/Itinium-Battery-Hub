@@ -1645,6 +1645,44 @@ router.patch(
 
       res.json({ battery: { ...updated, resolvedByName } });
 
+      // Fire-and-forget: record manual reviewer corrections in the audit
+      // trail (covers resolved and never-flagged rows too).
+      const changedFields: Array<{ fieldName: string; from: string | null; to: string | null }> = [];
+      if (manufacture !== undefined && updated.manufacture !== existing.manufacture) {
+        changedFields.push({ fieldName: "manufacturer", from: existing.manufacture, to: updated.manufacture });
+      }
+      if (cellType !== undefined && updated.cellType !== existing.cellType) {
+        changedFields.push({ fieldName: "cellModel", from: existing.cellType, to: updated.cellType });
+      }
+      if (voltage !== undefined && updated.voltage !== existing.voltage) {
+        changedFields.push({ fieldName: "voltage", from: existing.voltage, to: updated.voltage });
+      }
+      if (changedFields.length > 0) {
+        const reviewerName = req.user!.fullName;
+        setImmediate(async () => {
+          try {
+            const [parentJob] = await db
+              .select({ reference: jobsTable.reference })
+              .from(jobsTable)
+              .where(eq(jobsTable.id, jobId));
+            if (!parentJob) return;
+            await db.insert(correctionAuditLogTable).values(
+              changedFields.map((c) => ({
+                jobReference: parentJob.reference,
+                fieldName: c.fieldName,
+                originalValue: c.from,
+                suggestedValue: c.to,
+                wasAccepted: true,
+                confidenceLevel: null,
+                submittedByName: reviewerName,
+              }))
+            );
+          } catch (auditErr) {
+            console.error("Manual correction audit log error:", auditErr);
+          }
+        });
+      }
+
       if (clearedAnyFlag && resolvedByName) {
         const [parentJob] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
         if (parentJob) {
