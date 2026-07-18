@@ -84,6 +84,36 @@ function derivePbContentKg(
   return isFinite(totalPb) ? totalPb.toFixed(3) : null;
 }
 
+// Sort battery rows by pallet number in natural/numeric order (1, 2, … 10,
+// 17 — not text order), handling values like "PALLET 2". Rows without a
+// pallet number sort last; ties keep insertion (id) order so corrected rows
+// stay in their original pallet position.
+function sortBatteriesByPallet<T extends { palletNumber: string | null; id: number }>(rows: T[]): T[] {
+  const palletNum = (p: string | null): number | null => {
+    const tokens = (p || "").match(/\d+(?:\.\d+)?/);
+    if (!tokens) return null;
+    const n = parseFloat(tokens[0]);
+    return isFinite(n) ? n : null;
+  };
+  return [...rows].sort((a, b) => {
+    const an = palletNum(a.palletNumber);
+    const bn = palletNum(b.palletNumber);
+    if (an !== null && bn !== null && an !== bn) return an - bn;
+    if (an === null && bn !== null) return 1;
+    if (an !== null && bn === null) return -1;
+    if (an === null && bn === null) {
+      const at = (a.palletNumber || "").trim();
+      const bt = (b.palletNumber || "").trim();
+      // Rows with no pallet at all go after non-numeric pallet labels.
+      if (at && !bt) return -1;
+      if (!at && bt) return 1;
+      const cmp = at.localeCompare(bt, undefined, { sensitivity: "base" });
+      if (cmp !== 0) return cmp;
+    }
+    return a.id - b.id;
+  });
+}
+
 // Effective LME rate for a job: the job's CBL LME value if set (>0),
 // otherwise the latest LME GBP price. Returns null when neither exists.
 async function getEffectiveLmeRateForJob(cblLmeValue: string | null): Promise<number | null> {
@@ -435,10 +465,12 @@ router.get(
         return;
       }
 
-      const batteries = await db
-        .select()
-        .from(jobBatteriesTable)
-        .where(eq(jobBatteriesTable.jobId, jobId));
+      const batteries = sortBatteriesByPallet(
+        await db
+          .select()
+          .from(jobBatteriesTable)
+          .where(eq(jobBatteriesTable.jobId, jobId))
+      );
 
       const invoiceRef = job.itiniumInvoiceNo || job.customerInvoiceNo || job.reference;
       const collectionLabel = job.collectionDate
@@ -645,10 +677,12 @@ router.get(
         return;
       }
 
-      const batteries = await db
-        .select()
-        .from(jobBatteriesTable)
-        .where(eq(jobBatteriesTable.jobId, jobId));
+      const batteries = sortBatteriesByPallet(
+        await db
+          .select()
+          .from(jobBatteriesTable)
+          .where(eq(jobBatteriesTable.jobId, jobId))
+      );
 
       let locationAddress: string | null = null;
       if (job.locationId) {
@@ -826,10 +860,12 @@ router.get(
         return;
       }
 
-      const batteryRows = await db
-        .select()
-        .from(jobBatteriesTable)
-        .where(eq(jobBatteriesTable.jobId, jobId));
+      const batteryRows = sortBatteriesByPallet(
+        await db
+          .select()
+          .from(jobBatteriesTable)
+          .where(eq(jobBatteriesTable.jobId, jobId))
+      );
 
       const resolverIds = [...new Set(batteryRows.map(b => b.resolvedById).filter((v): v is number => v != null))];
       const resolverMap = new Map<number, string>();
