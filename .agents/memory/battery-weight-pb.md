@@ -3,15 +3,11 @@ name: Battery weight & Pb conventions
 description: Source-of-truth conventions for battery weight, safe-load factor and Pb derivation in the Itinium portal.
 ---
 
-## Weight convention (confirmed by user, July 2026)
-- Estimated weight = per-cell weight × actual cell count; the server then multiplies by the 1.4 safe vehicle loading factor before storing.
-- The 1.4 factor is intentional and must stay.
-- **Why:** user confirmed this is the business rule agreed with the client.
-
-## No real weights exist yet
-- The client's cell spreadsheet only contains Pb content per cell; the catalogue's weight-per-cell values were seeded from those same Pb figures, so displayed weights are understated.
-- Do NOT invent weights. Client contact Ingrid is being asked to clarify (she expects 552.72 kg for a 24V 5PzS575, which equals 32.9 kg/cell × 12 cells × 1.4 — 32.9 is the Pb figure of a *different* model, so her table likely has distinct weights).
-- **How to apply:** when a weights table arrives, update `lib/db/src/data/cell-models.ts` weight_per_cell_kg (and DB rows) only — no formula changes needed.
+## Weight convention (SETTLED — user confirmed July 20, 2026)
+- The client's Pb spreadsheet is the MASTER data source. Everything runs off lead weight only; total battery weight is deliberately not tracked.
+- Estimated weight = Pb-per-cell × actual cell count × 1.4 safe vehicle loading factor. The catalogue's weight_per_cell_kg values being the Pb figures is intentional, not a data gap.
+- **Why:** user confirmed this is the agreed business rule; the 1.4 factor is what accounts for safe vehicle load. Ingrid's expected 552.72 kg (32.9 × 12 × 1.4) follows the same convention.
+- **How to apply:** do NOT seek or add "real" battery weights, and do not change the 1.4 factor. Any mismatch with client figures means a per-cell Pb value differs in the catalogue — spot-check that value only.
 
 ## Pb derivation (fixed July 2026)
 - Total Pb = Pb-per-cell × actual cell count. Actual cell count = voltage/2 for full batteries (each cell 2V), loose-cells quantity for loose rows. Never use the number embedded in the model name (e.g. the 5 in 5PzS575).
