@@ -9,6 +9,8 @@ export const locationsTable = pgTable("locations", {
   name: varchar("name", { length: 255 }).notNull(),
   address: varchar("address", { length: 500 }),
   siteContacts: text("site_contacts"),
+  siteContactName: varchar("site_contact_name", { length: 255 }),
+  siteContactPhone: varchar("site_contact_phone", { length: 100 }),
   siteHours: varchar("site_hours", { length: 255 }),
   specialInstructions: text("special_instructions"),
   isActive: boolean("is_active").notNull().default(true),

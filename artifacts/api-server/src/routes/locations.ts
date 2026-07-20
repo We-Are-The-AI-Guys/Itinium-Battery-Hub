@@ -58,6 +58,8 @@ const createLocationSchema = z.object({
   name: z.string().min(1, "Location name is required"),
   address: z.string().nullable().optional(),
   siteContacts: z.string().nullable().optional(),
+  siteContactName: z.string().max(255).nullable().optional(),
+  siteContactPhone: z.string().max(100).nullable().optional(),
   siteHours: z.string().max(255).nullable().optional(),
   specialInstructions: z.string().nullable().optional(),
 });
@@ -95,7 +97,7 @@ router.post(
         return;
       }
 
-      const { name, address, siteContacts, siteHours, specialInstructions } = parsed.data;
+      const { name, address, siteContacts, siteContactName, siteContactPhone, siteHours, specialInstructions } = parsed.data;
 
       const [location] = await db
         .insert(locationsTable)
@@ -104,6 +106,8 @@ router.post(
           name: name.trim(),
           address: address || null,
           siteContacts: siteContacts || null,
+          siteContactName: siteContactName || null,
+          siteContactPhone: siteContactPhone || null,
           siteHours: siteHours || null,
           specialInstructions: specialInstructions || null,
         })
@@ -121,6 +125,8 @@ const updateLocationSchema = z.object({
   name: z.string().min(1).optional(),
   address: z.string().nullable().optional(),
   siteContacts: z.string().nullable().optional(),
+  siteContactName: z.string().max(255).nullable().optional(),
+  siteContactPhone: z.string().max(100).nullable().optional(),
   siteHours: z.string().max(255).nullable().optional(),
   specialInstructions: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
@@ -154,6 +160,8 @@ router.patch(
       if (parsed.data.name !== undefined) updates.name = parsed.data.name.trim();
       if (parsed.data.address !== undefined) updates.address = parsed.data.address;
       if (parsed.data.siteContacts !== undefined) updates.siteContacts = parsed.data.siteContacts;
+      if (parsed.data.siteContactName !== undefined) updates.siteContactName = parsed.data.siteContactName;
+      if (parsed.data.siteContactPhone !== undefined) updates.siteContactPhone = parsed.data.siteContactPhone;
       if (parsed.data.siteHours !== undefined) updates.siteHours = parsed.data.siteHours;
       if (parsed.data.specialInstructions !== undefined) updates.specialInstructions = parsed.data.specialInstructions;
       if (parsed.data.isActive !== undefined) updates.isActive = parsed.data.isActive;

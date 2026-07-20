@@ -472,6 +472,15 @@ router.get(
           .where(eq(jobBatteriesTable.jobId, jobId))
       );
 
+      let locationAddress: string | null = null;
+      if (job.locationId) {
+        const [loc] = await db
+          .select({ address: locationsTable.address })
+          .from(locationsTable)
+          .where(eq(locationsTable.id, job.locationId));
+        if (loc) locationAddress = loc.address;
+      }
+
       const invoiceRef = job.itiniumInvoiceNo || job.customerInvoiceNo || job.reference;
       const collectionLabel = job.collectionDate
         ? new Date(`${job.collectionDate}T00:00:00Z`).toLocaleDateString("en-GB", {
@@ -482,11 +491,11 @@ router.get(
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
-        `attachment; filename="remittance-${job.reference.toLowerCase().replace(/[^a-z0-9]/g, "-")}.pdf"`
+        `attachment; filename="confirmed-collection-sheet-${job.reference.toLowerCase().replace(/[^a-z0-9]/g, "-")}.pdf"`
       );
 
       const { doc, finalize } = createBrandedDoc(
-        `Remittance Advice — ${job.reference}`,
+        `Confirmed Collection Sheet — ${job.reference}`,
         `${job.clientName} | ${job.depot}`
       );
       doc.pipe(res);
@@ -503,7 +512,7 @@ router.get(
       }
 
       doc.fontSize(18).fillColor(NAVY).font("Helvetica-Bold")
-        .text(`Remittance Advice`, 40, doc.y, { continued: false });
+        .text(`Confirmed Collection Sheet`, 40, doc.y, { continued: false });
       doc.moveDown(0.3);
 
       const generatedStr = `Issued: ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`;
@@ -545,13 +554,31 @@ router.get(
       doc.moveTo(40, doc.y).lineTo(pageW - 40, doc.y).strokeColor("#e2e8f0").lineWidth(0.5).stroke();
       doc.moveDown(0.8);
 
+      const siteAddress = [locationAddress, job.collectionPoint].filter(Boolean).join(" — ") || job.depot;
+
+      function infoBlock(label: string, value: string) {
+        ensureRoom(40);
+        doc.fontSize(9).fillColor("#64748b").font("Helvetica-Bold").text(label.toUpperCase(), 40);
+        doc.fontSize(10).fillColor("#1e293b").font("Helvetica").text(value, 40, doc.y + 2, { width: contentW });
+        doc.moveDown(0.6);
+      }
+
+      infoBlock("Site Address", siteAddress);
+      infoBlock("Site Contacts", job.siteContacts || "—");
+      infoBlock("Site Hours", job.siteHours || "—");
+      infoBlock("Special / Loading Instructions", job.specialInstructions || "None");
+
+      doc.moveTo(40, doc.y).lineTo(pageW - 40, doc.y).strokeColor("#e2e8f0").lineWidth(0.5).stroke();
+      doc.moveDown(0.8);
+
       const batCols = [
-        { label: "Pallet", x: 40, w: 48 },
-        { label: "Manufacturer / Cell Type", x: 92, w: 160 },
-        { label: "Qty", x: 256, w: 35, align: "right" as const },
-        { label: "Wt (kg)", x: 295, w: 55, align: "right" as const },
-        { label: "Pb (kg)", x: 354, w: 55, align: "right" as const },
-        { label: "Value (£)", x: 413, w: 70, align: "right" as const },
+        { label: "Pallet", x: 40, w: 38 },
+        { label: "Manufacturer / Cell Type", x: 82, w: 116 },
+        { label: "Qty", x: 202, w: 28, align: "right" as const },
+        { label: "Wt (kg)", x: 234, w: 44, align: "right" as const },
+        { label: "Pb (kg)", x: 282, w: 44, align: "right" as const },
+        { label: "Value (£)", x: 330, w: 55, align: "right" as const },
+        { label: "Notes", x: 393, w: 162 },
       ];
 
       const headerY = doc.y;
@@ -584,6 +611,7 @@ router.get(
         const pbStr = pbNum !== null ? pbNum.toFixed(3) : "—";
         const valStr = valNum !== null ? `${valNum.toFixed(2)}` : "—";
         const cellLabel = [b.manufacture, b.cellType].filter(Boolean).join(" / ") || "—";
+        const notesStr = [b.notes, b.adminNotes].filter(Boolean).join(" | ") || "—";
 
         doc.fontSize(8.5).fillColor("#1e293b").font("Helvetica");
         doc.text(b.palletNumber || "—", batCols[0].x, ry, { width: batCols[0].w, lineBreak: false });
@@ -592,6 +620,7 @@ router.get(
         doc.text(weight, batCols[3].x, ry, { width: batCols[3].w, align: "right", lineBreak: false });
         doc.text(pbStr, batCols[4].x, ry, { width: batCols[4].w, align: "right", lineBreak: false });
         doc.text(valStr, batCols[5].x, ry, { width: batCols[5].w, align: "right", lineBreak: false });
+        doc.text(notesStr, batCols[6].x, ry, { width: batCols[6].w, lineBreak: false, ellipsis: true, height: 16 });
         doc.y = ry + 18;
         rowIdx++;
       }
@@ -643,7 +672,7 @@ router.get(
       ensureRoom(50);
       doc.fontSize(8).fillColor("#94a3b8").font("Helvetica")
         .text(
-          "This remittance advice is issued by Itinium Ltd and confirms the payment due to the above supplier for batteries collected. All values are calculated based on the LME lead price and Pb content of the batteries collected. Please retain for your records.",
+          "This confirmed collection sheet is issued by Itinium Ltd and confirms the payment due to the above supplier for batteries collected. All values are calculated based on the LME lead price and Pb content of the batteries collected. Please retain for your records.",
           40, doc.y, { width: contentW }
         );
 
@@ -951,6 +980,8 @@ router.post(
             name: locationsTable.name,
             clientId: locationsTable.clientId,
             siteContacts: locationsTable.siteContacts,
+            siteContactName: locationsTable.siteContactName,
+            siteContactPhone: locationsTable.siteContactPhone,
             siteHours: locationsTable.siteHours,
             specialInstructions: locationsTable.specialInstructions,
           })
@@ -959,15 +990,17 @@ router.post(
         if (location) {
           depot = location.name;
           if (!resolvedClientId) resolvedClientId = location.clientId;
-          locationSiteContacts = location.siteContacts;
+          const contactParts = [location.siteContactName, location.siteContactPhone].filter(Boolean);
+          locationSiteContacts = contactParts.length > 0 ? contactParts.join(" — ") : location.siteContacts;
           locationSiteHours = location.siteHours;
           locationSpecialInstructions = location.specialInstructions;
         }
       }
 
-      if (!depot) {
-        res.status(400).json({ message: "Depot is required" });
-        return;
+      // Head office users have no assigned depot/location — label their
+      // submissions "Head Office" rather than "Unknown".
+      if (!depot || String(depot).trim().toLowerCase() === "unknown") {
+        depot = "Head Office";
       }
 
       if (!batteries || !Array.isArray(batteries) || batteries.length === 0) {
@@ -1005,9 +1038,12 @@ router.post(
       }
 
       let autoTonnage = 0;
+      let rawWeightKg = 0;
       for (const b of batteryInputs) {
         const w = sanitizeWeight(b.estimatedWeightKg);
         if (w !== null) autoTonnage += parseFloat(w);
+        const raw = parseFloat(String(b.estimatedWeightKg ?? ""));
+        if (isFinite(raw) && raw > 0) rawWeightKg += raw;
       }
       const autoTonnageStr = (autoTonnage / 1000).toFixed(3);
       const parsedTonnage = tonnage ? parseFloat(String(tonnage)) : NaN;
@@ -1015,18 +1051,17 @@ router.post(
         ? String(parsedTonnage)
         : autoTonnageStr;
 
-      const finalTonnageNum = parseFloat(finalTonnage);
-      const MIN_TONNAGE = 9.5;
+      // Loads under 10t are allowed (a transportation charge applies —
+      // the portal shows a notice instead of blocking submission).
+      // The 26t truck capacity applies to the actual battery weight — the same
+      // figure shown to depot users — not the internal x1.4 safe-load tonnage.
       const MAX_TONNAGE = 26.0;
-      if (isFinite(finalTonnageNum)) {
-        if (finalTonnageNum < MIN_TONNAGE) {
-          res.status(400).json({ message: `Minimum collection weight is 10t. Current load is ${finalTonnageNum.toFixed(3)}t.` });
-          return;
-        }
-        if (finalTonnageNum > MAX_TONNAGE) {
-          res.status(400).json({ message: `Maximum collection weight is ${MAX_TONNAGE}t. Current load is ${finalTonnageNum.toFixed(3)}t.` });
-          return;
-        }
+      const effectiveLoadT = (tonnageManualOverride && isFinite(parsedTonnage) && parsedTonnage >= 0)
+        ? parsedTonnage
+        : rawWeightKg / 1000;
+      if (isFinite(effectiveLoadT) && effectiveLoadT > MAX_TONNAGE) {
+        res.status(400).json({ message: `Maximum collection weight is ${MAX_TONNAGE}t. Current load is ${effectiveLoadT.toFixed(3)}t.` });
+        return;
       }
 
       const knownManufacturers = new Set(
@@ -1316,6 +1351,7 @@ router.patch(
         tonnage, lmeRateUsed, calculatedValue, invoiceStatus,
         invoiceReceivedDate, dueDate, datePaid,
         siteContacts, siteHours, specialInstructions,
+        collectionDate,
       } = req.body;
 
       const toDecimal = (v: unknown): string | null =>
@@ -1349,6 +1385,13 @@ router.patch(
         return !isNaN(d.getTime());
       };
 
+      if (collectionDate !== undefined) {
+        if (collectionDate && !isValidDate(collectionDate)) {
+          res.status(400).json({ message: "Invalid collectionDate format (YYYY-MM-DD)" });
+          return;
+        }
+        updates.collectionDate = toStr(collectionDate);
+      }
       if (invoiceReceivedDate !== undefined) {
         if (invoiceReceivedDate && !isValidDate(invoiceReceivedDate)) {
           res.status(400).json({ message: "Invalid invoiceReceivedDate format (YYYY-MM-DD)" });

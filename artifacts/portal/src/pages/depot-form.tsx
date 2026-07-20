@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Link, useSearch } from "wouter";
+import { Link, useSearch, useLocation } from "wouter";
 import {
   Package,
   Battery,
@@ -336,6 +336,7 @@ interface CollectionPointPreset {
 
 export default function DepotFormPage() {
   const searchStr = useSearch();
+  const [, navigate] = useLocation();
   const [user, setUser] = useState<User | null>(null);
   const [collectionPoint, setCollectionPoint] = useState("");
   const [jobNotes, setJobNotes] = useState("");
@@ -1259,15 +1260,6 @@ export default function DepotFormPage() {
       return;
     }
 
-    if (currentLoad < minTonnage) {
-      toast({
-        title: "Below minimum tonnage",
-        description: `Minimum collection weight is ${targetMin}t. Current load is ${currentLoad.toFixed(3)}t. Please add more batteries.`,
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (currentLoad > maxCapacity) {
       toast({
         title: "Exceeds maximum tonnage",
@@ -1348,7 +1340,7 @@ export default function DepotFormPage() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          depot: getSelectedLocationName() || user?.depot || "Unknown",
+          depot: getSelectedLocationName() || user?.depot || "Head Office",
           collectionPoint: collectionPoint || null,
           collectionDate: null,
           tonnage: currentLoad > 0 ? currentLoad.toFixed(3) : "0.000",
@@ -1399,6 +1391,7 @@ export default function DepotFormPage() {
         setTonnageManual(false);
         setTonnageOverride("");
         setCurrentDraftId(null);
+        navigate("/");
       } else {
         const err = await res.json().catch(() => ({}));
         toast({
@@ -1473,7 +1466,9 @@ export default function DepotFormPage() {
     const w = parseFloat(b.estimatedWeightKg);
     return sum + (isNaN(w) ? 0 : w);
   }, 0);
-  const autoTonnage = (totalWeightKg * SAFE_LOAD_FACTOR) / 1000;
+  // Depot users see the actual battery weight; the safe-load (x1.4) tonnage
+  // is calculated server-side and only used internally by Itinium.
+  const autoTonnage = totalWeightKg / 1000;
   const currentLoad = tonnageManual && tonnageOverride ? parseFloat(tonnageOverride) || 0 : autoTonnage;
   const minTonnage = 9.5;
   const maxCapacity = 26.0;
@@ -1611,7 +1606,7 @@ export default function DepotFormPage() {
                   Redundant Battery Collection Note
                 </p>
                 <p className="text-sm font-medium text-[#0f2744]">
-                  {[getSelectedLocationName() || user?.depot, user?.fullName].filter(Boolean).join(" — ")}
+                  {[getSelectedLocationName() || user?.depot || "Head Office", user?.fullName].filter(Boolean).join(" — ")}
                 </p>
               </div>
             </div>
@@ -1687,6 +1682,59 @@ export default function DepotFormPage() {
                 ))}
               </div>
             )}
+          </div>
+        </section>
+
+        <section
+          className="bg-white rounded-xl border border-slate-200 shadow-[0_2px_10px_rgb(0,0,0,0.02)] overflow-hidden"
+          data-testid="section-csv-upload"
+        >
+          <div className="border-l-4 border-[#0ea5e9] bg-slate-50/50 px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Upload className="w-5 h-5 text-[#0ea5e9]" />
+              <h3 className="font-bold text-[#0f2744] text-lg">
+                Import from CSV
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={downloadCsvTemplate}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#0ea5e9] hover:text-[#0284c7] hover:bg-sky-50 rounded-md transition-colors border border-[#0ea5e9]/30"
+              data-testid="button-download-csv-template"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download Template
+            </button>
+          </div>
+          <div className="p-5">
+            <button
+              type="button"
+              onClick={() => {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.accept = ".csv,text/csv";
+                input.onchange = (e) => {
+                  const file = (e.target as HTMLInputElement).files?.[0];
+                  if (file) handleCsvImport(file);
+                };
+                input.click();
+              }}
+              className="w-full flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 hover:border-[#0ea5e9] transition-all group outline-none focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-2"
+              data-testid="button-upload-csv"
+            >
+              <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-sm mb-4 group-hover:scale-110 transition-transform">
+                <Upload className="w-6 h-6 text-[#0ea5e9]" />
+              </div>
+              <p className="text-[#0f2744] font-bold text-lg mb-1">
+                Upload CSV File
+              </p>
+              <p className="text-slate-500 text-sm mb-1">
+                Import battery items from a spreadsheet
+              </p>
+              <p className="text-slate-400 text-xs">
+                Download the template above for the correct format
+              </p>
+            </button>
           </div>
         </section>
 
@@ -1894,9 +1942,7 @@ export default function DepotFormPage() {
                             ? `"${battery.manufacture}" was not recognised — it will be reviewed by Itinium.`
                             : battery.manufacturerFlagReason === CSV_UNKNOWN_FLAG_REASON
                             ? `Flagged — "${battery.manufacture}" is not in Itinium's known list.`
-                            : battery.manufacture.trim().toLowerCase() === "unknown"
-                            ? "Flagged — manufacturer missing from CSV, defaulted to TAB weights. Itinium will review."
-                            : "Flagged — missing from CSV. Fill in to clear."}
+                            : "Flagged for Itinium review."}
                         </p>
                         {battery.manufacturerFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.manufacturerSuggestion && (
                           <CorrectionPrompt
@@ -2054,7 +2100,7 @@ export default function DepotFormPage() {
                             ? `"${battery.cellModel || battery.cellType}" was not recognised — it will be reviewed by Itinium.`
                             : battery.cellModelFlagReason === CSV_UNKNOWN_FLAG_REASON
                             ? `Flagged — "${battery.cellModel}" is not in Itinium's known list.`
-                            : "Flagged — missing from CSV. Fill in to clear."}
+                            : "Flagged for Itinium review."}
                         </p>
                         {battery.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.cellTypeSuggestion && (
                           <CorrectionPrompt
@@ -2098,11 +2144,6 @@ export default function DepotFormPage() {
                               I confirm this value is correct — submit for Itinium review
                             </span>
                           </label>
-                        )}
-                        {battery.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.cellTypeManuallyConfirmed && (
-                          <p className="text-[10px] text-emerald-600 flex items-center gap-1 mt-0.5">
-                            <Check className="w-3 h-3" /> Confirmed — will be flagged for Itinium review
-                          </p>
                         )}
                         {battery.cellModelFlagReason === CSV_UNKNOWN_FLAG_REASON &&
                           (() => {
@@ -2454,59 +2495,6 @@ export default function DepotFormPage() {
               <span className="text-sm text-emerald-600">Auto-calculated from battery weights</span>
             </div>
           )}
-        </section>
-
-        <section
-          className="bg-white rounded-xl border border-slate-200 shadow-[0_2px_10px_rgb(0,0,0,0.02)] overflow-hidden"
-          data-testid="section-csv-upload"
-        >
-          <div className="border-l-4 border-[#0ea5e9] bg-slate-50/50 px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Upload className="w-5 h-5 text-[#0ea5e9]" />
-              <h3 className="font-bold text-[#0f2744] text-lg">
-                Import from CSV
-              </h3>
-            </div>
-            <button
-              type="button"
-              onClick={downloadCsvTemplate}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#0ea5e9] hover:text-[#0284c7] hover:bg-sky-50 rounded-md transition-colors border border-[#0ea5e9]/30"
-              data-testid="button-download-csv-template"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Download Template
-            </button>
-          </div>
-          <div className="p-5">
-            <button
-              type="button"
-              onClick={() => {
-                const input = document.createElement("input");
-                input.type = "file";
-                input.accept = ".csv,text/csv";
-                input.onchange = (e) => {
-                  const file = (e.target as HTMLInputElement).files?.[0];
-                  if (file) handleCsvImport(file);
-                };
-                input.click();
-              }}
-              className="w-full flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 hover:border-[#0ea5e9] transition-all group outline-none focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-2"
-              data-testid="button-upload-csv"
-            >
-              <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-sm mb-4 group-hover:scale-110 transition-transform">
-                <Upload className="w-6 h-6 text-[#0ea5e9]" />
-              </div>
-              <p className="text-[#0f2744] font-bold text-lg mb-1">
-                Upload CSV File
-              </p>
-              <p className="text-slate-500 text-sm mb-1">
-                Import battery items from a spreadsheet
-              </p>
-              <p className="text-slate-400 text-xs">
-                Download the template above for the correct format
-              </p>
-            </button>
-          </div>
         </section>
 
         <section

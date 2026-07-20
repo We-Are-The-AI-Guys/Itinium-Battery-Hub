@@ -205,6 +205,7 @@ export default function JobDetailPage() {
     siteContacts: "",
     siteHours: "",
     specialInstructions: "",
+    collectionDate: "",
   });
   const [savingSiteDetails, setSavingSiteDetails] = useState(false);
   const [downloadingCollectionSheet, setDownloadingCollectionSheet] = useState(false);
@@ -322,6 +323,7 @@ export default function JobDetailPage() {
             siteContacts: data.job.siteContacts || "",
             siteHours: data.job.siteHours || "",
             specialInstructions: data.job.specialInstructions || "",
+            collectionDate: data.job.collectionDate || "",
           });
         } else if (result.status === 404) {
           setLoadError("not_found");
@@ -677,7 +679,7 @@ export default function JobDetailPage() {
                 disabled={downloadingInvoice}
               >
                 <Download className="w-3.5 h-3.5 mr-1.5" />
-                {downloadingInvoice ? "Preparing…" : "Download Remittance PDF"}
+                {downloadingInvoice ? "Preparing…" : "Confirmed Collection Sheet PDF"}
               </Button>
             )}
             <Badge variant="outline" className={`font-medium text-sm px-3 py-1 ${statusStyles[job.status] || ""}`}>
@@ -798,7 +800,15 @@ export default function JobDetailPage() {
                   placeholder="e.g. Mon–Fri 07:00–16:00"
                 />
               </div>
-              <div className="md:col-span-2">
+              <div>
+                <label className="text-xs font-medium text-slate-500 uppercase mb-1 block">Collection Date</label>
+                <Input
+                  type="date"
+                  value={siteDetails.collectionDate}
+                  onChange={(e) => setSiteDetails((prev) => ({ ...prev, collectionDate: e.target.value }))}
+                />
+              </div>
+              <div>
                 <label className="text-xs font-medium text-slate-500 uppercase mb-1 block">Special / Loading Instructions</label>
                 <Input
                   value={siteDetails.specialInstructions}
