@@ -1318,7 +1318,7 @@ export default function DepotFormPage() {
         unresolvedCritical.push(`${rowLabel}: Manufacturer`);
       }
       if (b.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON && !b.cellTypeManuallyConfirmed) {
-        unresolvedCritical.push(`${rowLabel}: Cell Model`);
+        unresolvedCritical.push(`${rowLabel}: Cell Type`);
       }
       if (!b.isLooseCells && b.voltageFlagReason === MANUAL_UNKNOWN_FLAG_REASON && !b.voltageManuallyConfirmed) {
         unresolvedCritical.push(`${rowLabel}: Voltage`);
@@ -1936,14 +1936,6 @@ export default function DepotFormPage() {
                     )}
                     {battery.manufacturerFlagReason && (
                       <div className="space-y-1">
-                        <p className="text-[10px] text-amber-600 flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" />
-                          {battery.manufacturerFlagReason === MANUAL_UNKNOWN_FLAG_REASON
-                            ? `"${battery.manufacture}" was not recognised — it will be reviewed by Itinium.`
-                            : battery.manufacturerFlagReason === CSV_UNKNOWN_FLAG_REASON
-                            ? `Flagged — "${battery.manufacture}" is not in Itinium's known list.`
-                            : "Flagged for Itinium review."}
-                        </p>
                         {battery.manufacturerFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.manufacturerSuggestion && (
                           <CorrectionPrompt
                             suggestion={battery.manufacturerSuggestion}
@@ -1980,11 +1972,6 @@ export default function DepotFormPage() {
                               I confirm this value is correct — submit for Itinium review
                             </span>
                           </label>
-                        )}
-                        {battery.manufacturerFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.manufacturerManuallyConfirmed && (
-                          <p className="text-[10px] text-emerald-600 flex items-center gap-1 mt-0.5">
-                            <Check className="w-3 h-3" /> Confirmed — will be flagged for Itinium review
-                          </p>
                         )}
                         {battery.manufacturerFlagReason === CSV_UNKNOWN_FLAG_REASON &&
                           (() => {
@@ -2094,14 +2081,6 @@ export default function DepotFormPage() {
                     )}
                     {battery.cellModelFlagReason && (
                       <div className="space-y-1">
-                        <p className="text-[10px] text-amber-600 flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" />
-                          {battery.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON
-                            ? `"${battery.cellModel || battery.cellType}" was not recognised — it will be reviewed by Itinium.`
-                            : battery.cellModelFlagReason === CSV_UNKNOWN_FLAG_REASON
-                            ? `Flagged — "${battery.cellModel}" is not in Itinium's known list.`
-                            : "Flagged for Itinium review."}
-                        </p>
                         {battery.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.cellTypeSuggestion && (
                           <CorrectionPrompt
                             suggestion={battery.cellTypeSuggestion}
