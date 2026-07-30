@@ -3,6 +3,9 @@ name: Battery weight & Pb conventions
 description: Source-of-truth conventions for battery weight, safe-load factor and Pb derivation in the Itinium portal.
 ---
 
+## Displayed load = gross = lead x 1.4 (user re-confirmed July 30, 2026)
+- The depot form's on-screen Current Load must show gross weight = total lead content × 1.4 — the same figure stored server-side. A July 20 change to display lead-only was reverted at the user's request; 26t/10t thresholds apply to the gross figure on both client and server.
+
 ## Weight convention (SETTLED — user confirmed July 20, 2026)
 - The client's Pb spreadsheet is the MASTER data source. Everything runs off lead weight only; total battery weight is deliberately not tracked.
 - Estimated weight = Pb-per-cell × actual cell count × 1.4 safe vehicle loading factor. The catalogue's weight_per_cell_kg values being the Pb figures is intentional, not a data gap.

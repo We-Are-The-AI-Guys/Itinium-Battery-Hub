@@ -159,10 +159,10 @@ describe("CSV import while the cell-model catalogue is still loading", () => {
     });
     expect(screen.getByDisplayValue("EnerSys / Hawker")).toBeInTheDocument();
 
-    // Depot users see the actual battery weight (19.9 kg/cell x 12 cells =
-    // 238.8 kg); the x1.4 safe-load figure is applied server-side only.
+    // Gross load = lead x 1.4 (19.9 kg/cell x 12 cells x 1.4 =
+    // 334.3 kg), matching the x1.4 safe-load tonnage stored server-side.
     await waitFor(() => {
-      expect(screen.getAllByText(/0\.239t/).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/0\.334t/).length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.queryByText(/^0\.000t/)).not.toBeInTheDocument();
   });

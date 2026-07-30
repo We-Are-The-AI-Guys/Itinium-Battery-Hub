@@ -1053,12 +1053,12 @@ router.post(
 
       // Loads under 10t are allowed (a transportation charge applies —
       // the portal shows a notice instead of blocking submission).
-      // The 26t truck capacity applies to the actual battery weight — the same
-      // figure shown to depot users — not the internal x1.4 safe-load tonnage.
+      // The 26t truck capacity applies to the gross load (lead x 1.4) — the
+      // same figure shown to depot users (client-confirmed 30 July 2026).
       const MAX_TONNAGE = 26.0;
       const effectiveLoadT = (tonnageManualOverride && isFinite(parsedTonnage) && parsedTonnage >= 0)
         ? parsedTonnage
-        : rawWeightKg / 1000;
+        : autoTonnage / 1000;
       if (isFinite(effectiveLoadT) && effectiveLoadT > MAX_TONNAGE) {
         res.status(400).json({ message: `Maximum collection weight is ${MAX_TONNAGE}t. Current load is ${effectiveLoadT.toFixed(3)}t.` });
         return;

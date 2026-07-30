@@ -157,9 +157,9 @@ describe("CSV import with 'N/A' in the Manufacturer column", () => {
       expect(screen.getByDisplayValue("SER-NA1")).toBeInTheDocument();
     });
     expect(screen.getByDisplayValue("Unknown")).toBeInTheDocument();
-    // Weight computed from TAB catalogue: 19.9 kg/cell x 12 cells = 238.8 kg
+    // Gross load from TAB catalogue: 19.9 kg/cell x 12 cells x 1.4 = 334.3 kg
     await waitFor(() => {
-      expect(screen.getAllByText(/0\.239t/).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/0\.334t/).length).toBeGreaterThanOrEqual(1);
     });
   });
 });
@@ -181,7 +181,7 @@ describe("submitting with an 'Other' manufacturer and no custom name", () => {
     });
     // Wait for auto-weight so the missing-weight guard doesn't trip.
     await waitFor(() => {
-      expect(screen.getAllByText(/0\.239t/).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/0\.334t/).length).toBeGreaterThanOrEqual(1);
     });
 
     fireEvent.click(screen.getByTestId("button-submit-collection"));
@@ -214,7 +214,7 @@ describe("submitting with a hand-typed 'unknown' manufacturer", () => {
       expect(screen.getByDisplayValue("SER-UK1")).toBeInTheDocument();
     });
     await waitFor(() => {
-      expect(screen.getAllByText(/0\.239t/).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/0\.334t/).length).toBeGreaterThanOrEqual(1);
     });
 
     fireEvent.click(screen.getByTestId("button-submit-collection"));

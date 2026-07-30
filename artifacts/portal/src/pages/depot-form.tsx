@@ -1484,9 +1484,10 @@ export default function DepotFormPage() {
     const w = parseFloat(b.estimatedWeightKg);
     return sum + (isNaN(w) ? 0 : w);
   }, 0);
-  // Depot users see the actual battery weight; the safe-load (x1.4) tonnage
-  // is calculated server-side and only used internally by Itinium.
-  const autoTonnage = totalWeightKg / 1000;
+  // Gross load = total lead content x 1.4 (client-confirmed 30 July 2026).
+  // This matches the x1.4 safe-load tonnage stored server-side.
+  const GROSS_WEIGHT_FACTOR = 1.4;
+  const autoTonnage = (totalWeightKg * GROSS_WEIGHT_FACTOR) / 1000;
   // Rows with no usable weight (e.g. unrecognised cell types) silently
   // contribute 0kg — surface this so the total is never quietly understated.
   const zeroWeightRows = batteries
