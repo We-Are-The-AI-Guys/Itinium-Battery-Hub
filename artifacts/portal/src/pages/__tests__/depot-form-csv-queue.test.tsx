@@ -159,8 +159,10 @@ describe("CSV import while the cell-model catalogue is still loading", () => {
     });
     expect(screen.getByDisplayValue("EnerSys / Hawker")).toBeInTheDocument();
 
+    // Depot users see the actual battery weight (19.9 kg/cell x 12 cells =
+    // 238.8 kg); the x1.4 safe-load figure is applied server-side only.
     await waitFor(() => {
-      expect(screen.getAllByText(/0\.334t/).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/0\.239t/).length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.queryByText(/^0\.000t/)).not.toBeInTheDocument();
   });
@@ -190,9 +192,7 @@ describe("CSV import with an empty Manufacturer column", () => {
       expect(screen.getByDisplayValue("SER-UT2")).toBeInTheDocument();
     });
     expect(screen.getByDisplayValue("Unknown")).toBeInTheDocument();
-    expect(
-      screen.getByText(/manufacturer missing from CSV, defaulted to TAB weights/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText("Needs Review")).toBeInTheDocument();
   });
 });
 

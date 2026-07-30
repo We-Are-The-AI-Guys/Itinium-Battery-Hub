@@ -183,6 +183,14 @@ function levenshtein(a: string, b: string): number {
   return dp[n];
 }
 
+// Placeholder manufacturer values that should be treated the same as a blank
+// manufacturer: mapped to "Unknown" (TAB weights), flagged for Itinium review,
+// and never allowed to block import or submission.
+const UNKNOWN_MANUFACTURER_VALUES = new Set(["n/a", "na", "unknown", "other", "none", "-", "?"]);
+export function isUnknownManufacturerValue(value: string): boolean {
+  return UNKNOWN_MANUFACTURER_VALUES.has(value.trim().toLowerCase());
+}
+
 function normalizeForMatch(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -745,12 +753,13 @@ export default function DepotFormPage() {
           const mfrTrim = rawMfr.trim();
           let normalizedMfr = mfrTrim;
           let mfrAutoUnknown = false;
-          if (mfrTrim) {
+          if (mfrTrim && !isUnknownManufacturerValue(mfrTrim)) {
             const canonical = mfrByNorm.get(normalizeForMatch(mfrTrim));
             if (canonical) normalizedMfr = canonical;
           } else {
-            // Empty manufacturer: default to "Unknown" + TAB weights and flag
-            // the row for Itinium review instead of blocking the import.
+            // Empty/placeholder manufacturers (blank, "N/A", "unknown",
+            // "Other", "-", "none"): default to "Unknown" + TAB weights and
+            // flag the row for Itinium review instead of blocking the import.
             normalizedMfr = "Unknown";
             mfrAutoUnknown = true;
           }
@@ -1202,19 +1211,27 @@ export default function DepotFormPage() {
       return;
     }
 
-    const missingCustomMfr = batteries.some(
-      (b) => b.manufacture === "Other" && !b.manufactureCustom.trim()
-    );
-    if (missingCustomMfr) {
-      toast({
-        title: "Missing manufacturer name",
-        description: "Please enter the manufacturer name for batteries marked as 'Other'.",
-        variant: "destructive",
-      });
-      return;
-    }
+    // Rows marked "Other" with no manufacturer name (and placeholder names
+    // like "N/A" or "unknown") are treated as Unknown manufacturers: they use
+    // TAB weights and are flagged for Itinium review — never blocked.
+    const batteriesWithMfrFallback = batteries.map((b) => {
+      const effRaw = b.manufacture === "Other" ? b.manufactureCustom : b.manufacture;
+      if (
+        (b.manufacture === "Other" && !b.manufactureCustom.trim()) ||
+        !effRaw.trim() ||
+        isUnknownManufacturerValue(effRaw)
+      ) {
+        return {
+          ...b,
+          manufacture: "Unknown",
+          manufactureCustom: "",
+          manufacturerFlagReason: b.manufacturerFlagReason || CSV_FLAG_REASON,
+        };
+      }
+      return b;
+    });
 
-    const looseCellsMissingInputs = batteries.some(
+    const looseCellsMissingInputs = batteriesWithMfrFallback.some(
       (b) =>
         b.isLooseCells &&
         (!b.cellType.trim() || !b.looseCellsQty.trim() || parseInt(b.looseCellsQty, 10) <= 0)
@@ -1228,7 +1245,7 @@ export default function DepotFormPage() {
       return;
     }
 
-    const rowsMissingWeight = batteries
+    const rowsMissingWeight = batteriesWithMfrFallback
       .map((b, i) => ({ b, i }))
       .filter(({ b }) => {
         const w = parseFloat(b.estimatedWeightKg);
@@ -1271,7 +1288,7 @@ export default function DepotFormPage() {
 
     // Validate manufacturer, cell type, and voltage against master lists before submitting.
     // If any value is unrecognised, flag it but do not block — flags are stored for Itinium review.
-    const validatedBatteries = batteries.map((b) => {
+    const validatedBatteries = batteriesWithMfrFallback.map((b) => {
       const updated = { ...b };
       const effMfr =
         b.manufacture === "Other" && b.manufactureCustom ? b.manufactureCustom : b.manufacture;
@@ -1302,6 +1319,7 @@ export default function DepotFormPage() {
     });
     const hasNewFlags = validatedBatteries.some(
       (b, i) =>
+        b.manufacture !== batteries[i].manufacture ||
         b.manufacturerFlagReason !== batteries[i].manufacturerFlagReason ||
         b.cellModelFlagReason !== batteries[i].cellModelFlagReason ||
         b.voltageFlagReason !== batteries[i].voltageFlagReason
@@ -1469,6 +1487,15 @@ export default function DepotFormPage() {
   // Depot users see the actual battery weight; the safe-load (x1.4) tonnage
   // is calculated server-side and only used internally by Itinium.
   const autoTonnage = totalWeightKg / 1000;
+  // Rows with no usable weight (e.g. unrecognised cell types) silently
+  // contribute 0kg — surface this so the total is never quietly understated.
+  const zeroWeightRows = batteries
+    .map((b, i) => ({ b, i }))
+    .filter(({ b }) => {
+      const hasData = b.batterySerial.trim() || b.assetNumber.trim() || b.cellType.trim() || b.cellModel.trim();
+      const w = parseFloat(b.estimatedWeightKg);
+      return hasData && !(isFinite(w) && w > 0);
+    });
   const currentLoad = tonnageManual && tonnageOverride ? parseFloat(tonnageOverride) || 0 : autoTonnage;
   const minTonnage = 9.5;
   const maxCapacity = 26.0;
@@ -1567,6 +1594,13 @@ export default function DepotFormPage() {
           {isGreen && (
             <p className="text-xs font-medium text-emerald-700 mb-2">
               Load is within the optimal range.
+            </p>
+          )}
+          {zeroWeightRows.length > 0 && (
+            <p className="text-xs font-medium text-amber-700 mb-2" data-testid="text-zero-weight-warning">
+              {zeroWeightRows.length} row{zeroWeightRows.length > 1 ? "s have" : " has"} no weight and{" "}
+              {zeroWeightRows.length > 1 ? "are" : "is"} not included in the total (row{zeroWeightRows.length > 1 ? "s" : ""}{" "}
+              {zeroWeightRows.map(({ i }) => i + 1).join(", ")}). Check the Cell Type is correct or enter the weight manually.
             </p>
           )}
           <div className="relative h-3 w-full bg-slate-200 rounded-full overflow-hidden mt-3">
