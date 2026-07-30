@@ -100,7 +100,7 @@ export default function LmePricingPage() {
 
   const [currentPrice, setCurrentPrice] = useState<LmePrice | null>(null);
   const [usdPrice, setUsdPrice] = useState("2185.50");
-  const [exchangeRate, setExchangeRate] = useState("0.7892");
+  const [exchangeRate, setExchangeRate] = useState("1.2671");
   const [updating, setUpdating] = useState(false);
 
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -118,7 +118,7 @@ export default function LmePricingPage() {
   const [downloadingJobId, setDownloadingJobId] = useState<number | null>(null);
   const [pdfMonth, setPdfMonth] = useState(currentMonthValue());
 
-  const calculatedGbp = (parseFloat(usdPrice.replace(/,/g, "")) * parseFloat(exchangeRate)).toFixed(2);
+  const calculatedGbp = (parseFloat(usdPrice.replace(/,/g, "")) / parseFloat(exchangeRate)).toFixed(2);
 
   const applyCurrentPrice = useCallback((price: LmePrice | null) => {
     if (!price) return;

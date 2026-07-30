@@ -52,7 +52,8 @@ router.post(
       }
 
       const { usdPrice, exchangeRate } = parsed.data;
-      const gbpPrice = (parseFloat(usdPrice) * parseFloat(exchangeRate)).toFixed(2);
+      // exchangeRate is GBP/USD (USD per 1 GBP, e.g. ~1.27), so convert by dividing
+      const gbpPrice = (parseFloat(usdPrice) / parseFloat(exchangeRate)).toFixed(2);
 
       const today = new Date().toISOString().split("T")[0];
       const [price] = await db

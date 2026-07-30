@@ -316,7 +316,7 @@ async function seed() {
   await db.insert(lmePricesTable).values({
     priceDate: "2026-04-02",
     usdPrice: "2200.00",
-    exchangeRate: "0.790000",
+    exchangeRate: "1.265823",
     gbpPrice: "1738.00",
     source: "manual",
   }).onConflictDoNothing();
