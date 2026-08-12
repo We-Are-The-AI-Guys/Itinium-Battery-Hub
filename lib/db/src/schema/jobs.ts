@@ -42,6 +42,8 @@ export const jobsTable = pgTable("jobs", {
   dueDate: date("due_date"),
   datePaid: date("date_paid"),
   daysToPay: integer("days_to_pay"),
+  driverName: varchar("driver_name", { length: 255 }),
+  vehicleReg: varchar("vehicle_reg", { length: 50 }),
   siteContacts: text("site_contacts"),
   siteHours: varchar("site_hours", { length: 255 }),
   specialInstructions: text("special_instructions"),

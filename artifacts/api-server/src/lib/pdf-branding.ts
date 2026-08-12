@@ -30,38 +30,40 @@ function logoExists(): boolean {
 export function drawPageHeader(doc: Doc, docTitle: string, docSubtitle?: string) {
   doc.save();
 
-  doc.rect(0, 0, doc.page.width, HEADER_H).fill(NAVY);
-
+  // Light header: the Itinium logo is dark navy on transparent, so it must
+  // sit on a white background to print clearly (printers often drop filled
+  // background rectangles, which made white-on-navy text disappear).
   let logoEndX = MARGIN + 10;
   if (logoExists()) {
     try {
       doc.image(LOGO_PATH, 18, 9, { height: 50 });
-      logoEndX = 155;
+      logoEndX = 175;
     } catch {
     }
   }
 
   const rightW = doc.page.width - logoEndX - 16;
 
-  doc.fillColor("#ffffff").fontSize(14).font("Helvetica-Bold")
+  doc.fillColor(NAVY).fontSize(14).font("Helvetica-Bold")
     .text("Itinium Battery Portal", logoEndX, 13, { width: rightW, align: "right", lineBreak: false });
 
   if (docTitle) {
-    doc.fillColor(TEAL).fontSize(10).font("Helvetica")
+    doc.fillColor("#0369a1").fontSize(10).font("Helvetica")
       .text(docTitle, logoEndX, 32, { width: rightW, align: "right", lineBreak: false });
   }
 
   if (docSubtitle) {
-    doc.fillColor("#94a3b8").fontSize(8).font("Helvetica")
+    doc.fillColor("#475569").fontSize(8).font("Helvetica")
       .text(docSubtitle, logoEndX, 49, { width: rightW, align: "right", lineBreak: false });
   }
 
-  doc.rect(0, HEADER_H, doc.page.width, 3).fill(TEAL);
+  doc.rect(0, HEADER_H, doc.page.width, 2).fill(NAVY);
+  doc.rect(0, HEADER_H + 2, doc.page.width, 2).fill(TEAL);
 
   doc.restore();
 
   doc.x = MARGIN;
-  doc.y = HEADER_H + 3 + 18;
+  doc.y = HEADER_H + 4 + 18;
 }
 
 export function drawPageFooter(doc: Doc, pageNum: number, totalPages: number) {

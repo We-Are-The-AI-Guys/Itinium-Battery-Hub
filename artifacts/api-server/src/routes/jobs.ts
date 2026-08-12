@@ -147,6 +147,85 @@ function sortBatteriesByPallet<T extends { palletNumber: string | null; id: numb
   });
 }
 
+// Shared Driver & Vehicle section for the Collection Sheet and Confirmed
+// Collection Sheet: shows assigned values, or blank lines to hand-write.
+function drawDriverVehicleSection(
+  doc: InstanceType<typeof PDFDocument>,
+  contentW: number,
+  driverName: string | null,
+  vehicleReg: string | null
+) {
+  const NAVY = "#0f2744";
+  if (doc.y + 70 > doc.page.height - 60) doc.addPage();
+  const dvY = doc.y;
+  doc.rect(40, dvY, contentW, 0.5).fill("#e2e8f0");
+  doc.y = dvY + 8;
+  doc.fontSize(10).fillColor(NAVY).font("Helvetica-Bold").text("DRIVER & VEHICLE", 40);
+  const dvRowY = doc.y + 6;
+  const halfW = contentW / 2;
+  doc.fontSize(9).fillColor("#64748b").font("Helvetica-Bold")
+    .text("DRIVER", 40, dvRowY, { lineBreak: false })
+    .text("VEHICLE REG", 40 + halfW, dvRowY, { lineBreak: false });
+  const dvValY = dvRowY + 13;
+  doc.fontSize(10).fillColor("#1e293b").font("Helvetica");
+  if (driverName) {
+    doc.text(driverName, 40, dvValY, { width: halfW - 20, lineBreak: false });
+  } else {
+    doc.moveTo(40, dvValY + 10).lineTo(40 + halfW - 30, dvValY + 10).strokeColor("#94a3b8").lineWidth(0.75).stroke();
+  }
+  if (vehicleReg) {
+    doc.text(vehicleReg, 40 + halfW, dvValY, { width: halfW - 20, lineBreak: false });
+  } else {
+    doc.moveTo(40 + halfW, dvValY + 10).lineTo(40 + contentW - 10, dvValY + 10).strokeColor("#94a3b8").lineWidth(0.75).stroke();
+  }
+  doc.y = dvValY + 22;
+}
+
+// Shared closing block for the Collection Sheet and Confirmed Collection
+// Sheet: the middle agreement box, Driver and Site signature lines, and the
+// closing notice. Drawn atomically — the total height is measured up front
+// and a new page is started first if it will not fit, so the agreement,
+// signatures, and notice are never split across pages.
+function drawAgreementAndSignatures(doc: InstanceType<typeof PDFDocument>, contentW: number, closingNotice: string) {
+  const NAVY = "#0f2744";
+  const pageBottom = doc.page.height - 60;
+
+  doc.fontSize(9.5).font("Helvetica");
+  const agreement = "This document is the confirmation and agreement for Itinium to remove the above redundant batteries for further inspection.";
+  const agreementTextH = doc.heightOfString(agreement, { width: contentW - 24 });
+  doc.fontSize(8);
+  const noticeH = doc.heightOfString(closingNotice, { width: contentW });
+  // gap + agreement box + gap + "SIGNATURES" + signature rows + gap + notice
+  const totalH = 18 + (agreementTextH + 20) + 18 + 14 + 98 + 12 + noticeH;
+  if (doc.y + totalH > pageBottom) doc.addPage();
+
+  doc.y += 18;
+  const boxY = doc.y;
+  doc.rect(40, boxY, contentW, agreementTextH + 20).strokeColor("#94a3b8").lineWidth(0.75).stroke();
+  doc.fontSize(9.5).fillColor("#1e293b").font("Helvetica")
+    .text(agreement, 52, boxY + 10, { width: contentW - 24 });
+  doc.y = boxY + agreementTextH + 20 + 18;
+
+  doc.fontSize(10).fillColor(NAVY).font("Helvetica-Bold").text("SIGNATURES", 40);
+  const sigTop = doc.y + 8;
+  const colW = (contentW - 30) / 2;
+  const drawSigBlock = (x: number, party: string) => {
+    doc.fontSize(9).fillColor("#64748b").font("Helvetica-Bold").text(party.toUpperCase(), x, sigTop, { lineBreak: false });
+    const rows = [["Name:", 20], ["Signature:", 46], ["Date:", 72]] as const;
+    for (const [label, dy] of rows) {
+      const y = sigTop + dy;
+      doc.fontSize(9).fillColor("#475569").font("Helvetica").text(label, x, y, { lineBreak: false });
+      doc.moveTo(x + 55, y + 9).lineTo(x + colW, y + 9).strokeColor("#94a3b8").lineWidth(0.75).stroke();
+    }
+  };
+  drawSigBlock(40, "Driver");
+  drawSigBlock(40 + colW + 30, "Site");
+  doc.y = sigTop + 90;
+
+  doc.fontSize(8).fillColor("#64748b").font("Helvetica")
+    .text(closingNotice, 40, doc.y, { width: contentW });
+}
+
 // Effective LME rate for a job: the job's CBL LME value if set (>0),
 // otherwise the latest LME GBP price. Returns null when neither exists.
 async function getEffectiveLmeRateForJob(cblLmeValue: string | null): Promise<number | null> {
@@ -514,7 +593,6 @@ router.get(
         if (loc) locationAddress = loc.address;
       }
 
-      const invoiceRef = job.itiniumInvoiceNo || job.customerInvoiceNo || job.reference;
       const collectionLabel = job.collectionDate
         ? new Date(`${job.collectionDate}T00:00:00Z`).toLocaleDateString("en-GB", {
             day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
@@ -554,14 +632,19 @@ router.get(
 
       const topY = doc.y;
 
-      doc.fontSize(10).fillColor(NAVY).font("Helvetica-Bold").text("Supplier:", 40, topY);
-      doc.fontSize(10).fillColor("#334155").font("Helvetica")
-        .text(job.clientName, 40)
-        .text(job.depot, 40);
-      if (job.collectionPoint) doc.text(job.collectionPoint, 40);
-
-      doc.fontSize(10).fillColor(NAVY).font("Helvetica-Bold").text("Buyer:", 40);
-      doc.fontSize(10).fillColor("#334155").font("Helvetica").text("Itinium Ltd", 40);
+      // Supplier block with explicit line positions (fixes uneven spacing).
+      const leftLines: Array<[string, boolean]> = [["Supplier:", true], [job.clientName, false], [job.depot, false]];
+      if (job.collectionPoint) leftLines.push([job.collectionPoint, false]);
+      leftLines.push(["Buyer:", true], ["Itinium Partnership Ltd", false]);
+      let ly = topY;
+      for (const [line, bold] of leftLines) {
+        doc.fontSize(10)
+          .fillColor(bold ? NAVY : "#334155")
+          .font(bold ? "Helvetica-Bold" : "Helvetica")
+          .text(line, 40, ly, { width: pageW / 2 - 60, lineBreak: false });
+        ly += bold && line !== "Supplier:" ? 15 : 14;
+        if (bold && line === "Buyer:") ly -= 0;
+      }
 
       const rightColX = pageW / 2 + 10;
       const labelW = 120;
@@ -577,11 +660,9 @@ router.get(
 
       infoRow("Job Reference:", job.reference, topY);
       infoRow("Collection Date:", collectionLabel, topY + 16);
-      infoRow("Itinium Invoice No:", job.itiniumInvoiceNo || "—", topY + 32);
-      infoRow("Customer Invoice No:", job.customerInvoiceNo || "—", topY + 48);
-      infoRow("Invoice Status:", job.invoiceStatus || "—", topY + 64);
+      infoRow("Customer Invoice No:", job.customerInvoiceNo || "—", topY + 32);
 
-      doc.y = Math.max(doc.y, topY + 105);
+      doc.y = Math.max(ly, topY + 60);
       doc.moveDown(1.2);
 
       doc.moveTo(40, doc.y).lineTo(pageW - 40, doc.y).strokeColor("#e2e8f0").lineWidth(0.5).stroke();
@@ -599,61 +680,64 @@ router.get(
       infoBlock("Site Address", siteAddress);
       infoBlock("Site Contacts", job.siteContacts || "—");
       infoBlock("Site Hours", job.siteHours || "—");
+      drawDriverVehicleSection(doc, contentW, job.driverName, job.vehicleReg);
       infoBlock("Special / Loading Instructions", job.specialInstructions || "None");
 
       doc.moveTo(40, doc.y).lineTo(pageW - 40, doc.y).strokeColor("#e2e8f0").lineWidth(0.5).stroke();
       doc.moveDown(0.8);
 
+      // Mirror of the Collection Sheet table, plus a printed receipt
+      // confirmation column (tick / cross by hand) and a blank notes column.
       const batCols = [
-        { label: "Pallet", x: 40, w: 38 },
-        { label: "Manufacturer / Cell Type", x: 82, w: 116 },
-        { label: "Qty", x: 202, w: 28, align: "right" as const },
-        { label: "Wt (kg)", x: 234, w: 44, align: "right" as const },
-        { label: "Pb (kg)", x: 282, w: 44, align: "right" as const },
-        { label: "Value (£)", x: 330, w: 55, align: "right" as const },
-        { label: "Notes", x: 393, w: 162 },
+        { label: "Pallet", x: 40, w: 44 },
+        { label: "Asset", x: 88, w: 56 },
+        { label: "Serial", x: 148, w: 62 },
+        { label: "Manufacturer", x: 214, w: 70 },
+        { label: "Cell Type", x: 288, w: 66 },
+        { label: "Voltage", x: 358, w: 30 },
+        { label: "Loose Qty", x: 392, w: 34, align: "right" as const },
+        { label: "Received", x: 432, w: 42, align: "center" as const },
+        { label: "Notes", x: 480, w: 75 },
       ];
 
-      const headerY = doc.y;
-      doc.rect(40, headerY - 4, contentW, 22).fill("#f1f5f9");
-      doc.fontSize(8.5).fillColor(NAVY).font("Helvetica-Bold");
-      for (const c of batCols) {
-        doc.text(c.label, c.x, headerY + 2, { width: c.w, align: c.align, lineBreak: false });
+      function drawConfirmedTableHeader() {
+        const hy = doc.y;
+        doc.rect(40, hy - 4, contentW, 22).fill("#f1f5f9");
+        doc.fontSize(8.5).fillColor(NAVY).font("Helvetica-Bold");
+        for (const c of batCols) {
+          doc.text(c.label, c.x, hy + 2, { width: c.w, align: c.align, lineBreak: false });
+        }
+        doc.y = hy + 22;
+        doc.font("Helvetica").fillColor("#1e293b");
       }
-      doc.moveDown(0.2);
-      doc.y = headerY + 22;
-      doc.font("Helvetica").fillColor("#1e293b");
 
-      let totalPb = 0;
-      let totalValue = 0;
+      ensureRoom(60);
+      drawConfirmedTableHeader();
+
       let rowIdx = 0;
-
       for (const b of batteries) {
-        ensureRoom(20);
+        if (doc.y + 20 > doc.page.height - 60) {
+          doc.addPage();
+          drawConfirmedTableHeader();
+        }
         const ry = doc.y;
         if (rowIdx % 2 === 1) {
           doc.rect(40, ry - 2, contentW, 18).fill("#f8fafc");
         }
-        const pbNum = b.pbContentKg ? parseFloat(b.pbContentKg) : null;
-        const valNum = b.valueGbp ? parseFloat(b.valueGbp) : null;
-        if (pbNum) totalPb += pbNum;
-        if (valNum) totalValue += valNum;
-
-        const qty = b.isLooseCells ? (b.looseCellsQty ? String(b.looseCellsQty) : "—") : "1";
-        const weight = b.estimatedWeightKg ? `${parseFloat(b.estimatedWeightKg).toFixed(1)}` : "—";
-        const pbStr = pbNum !== null ? pbNum.toFixed(3) : "—";
-        const valStr = valNum !== null ? `${valNum.toFixed(2)}` : "—";
-        const cellLabel = [b.manufacture, b.cellType].filter(Boolean).join(" / ") || "—";
-        const notesStr = [b.notes, b.adminNotes].filter(Boolean).join(" | ") || "—";
+        const looseQty = b.isLooseCells ? (b.looseCellsQty ? String(b.looseCellsQty) : "—") : "—";
 
         doc.fontSize(8.5).fillColor("#1e293b").font("Helvetica");
         doc.text(b.palletNumber || "—", batCols[0].x, ry, { width: batCols[0].w, lineBreak: false });
-        doc.text(cellLabel, batCols[1].x, ry, { width: batCols[1].w, lineBreak: false });
-        doc.text(qty, batCols[2].x, ry, { width: batCols[2].w, align: "right", lineBreak: false });
-        doc.text(weight, batCols[3].x, ry, { width: batCols[3].w, align: "right", lineBreak: false });
-        doc.text(pbStr, batCols[4].x, ry, { width: batCols[4].w, align: "right", lineBreak: false });
-        doc.text(valStr, batCols[5].x, ry, { width: batCols[5].w, align: "right", lineBreak: false });
-        doc.text(notesStr, batCols[6].x, ry, { width: batCols[6].w, lineBreak: false, ellipsis: true, height: 16 });
+        doc.text(b.assetNumber || "—", batCols[1].x, ry, { width: batCols[1].w, lineBreak: false, ellipsis: true, height: 16 });
+        doc.text(b.batterySerial || "—", batCols[2].x, ry, { width: batCols[2].w, lineBreak: false, ellipsis: true, height: 16 });
+        doc.text(b.manufacture || "—", batCols[3].x, ry, { width: batCols[3].w, lineBreak: false, ellipsis: true, height: 16 });
+        doc.text(b.cellType || "—", batCols[4].x, ry, { width: batCols[4].w, lineBreak: false, ellipsis: true, height: 16 });
+        doc.text(b.voltage || "—", batCols[5].x, ry, { width: batCols[5].w, lineBreak: false });
+        doc.text(looseQty, batCols[6].x, ry, { width: batCols[6].w, align: "right", lineBreak: false });
+        // Empty tick box for hand-marking receipt
+        doc.rect(batCols[7].x + batCols[7].w / 2 - 5, ry, 10, 10).strokeColor("#94a3b8").lineWidth(0.5).stroke();
+        // Blank notes line
+        doc.moveTo(batCols[8].x, ry + 10).lineTo(batCols[8].x + batCols[8].w, ry + 10).strokeColor("#e2e8f0").lineWidth(0.5).stroke();
         doc.y = ry + 18;
         rowIdx++;
       }
@@ -662,52 +746,11 @@ router.get(
         doc.fontSize(9).fillColor("#94a3b8").text("No battery items recorded.", 40);
       }
 
-      ensureRoom(30);
-      doc.moveDown(0.4);
-      doc.moveTo(40, doc.y).lineTo(pageW - 40, doc.y).strokeColor("#cbd5e1").lineWidth(0.5).stroke();
-      doc.moveDown(0.6);
-
-      function summaryRow(label: string, value: string, highlight = false) {
-        ensureRoom(18);
-        const sy = doc.y;
-        doc.fontSize(9)
-          .fillColor(highlight ? NAVY : "#475569")
-          .font(highlight ? "Helvetica-Bold" : "Helvetica")
-          .text(label, 40, sy, { width: contentW - 90, lineBreak: false });
-        doc.fontSize(9)
-          .fillColor(highlight ? NAVY : "#1e293b")
-          .font(highlight ? "Helvetica-Bold" : "Helvetica")
-          .text(value, 40, sy, { width: contentW, align: "right", lineBreak: false });
-        doc.y = sy + 16;
-      }
-
-      summaryRow("Total Pb Content:", `${totalPb.toFixed(3)} kg`);
-      summaryRow("LME Rate Used:", job.lmeRateUsed ? `£${parseFloat(job.lmeRateUsed).toLocaleString("en-GB", { minimumFractionDigits: 2 })} / tonne` : "—");
-      summaryRow("Tonnage:", job.tonnage ? `${parseFloat(job.tonnage).toFixed(3)} t` : "—");
-
-      doc.moveDown(0.3);
-      doc.moveTo(pageW - 190, doc.y).lineTo(pageW - 40, doc.y).strokeColor("#cbd5e1").lineWidth(0.5).stroke();
-      doc.moveDown(0.4);
-
-      const calcValue = job.calculatedValue ? parseFloat(job.calculatedValue) : totalValue;
-      summaryRow("Calculated Value:", `£${calcValue.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, true);
-
-      if (job.grossProfit) {
-        const gp = parseFloat(job.grossProfit);
-        summaryRow(
-          "Gross Profit:",
-          `£${gp.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-          true
-        );
-      }
-
-      doc.moveDown(1.5);
-      ensureRoom(50);
-      doc.fontSize(8).fillColor("#94a3b8").font("Helvetica")
-        .text(
-          "This confirmed collection sheet is issued by Itinium Ltd and confirms the payment due to the above supplier for batteries collected. All values are calculated based on the LME lead price and Pb content of the batteries collected. Please retain for your records.",
-          40, doc.y, { width: contentW }
-        );
+      drawAgreementAndSignatures(
+        doc,
+        contentW,
+        "This confirmed collection sheet is issued by Itinium Partnership Ltd and confirms receipt of the batteries collected above. Please retain a copy for your records."
+      );
 
       finalize();
     } catch (error) {
@@ -820,6 +863,8 @@ router.get(
       infoBlock("Site Contacts", job.siteContacts || "—");
       infoBlock("Site Hours", job.siteHours || "—");
 
+      drawDriverVehicleSection(doc, contentW, job.driverName, job.vehicleReg);
+
       ensureRoom(50);
       const instrY = doc.y;
       doc.rect(40, instrY, contentW, 0.5).fill("#e2e8f0");
@@ -880,13 +925,11 @@ router.get(
         doc.fontSize(9).fillColor("#94a3b8").text("No battery items recorded.", 40);
       }
 
-      ensureRoom(40);
-      doc.moveDown(1);
-      doc.fontSize(8).fillColor("#94a3b8").font("Helvetica")
-        .text(
-          "This collection sheet is issued by Itinium Ltd for the transport company carrying out the above collection. Please follow all site instructions and confirm pallet counts on arrival.",
-          40, doc.y, { width: contentW }
-        );
+      drawAgreementAndSignatures(
+        doc,
+        contentW,
+        "This collection sheet is issued by Itinium Partnership Ltd for the transport company carrying out the above collection. Please follow all site instructions and confirm pallet counts on arrival."
+      );
 
       finalize();
     } catch (error) {

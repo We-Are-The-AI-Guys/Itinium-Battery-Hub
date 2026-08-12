@@ -38,6 +38,10 @@ async function bootstrap() {
     // by automatic catalogue re-derivation (see routes/jobs.ts).
     await db.execute(sql`ALTER TABLE job_batteries ADD COLUMN IF NOT EXISTS weight_manual BOOLEAN NOT NULL DEFAULT FALSE`);
     await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS tonnage_manual_override BOOLEAN NOT NULL DEFAULT FALSE`);
+    // Driver/vehicle shown on the collection sheet (assigned later by the
+    // collection company workflow; blank lines are printed when unset).
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS driver_name VARCHAR(255)`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS vehicle_reg VARCHAR(50)`);
   } catch (err) {
     console.error("Bootstrap: failed to create weight reference table:", err);
   }
