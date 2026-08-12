@@ -24,13 +24,14 @@ interface PbCatalogueEntry {
   manufacturer: string;
   modelName: string;
   pbContentKgPerCell: string | null;
+  weightPerCellKg?: string | null;
   cellsCount: number;
 }
 
 // Actual number of cells in a battery: each cell is 2V, so a complete
 // battery has voltage/2 cells (24V => 12 cells). Loose-cell rows carry an
 // explicit quantity instead. Returns null when it cannot be determined.
-function deriveActualCellCount(opts: {
+export function deriveActualCellCount(opts: {
   isLooseCells?: boolean | null;
   looseCellsQty?: number | string | null;
   voltage?: string | null;
@@ -58,7 +59,7 @@ function deriveActualCellCount(opts: {
 // the actual cell count comes from the battery's voltage (voltage/2 cells,
 // each cell being 2V) or, for loose cells, the recorded quantity. Returns
 // null when the catalogue has no Pb data or the cell count is unknown.
-function derivePbContentKg(
+export function derivePbContentKg(
   catalogue: PbCatalogueEntry[],
   manufacture: string | null,
   cellType: string | null,
@@ -82,6 +83,38 @@ function derivePbContentKg(
     matches[0];
   const totalPb = parseFloat(chosen.pbContentKgPerCell!) * cellCount;
   return isFinite(totalPb) ? totalPb.toFixed(3) : null;
+}
+
+// Derive a battery's raw (pre-safe-load-factor) estimated weight in kg from
+// the cell model catalogue, using the same matching rules as Pb derivation:
+// exact manufacturer first, then TAB, then any. Returns null when the model
+// isn't in the catalogue or the cell count is unknown. Keeping this on the
+// server guarantees manual entry and CSV import produce identical weights
+// for the same battery, and that corrections re-derive consistently.
+export function deriveEstimatedWeightKg(
+  catalogue: PbCatalogueEntry[],
+  manufacture: string | null,
+  cellType: string | null,
+  cellCount: number | null
+): string | null {
+  const cellStr = (cellType || "").trim();
+  if (!cellStr || cellStr === "Blocs" || cellStr === "Other") return null;
+  if (cellCount === null || !isFinite(cellCount) || cellCount <= 0) return null;
+  const normCell = normalizeCellKey(cellStr);
+  const matches = catalogue.filter(
+    (m) => m.weightPerCellKg != null && normalizeCellKey(m.modelName) === normCell
+  );
+  if (matches.length === 0) return null;
+  const mfr = (manufacture || "").trim();
+  const isUnknownMfr = !mfr || mfr.toLowerCase() === "unknown";
+  const chosen =
+    (!isUnknownMfr
+      ? matches.find((m) => m.manufacturer.toLowerCase() === mfr.toLowerCase())
+      : undefined) ||
+    matches.find((m) => m.manufacturer === "TAB") ||
+    matches[0];
+  const total = parseFloat(chosen.weightPerCellKg!) * cellCount;
+  return isFinite(total) && total > 0 ? total.toFixed(3) : null;
 }
 
 // Sort battery rows by pallet number in natural/numeric order (1, 2, … 10,
@@ -928,6 +961,7 @@ interface BatteryInput {
   voltage?: string | null;
   looseCellsQty?: string | number | null;
   estimatedWeightKg?: string | number | null;
+  weightManual?: boolean;
   notes?: string | null;
   isLooseCells?: boolean;
   serialFlagReason?: string | null;
@@ -1014,12 +1048,9 @@ router.post(
         const b = batteryInputs[i];
         if (b.isLooseCells) {
           b.voltage = null;
-          const w = b.estimatedWeightKg;
-          const parsed = w !== null && w !== undefined && w !== "" ? parseFloat(String(w)) : NaN;
-          if (!isFinite(parsed) || parsed <= 0) {
-            res.status(400).json({ message: `Battery row ${i + 1}: Estimated weight is required for loose cells and must be a positive number.` });
-            return;
-          }
+          // The positive-weight requirement for loose cells is enforced
+          // below, after catalogue weight derivation has had a chance to
+          // fill it in from the model + quantity.
         }
         if (b.rowPhoto && !b.rowPhoto.startsWith("data:image/")) {
           b.rowPhoto = null;
@@ -1037,33 +1068,6 @@ router.post(
         return (parsed * SAFE_LOAD_FACTOR).toFixed(3);
       }
 
-      let autoTonnage = 0;
-      let rawWeightKg = 0;
-      for (const b of batteryInputs) {
-        const w = sanitizeWeight(b.estimatedWeightKg);
-        if (w !== null) autoTonnage += parseFloat(w);
-        const raw = parseFloat(String(b.estimatedWeightKg ?? ""));
-        if (isFinite(raw) && raw > 0) rawWeightKg += raw;
-      }
-      const autoTonnageStr = (autoTonnage / 1000).toFixed(3);
-      const parsedTonnage = tonnage ? parseFloat(String(tonnage)) : NaN;
-      const finalTonnage = (tonnageManualOverride && !isNaN(parsedTonnage) && isFinite(parsedTonnage) && parsedTonnage >= 0)
-        ? String(parsedTonnage)
-        : autoTonnageStr;
-
-      // Loads under 10t are allowed (a transportation charge applies —
-      // the portal shows a notice instead of blocking submission).
-      // The 26t truck capacity applies to the gross load (lead x 1.4) — the
-      // same figure shown to depot users (client-confirmed 30 July 2026).
-      const MAX_TONNAGE = 26.0;
-      const effectiveLoadT = (tonnageManualOverride && isFinite(parsedTonnage) && parsedTonnage >= 0)
-        ? parsedTonnage
-        : autoTonnage / 1000;
-      if (isFinite(effectiveLoadT) && effectiveLoadT > MAX_TONNAGE) {
-        res.status(400).json({ message: `Maximum collection weight is ${MAX_TONNAGE}t. Current load is ${effectiveLoadT.toFixed(3)}t.` });
-        return;
-      }
-
       const knownManufacturers = new Set(
         MANUFACTURERS.filter((m) => m.toLowerCase() !== "other").map((m) => m.toLowerCase())
       );
@@ -1072,6 +1076,7 @@ router.post(
           manufacturer: cellModelsTable.manufacturer,
           modelName: cellModelsTable.modelName,
           pbContentKgPerCell: cellModelsTable.pbContentKgPerCell,
+          weightPerCellKg: cellModelsTable.weightPerCellKg,
           cellsCount: cellModelsTable.cellsCount,
         })
         .from(cellModelsTable);
@@ -1124,6 +1129,67 @@ router.post(
             if (!matches) b.cellModelFlagReason = CSV_UNKNOWN_FLAG_REASON;
           }
         }
+
+        // Authoritative weight derivation: unless the user typed the weight
+        // themselves (weightManual), re-derive it from the catalogue using
+        // the canonicalised cell type. This guarantees manual entry and CSV
+        // import produce identical weights for the same battery, and that a
+        // row whose cell type was corrected in the form can't carry a stale
+        // weight from the previously selected model.
+        if (b.weightManual !== true) {
+          const derived = deriveEstimatedWeightKg(
+            allCellModels,
+            b.manufacture || null,
+            b.cellType || null,
+            deriveActualCellCount({
+              isLooseCells: b.isLooseCells,
+              looseCellsQty: b.looseCellsQty,
+              voltage: b.voltage,
+            })
+          );
+          if (derived !== null) b.estimatedWeightKg = derived;
+        }
+      }
+
+      // Loose cells must end up with a positive weight — either supplied by
+      // the user or derived from the catalogue above.
+      for (let i = 0; i < batteryInputs.length; i++) {
+        const b = batteryInputs[i];
+        if (b.isLooseCells) {
+          const w = b.estimatedWeightKg;
+          const parsed = w !== null && w !== undefined && w !== "" ? parseFloat(String(w)) : NaN;
+          if (!isFinite(parsed) || parsed <= 0) {
+            res.status(400).json({ message: `Battery row ${i + 1}: Estimated weight is required for loose cells and must be a positive number.` });
+            return;
+          }
+        }
+      }
+
+      let autoTonnage = 0;
+      let rawWeightKg = 0;
+      for (const b of batteryInputs) {
+        const w = sanitizeWeight(b.estimatedWeightKg);
+        if (w !== null) autoTonnage += parseFloat(w);
+        const raw = parseFloat(String(b.estimatedWeightKg ?? ""));
+        if (isFinite(raw) && raw > 0) rawWeightKg += raw;
+      }
+      const autoTonnageStr = (autoTonnage / 1000).toFixed(3);
+      const parsedTonnage = tonnage ? parseFloat(String(tonnage)) : NaN;
+      const finalTonnage = (tonnageManualOverride && !isNaN(parsedTonnage) && isFinite(parsedTonnage) && parsedTonnage >= 0)
+        ? String(parsedTonnage)
+        : autoTonnageStr;
+
+      // Loads under 10t are allowed (a transportation charge applies —
+      // the portal shows a notice instead of blocking submission).
+      // The 26t truck capacity applies to the gross load (lead x 1.4) — the
+      // same figure shown to depot users (client-confirmed 30 July 2026).
+      const MAX_TONNAGE = 26.0;
+      const effectiveLoadT = (tonnageManualOverride && isFinite(parsedTonnage) && parsedTonnage >= 0)
+        ? parsedTonnage
+        : autoTonnage / 1000;
+      if (isFinite(effectiveLoadT) && effectiveLoadT > MAX_TONNAGE) {
+        res.status(400).json({ message: `Maximum collection weight is ${MAX_TONNAGE}t. Current load is ${effectiveLoadT.toFixed(3)}t.` });
+        return;
       }
 
       const result = await db.transaction(async (tx) => {
@@ -1166,6 +1232,7 @@ router.post(
             collectionPoint: collectionPoint || null,
             collectionDate: collectionDate || null,
             tonnage: finalTonnage,
+            tonnageManualOverride: !!(tonnageManualOverride && !isNaN(parsedTonnage) && isFinite(parsedTonnage) && parsedTonnage >= 0),
             status: "request",
             notes: notes || null,
             submittedById: req.user!.id,
@@ -1204,6 +1271,7 @@ router.post(
             voltage: b.isLooseCells ? null : (b.voltage || null),
             looseCellsQty: b.looseCellsQty ? parseInt(String(b.looseCellsQty), 10) : null,
             estimatedWeightKg: sanitizeWeight(b.estimatedWeightKg),
+            weightManual: b.weightManual === true,
             isLooseCells: b.isLooseCells || false,
             serialFlagReason: b.serialFlagReason || null,
             manufacturerFlagReason: b.manufacturerFlagReason || null,
@@ -1597,13 +1665,14 @@ router.patch(
       }
 
       // When the cell type, manufacturer or voltage is corrected, re-derive
-      // Pb content (and £ value) from the catalogue — unless the caller
-      // explicitly set pbContentKg themselves. Leave existing values
-      // untouched when the catalogue has no Pb data for the corrected model.
-      if (
-        (cellType !== undefined || manufacture !== undefined || voltage !== undefined) &&
-        pbContentKg === undefined
-      ) {
+      // the estimated weight and — unless the caller explicitly set
+      // pbContentKg themselves — the Pb content (and £ value) from the
+      // catalogue. Leave existing values untouched when the catalogue has no
+      // data for the corrected model. Weight derivation is deliberately
+      // independent of a manual Pb value: a correction that supplies Pb must
+      // still not leave a stale weight from the old model behind (the +67kg
+      // manual-vs-CSV discrepancy Ingrid reported).
+      if (cellType !== undefined || manufacture !== undefined || voltage !== undefined) {
         const finalCellType =
           (updates.cellType as string | null | undefined) !== undefined
             ? (updates.cellType as string | null)
@@ -1619,31 +1688,39 @@ router.patch(
             manufacturer: cellModelsTable.manufacturer,
             modelName: cellModelsTable.modelName,
             pbContentKgPerCell: cellModelsTable.pbContentKgPerCell,
+            weightPerCellKg: cellModelsTable.weightPerCellKg,
             cellsCount: cellModelsTable.cellsCount,
           })
           .from(cellModelsTable);
-        const derivedPb = derivePbContentKg(
-          pbCatalogue,
-          finalMfr,
-          finalCellType,
-          deriveActualCellCount({
-            isLooseCells: existing.isLooseCells,
-            looseCellsQty: existing.looseCellsQty,
-            voltage: finalVoltage,
-          })
-        );
-        if (derivedPb !== null) {
-          updates.pbContentKg = derivedPb;
-          if (valueGbp === undefined) {
-            const [parentJob] = await db
-              .select({ cblLmeValue: jobsTable.cblLmeValue })
-              .from(jobsTable)
-              .where(eq(jobsTable.id, jobId));
-            const rate = await getEffectiveLmeRateForJob(parentJob?.cblLmeValue ?? null);
-            if (rate !== null) {
-              const val = (parseFloat(derivedPb) * rate) / 1000;
-              if (isFinite(val)) updates.valueGbp = val.toFixed(2);
+        const cellCount = deriveActualCellCount({
+          isLooseCells: existing.isLooseCells,
+          looseCellsQty: existing.looseCellsQty,
+          voltage: finalVoltage,
+        });
+        if (pbContentKg === undefined) {
+          const derivedPb = derivePbContentKg(pbCatalogue, finalMfr, finalCellType, cellCount);
+          if (derivedPb !== null) {
+            updates.pbContentKg = derivedPb;
+            if (valueGbp === undefined) {
+              const [parentJob] = await db
+                .select({ cblLmeValue: jobsTable.cblLmeValue })
+                .from(jobsTable)
+                .where(eq(jobsTable.id, jobId));
+              const rate = await getEffectiveLmeRateForJob(parentJob?.cblLmeValue ?? null);
+              if (rate !== null) {
+                const val = (parseFloat(derivedPb) * rate) / 1000;
+                if (isFinite(val)) updates.valueGbp = val.toFixed(2);
+              }
             }
+          }
+        }
+        // Stored weights are gross (raw catalogue weight x 1.4 safe-load).
+        // Rows whose weight was supplied by the user (weightManual) are
+        // never overwritten by automatic re-derivation.
+        if (existing.weightManual !== true) {
+          const derivedWeight = deriveEstimatedWeightKg(pbCatalogue, finalMfr, finalCellType, cellCount);
+          if (derivedWeight !== null) {
+            updates.estimatedWeightKg = (parseFloat(derivedWeight) * SAFE_LOAD_FACTOR).toFixed(3);
           }
         }
       }
@@ -1675,6 +1752,49 @@ router.patch(
       if (!updated) {
         res.status(404).json({ message: "Battery not found" });
         return;
+      }
+
+      // Keep the job's tonnage in sync when a row's weight was re-derived —
+      // otherwise a corrected cell type would fix the row but leave the job
+      // total (and downstream reports/PDFs) showing the old weight. Only do
+      // this when the current tonnage still equals the previous sum of row
+      // weights (i.e. it was auto-derived): a manually overridden tonnage
+      // must never be silently replaced.
+      if (
+        updates.estimatedWeightKg !== undefined &&
+        String(updates.estimatedWeightKg ?? "") !== String(existing.estimatedWeightKg ?? "")
+      ) {
+        const rows = await db
+          .select({ id: jobBatteriesTable.id, estimatedWeightKg: jobBatteriesTable.estimatedWeightKg })
+          .from(jobBatteriesTable)
+          .where(eq(jobBatteriesTable.jobId, jobId));
+        let newTotalKg = 0;
+        let oldTotalKg = 0;
+        for (const r of rows) {
+          const w = parseFloat(String(r.estimatedWeightKg ?? ""));
+          if (isFinite(w) && w > 0) newTotalKg += w;
+          const oldVal = r.id === batteryId ? existing.estimatedWeightKg : r.estimatedWeightKg;
+          const ow = parseFloat(String(oldVal ?? ""));
+          if (isFinite(ow) && ow > 0) oldTotalKg += ow;
+        }
+        const [parentJob] = await db
+          .select({ tonnage: jobsTable.tonnage, tonnageManualOverride: jobsTable.tonnageManualOverride })
+          .from(jobsTable)
+          .where(eq(jobsTable.id, jobId));
+        const currentTonnage = parseFloat(String(parentJob?.tonnage ?? ""));
+        // Persisted override flag is authoritative; the old-sum equality
+        // check additionally protects legacy jobs created before the flag
+        // existed (their flag defaults to false regardless of provenance).
+        const wasAutoDerived =
+          parentJob?.tonnageManualOverride !== true &&
+          isFinite(currentTonnage) &&
+          Math.abs(currentTonnage - oldTotalKg / 1000) < 0.0015;
+        if (wasAutoDerived) {
+          await db
+            .update(jobsTable)
+            .set({ tonnage: (newTotalKg / 1000).toFixed(3) })
+            .where(eq(jobsTable.id, jobId));
+        }
       }
 
       let resolvedByName: string | null = null;

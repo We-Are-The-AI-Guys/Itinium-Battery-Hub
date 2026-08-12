@@ -34,6 +34,10 @@ async function bootstrap() {
     await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_bwr_cell_voltage_notnull ON battery_weight_reference (cell_type, voltage) WHERE voltage IS NOT NULL`);
     await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_bwr_cell_voltage_null ON battery_weight_reference (cell_type) WHERE voltage IS NULL`);
     await db.execute(sql`ALTER TABLE job_batteries ADD COLUMN IF NOT EXISTS estimated_weight_kg DECIMAL(10,3)`);
+    // Weight/tonnage provenance flags: manual values are never overwritten
+    // by automatic catalogue re-derivation (see routes/jobs.ts).
+    await db.execute(sql`ALTER TABLE job_batteries ADD COLUMN IF NOT EXISTS weight_manual BOOLEAN NOT NULL DEFAULT FALSE`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS tonnage_manual_override BOOLEAN NOT NULL DEFAULT FALSE`);
   } catch (err) {
     console.error("Bootstrap: failed to create weight reference table:", err);
   }

@@ -1374,6 +1374,7 @@ export default function DepotFormPage() {
             voltage: b.isLooseCells ? null : ((b.voltage === "Other" ? b.customVoltage : b.voltage) || null),
             looseCellsQty: b.looseCellsQty || null,
             estimatedWeightKg: b.estimatedWeightKg || null,
+            weightManual: b.weightManual === true,
             isLooseCells: b.isLooseCells,
             serialFlagReason: null,
             manufacturerFlagReason: b.manufacturerFlagReason || null,

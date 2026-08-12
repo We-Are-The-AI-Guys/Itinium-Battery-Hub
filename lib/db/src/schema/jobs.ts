@@ -17,6 +17,10 @@ export const jobsTable = pgTable("jobs", {
   collectionDate: date("collection_date"),
   submittedAt: timestamp("submitted_at").defaultNow().notNull(),
   tonnage: decimal("tonnage", { precision: 10, scale: 3 }).notNull(),
+  // True when the submitter manually overrode the tonnage instead of using
+  // the automatic sum of row weights. Overridden tonnage is never re-synced
+  // automatically after battery corrections.
+  tonnageManualOverride: boolean("tonnage_manual_override").default(false),
   status: varchar("status", { length: 50 }).notNull().default("request"),
   notes: text("notes"),
   invoiceStatus: varchar("invoice_status", { length: 50 }).default("pending_invoice"),
@@ -63,6 +67,10 @@ export const jobBatteriesTable = pgTable("job_batteries", {
   pbContentKg: decimal("pb_content_kg", { precision: 10, scale: 3 }),
   valueGbp: decimal("value_gbp", { precision: 12, scale: 2 }),
   estimatedWeightKg: decimal("estimated_weight_kg", { precision: 10, scale: 3 }),
+  // True when the weight was supplied by the user (typed or CSV weight
+  // column) rather than derived from the cell-model catalogue. Manual
+  // weights are never overwritten by automatic re-derivation.
+  weightManual: boolean("weight_manual").default(false),
   isLooseCells: boolean("is_loose_cells").default(false),
   serialFlagReason: varchar("serial_flag_reason", { length: 100 }),
   manufacturerFlagReason: varchar("manufacturer_flag_reason", { length: 100 }),
