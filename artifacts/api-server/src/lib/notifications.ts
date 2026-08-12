@@ -491,6 +491,29 @@ export async function notifySiteContactScheduleConfirmed(
   });
 }
 
+// The collection company uploaded their statement — accounts raise the
+// Itinium invoice from it, so tell them it has arrived.
+export async function notifyAccountsStatementUploaded(job: JobRef, fileName: string): Promise<void> {
+  const { accountIds } = await recipientsForJob(job);
+  const link = portalLink(`/jobs/${job.id}`);
+  const emailHtml = buildBrandedEmail(
+    `Statement uploaded — ${escapeHtml(job.reference)}`,
+    `<p style="color:#475569;margin:0 0 4px;">The collection company has uploaded their statement (<strong>${escapeHtml(fileName)}</strong>) for collection <strong>${escapeHtml(job.reference)}</strong>. You can now raise the invoice to them.</p>
+    ${jobTable(job)}
+    ${ctaButton(link, "View Documents")}`,
+    "You are receiving this because you are an accounts user on the Itinium Battery Portal."
+  );
+  await dispatchToMany(accountIds, {
+    type: "statement_uploaded",
+    title: `Statement uploaded — ${job.reference}`,
+    body: `The collection company uploaded their statement for ${job.reference}. Ready to invoice.`,
+    link: `/jobs/${job.id}`,
+    emailSubject: `Statement Uploaded — ${job.reference}`,
+    emailHtml,
+    emailPrefKey: "invoiceGenerated",
+  });
+}
+
 export async function pruneOldNotifications(): Promise<void> {
   try {
     const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);

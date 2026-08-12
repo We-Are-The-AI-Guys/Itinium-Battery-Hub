@@ -101,6 +101,29 @@ async function bootstrap() {
     console.error("Bootstrap: failed to set up collection companies:", err);
   }
 
+  // Post-collection documents (signed collection sheet, consignment note,
+  // statement) uploaded by the collection company. Files live in object
+  // storage; this table stores the metadata. One document per type per job.
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS job_documents (
+        id SERIAL PRIMARY KEY,
+        job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+        doc_type VARCHAR(30) NOT NULL,
+        file_name VARCHAR(255) NOT NULL,
+        content_type VARCHAR(100) NOT NULL,
+        size_bytes INTEGER,
+        object_path TEXT NOT NULL,
+        uploaded_by_id INTEGER,
+        uploaded_at TIMESTAMP DEFAULT NOW() NOT NULL
+      )
+    `);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_job_documents_job ON job_documents (job_id)`);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS uq_job_documents_job_type ON job_documents (job_id, doc_type)`);
+  } catch (err) {
+    console.error("Bootstrap: failed to create job_documents table:", err);
+  }
+
   try {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS cell_models (

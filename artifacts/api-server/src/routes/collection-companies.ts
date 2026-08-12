@@ -260,7 +260,9 @@ router.get(
         .where(
           and(
             eq(jobsTable.collectionCompanyId, companyId),
-            inArray(jobsTable.status, ["request", "confirmed"])
+            // Post-collection statuses stay visible so the company can upload
+            // the signed paperwork and their statement after the collection.
+            inArray(jobsTable.status, ["request", "confirmed", "received", "awaiting_invoice", "invoice", "completed"])
           )
         )
         .orderBy(desc(jobsTable.submittedAt))

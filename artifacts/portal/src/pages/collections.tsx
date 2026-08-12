@@ -28,6 +28,7 @@ import {
   Settings,
 } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
+import { JobDocumentsPanel } from "@/components/job-documents";
 
 interface CollectionJob {
   id: number;
@@ -328,6 +329,13 @@ export default function CollectionsPage() {
                           <p className="text-xs font-medium text-slate-500 uppercase">Vehicle</p>
                           <p className="text-slate-700">{job.vehicleReg || "—"}</p>
                         </div>
+                      </div>
+                    )}
+
+                    {(job.scheduleStatus === "confirmed" ||
+                      ["received", "awaiting_invoice", "invoice", "completed"].includes(job.status)) && (
+                      <div className="mt-4 pt-4 border-t border-slate-100">
+                        <JobDocumentsPanel jobId={job.id} mode="upload" />
                       </div>
                     )}
                   </div>

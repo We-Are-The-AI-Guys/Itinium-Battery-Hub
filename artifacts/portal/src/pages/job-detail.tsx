@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { SidebarLayout } from "@/components/sidebar-layout";
+import { JobDocumentsPanel } from "@/components/job-documents";
 import { useToast } from "@/hooks/use-toast";
 
 interface LmePrice {
@@ -749,6 +750,12 @@ export default function JobDetailPage() {
                 </Button>
               </div>
             </div>
+          </div>
+        )}
+
+        {(userRole === "accounts" || userRole === "head_office_admin") && (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-6" data-testid="card-job-documents">
+            <JobDocumentsPanel jobId={job.id} mode="review" />
           </div>
         )}
 

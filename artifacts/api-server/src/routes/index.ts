@@ -20,6 +20,7 @@ import notificationsRouter from "./notifications";
 import suggestCorrectionRouter from "./suggest-correction";
 import correctionAuditRouter from "./correction-audit";
 import collectionCompaniesRouter from "./collection-companies";
+import jobDocumentsRouter from "./job-documents";
 
 const router: IRouter = Router();
 
@@ -31,6 +32,7 @@ router.use(kpiRouter);
 router.use(lmeRouter);
 router.use(usersRouter);
 router.use(collectionCompaniesRouter);
+router.use(jobDocumentsRouter);
 router.use(settingsRouter);
 router.use(weightReferenceRouter);
 router.use(manufacturersRouter);

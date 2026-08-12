@@ -9,3 +9,4 @@ export * from "./notifications";
 export * from "./schedule-audit-log";
 export * from "./correction-audit-log";
 export * from "./collection-companies";
+export * from "./job-documents";
