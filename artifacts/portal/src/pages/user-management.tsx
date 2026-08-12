@@ -69,6 +69,7 @@ function getRoleLabel(role: string) {
     team_leader: "Team Leader",
     accounts: "Accounts",
     head_office_admin: "Head Office",
+    collection_company: "Collection Company",
   };
   return labels[role] || role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -115,7 +116,9 @@ export default function UserManagementPage() {
     role: "",
     clientId: "",
     locationId: "",
+    collectionCompanyId: "",
   });
+  const [collectionCompanies, setCollectionCompanies] = useState<{ id: number; name: string }[]>([]);
 
   const [createdTempPassword, setCreatedTempPassword] = useState<string | null>(null);
   const [copiedPassword, setCopiedPassword] = useState(false);
@@ -205,9 +208,23 @@ export default function UserManagementPage() {
     } catch {}
   }, [isAdmin]);
 
+  const fetchCollectionCompanies = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const res = await fetch("/api/collection-companies", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setCollectionCompanies(
+          (data.companies || []).map((c: { id: number; name: string }) => ({ id: c.id, name: c.name }))
+        );
+      }
+    } catch {}
+  }, [isAdmin]);
+
   useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
   useEffect(() => { fetchClients(); }, [fetchClients]);
+  useEffect(() => { fetchCollectionCompanies(); }, [fetchCollectionCompanies]);
 
   async function fetchLocationsForClient(clientId: number): Promise<LocationOption[]> {
     try {
@@ -270,6 +287,10 @@ export default function UserManagementPage() {
       setFormError("Location is required for Depot User role");
       return;
     }
+    if (role === "collection_company" && !newUser.collectionCompanyId) {
+      setFormError("Collection company is required for this role");
+      return;
+    }
 
     setCreating(true);
     try {
@@ -283,12 +304,13 @@ export default function UserManagementPage() {
           role: newUser.role,
           clientId,
           locationId,
+          collectionCompanyId: newUser.collectionCompanyId ? parseInt(newUser.collectionCompanyId) : null,
         }),
       });
       if (res.ok) {
         const data = await res.json();
         setCreatedTempPassword(data.tempPassword || null);
-        setNewUser({ fullName: "", email: "", role: "", clientId: "", locationId: "" });
+        setNewUser({ fullName: "", email: "", role: "", clientId: "", locationId: "", collectionCompanyId: "" });
         fetchUsers();
         fetchStats();
       } else {
@@ -460,6 +482,7 @@ export default function UserManagementPage() {
         { value: "team_leader", label: "Team Leader" },
         { value: "accounts", label: "Accounts" },
         { value: "head_office_admin", label: "Head Office" },
+        { value: "collection_company", label: "Collection Company" },
       ];
 
   const needsClientForNewUser = newUser.role === "depot_user" || newUser.role === "team_leader";
@@ -788,6 +811,28 @@ export default function UserManagementPage() {
                         <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                       </div>
                     </div>
+
+                    {isAdmin && newUser.role === "collection_company" && (
+                      <div className="grid gap-2">
+                        <label className="text-sm font-medium text-slate-700">
+                          Collection Company <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <select
+                            className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
+                            value={newUser.collectionCompanyId}
+                            onChange={(e) => setNewUser({ ...newUser, collectionCompanyId: e.target.value })}
+                            data-testid="select-collection-company"
+                          >
+                            <option value="">Select a company...</option>
+                            {collectionCompanies.map((c) => (
+                              <option key={c.id} value={c.id}>{c.name}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
+                      </div>
+                    )}
 
                     {isAdmin && needsClientForNewUser && (
                       <div className="grid gap-2">

@@ -22,6 +22,7 @@ import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
 import CorrectionAuditPage from "@/pages/correction-audit";
 import HelpPage from "@/pages/help";
+import CollectionsPage from "@/pages/collections";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -98,6 +99,11 @@ function AppRouter() {
         <AdminGuard>
           <JobDetailPage />
         </AdminGuard>
+      </Route>
+      <Route path="/collections">
+        <RoleGuard allowedRoles={["collection_company"]}>
+          <CollectionsPage />
+        </RoleGuard>
       </Route>
       <Route path="/stillages">
         <AuthGuard>

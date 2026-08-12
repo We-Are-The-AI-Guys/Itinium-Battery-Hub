@@ -1,13 +1,13 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable, locationsTable, clientsTable, usersTable, jobDraftsTable, scheduleRescheduleLogTable, correctionAuditLogTable } from "@workspace/db/schema";
+import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable, locationsTable, clientsTable, usersTable, jobDraftsTable, scheduleRescheduleLogTable, correctionAuditLogTable, collectionCompaniesTable } from "@workspace/db/schema";
 import { eq, sql, and, count, ilike, or, inArray, desc, asc } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { MANUFACTURERS } from "./manufacturers";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { createBrandedDoc } from "../lib/pdf-branding";
-import { notifyAdminsNewJob, notifyAdminsFlaggedBatteries, notifySubmitterStatusChange, notifyFlagResolved } from "../lib/notifications";
+import { notifyAdminsNewJob, notifyAdminsFlaggedBatteries, notifySubmitterStatusChange, notifyFlagResolved, notifyCollectionCompanyNewJob } from "../lib/notifications";
 
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
@@ -1420,6 +1420,26 @@ router.post(
       notifyAdminsNewJob(jobForNotify).catch(() => {});
       if (flaggedCount > 0) {
         notifyAdminsFlaggedBatteries(jobForNotify, flaggedCount).catch(() => {});
+      }
+
+      // Assign the default (first active) collection company and let them
+      // know a new collection needs scheduling.
+      try {
+        const [defaultCompany] = await db
+          .select({ id: collectionCompaniesTable.id })
+          .from(collectionCompaniesTable)
+          .where(eq(collectionCompaniesTable.isActive, true))
+          .orderBy(collectionCompaniesTable.id)
+          .limit(1);
+        if (defaultCompany) {
+          await db
+            .update(jobsTable)
+            .set({ collectionCompanyId: defaultCompany.id })
+            .where(eq(jobsTable.id, result.job.id));
+          notifyCollectionCompanyNewJob(jobForNotify, defaultCompany.id).catch(() => {});
+        }
+      } catch (assignErr) {
+        console.error("Failed to assign collection company to new job:", assignErr);
       }
     } catch (error) {
       console.error("Job creation error:", error);

@@ -13,6 +13,10 @@ export const usersTable = pgTable("users", {
   depot: varchar("depot", { length: 255 }),
   clientId: integer("client_id").references(() => clientsTable.id),
   locationId: integer("location_id").references(() => locationsTable.id),
+  // Set for role "collection_company": which transport company this login
+  // belongs to. FK constraint added via startup DDL (table declared in
+  // collection-companies.ts; avoids a circular schema import here).
+  collectionCompanyId: integer("collection_company_id"),
   isActive: boolean("is_active").notNull().default(true),
   lastActiveAt: timestamp("last_active_at"),
   notificationPreferences: jsonb("notification_preferences").default({

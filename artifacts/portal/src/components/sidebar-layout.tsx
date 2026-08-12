@@ -115,6 +115,7 @@ function getRoleLabel(role: string) {
     team_leader: "Team Leader",
     accounts: "Accounts",
     head_office_admin: "Head Office Admin",
+    collection_company: "Collection Company",
   };
   return labels[role] || role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }

@@ -75,6 +75,10 @@ export default function DashboardPage() {
     return <Redirect to="/dashboard" />;
   }
 
+  if (user.role === "collection_company") {
+    return <Redirect to="/collections" />;
+  }
+
   return (
     <div className="min-h-screen bg-[#f8fafc]">
       <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">

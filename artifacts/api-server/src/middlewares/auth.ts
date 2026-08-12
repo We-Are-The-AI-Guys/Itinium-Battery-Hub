@@ -12,6 +12,7 @@ export interface AuthenticatedRequest extends Request {
     depot: string | null;
     clientId: number | null;
     locationId: number | null;
+    collectionCompanyId: number | null;
   };
 }
 
@@ -54,6 +55,7 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
             depot: user.depot,
             clientId: user.clientId,
             locationId: user.locationId,
+            collectionCompanyId: user.collectionCompanyId,
           };
 
           db.update(sessionsTable)

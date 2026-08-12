@@ -44,6 +44,12 @@ export const jobsTable = pgTable("jobs", {
   daysToPay: integer("days_to_pay"),
   driverName: varchar("driver_name", { length: 255 }),
   vehicleReg: varchar("vehicle_reg", { length: 50 }),
+  // Collection scheduling workflow: the assigned transport company proposes
+  // a driver/vehicle/date; Itinium confirms (possibly adjusting the date).
+  // schedule_status: unassigned -> proposed -> confirmed
+  collectionCompanyId: integer("collection_company_id"),
+  proposedCollectionDate: date("proposed_collection_date"),
+  scheduleStatus: varchar("schedule_status", { length: 30 }).notNull().default("unassigned"),
   siteContacts: text("site_contacts"),
   siteHours: varchar("site_hours", { length: 255 }),
   specialInstructions: text("special_instructions"),

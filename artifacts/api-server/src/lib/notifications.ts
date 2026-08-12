@@ -25,10 +25,23 @@ function wantsEmail(prefs: unknown, key: string): boolean {
   return p[key] !== false;
 }
 
-function infoRow(label: string, value: string): string {
+// Escape user-controlled values before interpolating them into email HTML.
+// Job fields, fleet names/registrations, and site details are all free text
+// that non-admin users can set, so nothing dynamic may be rendered raw.
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// `allowHtml` is only for trusted, already-escaped template fragments.
+function infoRow(label: string, value: string, allowHtml = false): string {
   return `<tr>
     <td style="padding: 7px 12px 7px 0; color: #64748b; font-size: 13px; white-space: nowrap; vertical-align: top;">${label}</td>
-    <td style="padding: 7px 0; color: #1e293b; font-size: 13px; font-weight: 600;">${value}</td>
+    <td style="padding: 7px 0; color: #1e293b; font-size: 13px; font-weight: 600;">${allowHtml ? value : escapeHtml(value)}</td>
   </tr>`;
 }
 
@@ -314,6 +327,168 @@ export async function notifyFlagResolved(job: JobRef, resolvedByName: string): P
 
   const { submitterAndTeamLeaderIds } = await recipientsForJob(job);
   await dispatchToMany(submitterAndTeamLeaderIds, notif);
+}
+
+async function collectionCompanyUserIds(companyId: number): Promise<number[]> {
+  const users = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(
+      and(
+        eq(usersTable.role, "collection_company"),
+        eq(usersTable.collectionCompanyId, companyId),
+        eq(usersTable.isActive, true)
+      )
+    );
+  return users.map((u) => u.id);
+}
+
+// New collection created — tell the assigned collection company so they can
+// log in and assign a vehicle, driver, and collection date.
+export async function notifyCollectionCompanyNewJob(job: JobRef, companyId: number): Promise<void> {
+  const userIds = await collectionCompanyUserIds(companyId);
+  if (userIds.length === 0) return;
+  const link = portalLink(`/collections`);
+  const emailHtml = buildBrandedEmail(
+    "New collection to schedule",
+    `<p style="color:#475569;margin:0 0 4px;">A new battery collection has been requested and needs a vehicle, driver, and collection date.</p>
+    ${jobTable(job)}
+    ${ctaButton(link, "Schedule Collection")}
+    <p style="color:#475569;margin:16px 0 0;font-size:13px;">Please log in to the portal to assign a vehicle and driver and propose a collection date.</p>`,
+    "You are receiving this because your company carries out collections for Itinium Partnership Ltd."
+  );
+  await dispatchToMany(userIds, {
+    type: "collection_to_schedule",
+    title: `New collection — ${job.reference}`,
+    body: `${job.clientName} / ${job.depot} — assign a vehicle, driver, and date.`,
+    link: `/collections`,
+    emailSubject: `New Collection to Schedule — ${job.reference}`,
+    emailHtml,
+    emailPrefKey: "newJobSubmitted",
+  });
+}
+
+// Exported for tests: builds the admin "schedule proposed" email body with
+// all user-controlled values escaped.
+export function buildScheduleProposedEmailHtml(
+  job: Pick<JobRef, "id" | "reference">,
+  details: { companyName: string; driverName: string; vehicleReg: string; proposedDate: string }
+): string {
+  const link = portalLink(`/jobs/${job.id}`);
+  const dateLabel = new Date(`${details.proposedDate}T00:00:00Z`).toLocaleDateString("en-GB", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
+  });
+  return buildBrandedEmail(
+    `Collection date proposed — ${escapeHtml(job.reference)}`,
+    `<p style="color:#475569;margin:0 0 4px;"><strong>${escapeHtml(details.companyName)}</strong> has proposed a schedule for collection <strong>${escapeHtml(job.reference)}</strong>:</p>
+    <table cellpadding="0" cellspacing="0" style="margin: 20px 0; border-left: 3px solid #0ea5e9; padding-left: 16px;">
+      ${infoRow("Proposed Date:", dateLabel)}
+      ${infoRow("Driver:", details.driverName)}
+      ${infoRow("Vehicle:", details.vehicleReg)}
+    </table>
+    ${ctaButton(link, "Review & Confirm")}
+    <p style="color:#475569;margin:16px 0 0;font-size:13px;">Please confirm the date (or adjust it) so the customer site contact can be notified.</p>`,
+    "You are receiving this because you are an admin or accounts user on the Itinium Battery Portal."
+  );
+}
+
+// Collection company proposed a schedule — ask Itinium to confirm the date.
+export async function notifyAdminsScheduleProposed(
+  job: JobRef,
+  details: { companyName: string; driverName: string; vehicleReg: string; proposedDate: string }
+): Promise<void> {
+  const { adminIds } = await recipientsForJob(job);
+  const dateLabel = new Date(`${details.proposedDate}T00:00:00Z`).toLocaleDateString("en-GB", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
+  });
+  const emailHtml = buildScheduleProposedEmailHtml(job, details);
+  await dispatchToMany(adminIds, {
+    type: "schedule_proposed",
+    title: `Date proposed — ${job.reference}`,
+    body: `${details.companyName} proposed ${dateLabel} (${details.driverName}, ${details.vehicleReg}). Please confirm.`,
+    link: `/jobs/${job.id}`,
+    emailSubject: `Collection Date Proposed — ${job.reference}`,
+    emailHtml,
+    emailPrefKey: "newJobSubmitted",
+  });
+}
+
+// Exported for tests: builds the "collection confirmed" email body (Ingrid's
+// template, 11 Aug 2026) with all user-controlled values escaped.
+export function buildScheduleConfirmedEmailHtml(
+  job: Pick<JobRef, "reference">,
+  firstName: string,
+  details: {
+    collectionDate: string;
+    driverName: string;
+    vehicleReg: string;
+    siteAddress: string;
+    siteHours: string | null;
+    siteContacts: string | null;
+    specialInstructions: string | null;
+  }
+): string {
+  const dateLabel = new Date(`${details.collectionDate}T00:00:00Z`).toLocaleDateString("en-GB", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
+  });
+  const addressHtml = details.siteAddress
+    .split(/\s*[—\n]\s*/)
+    .map((line) => escapeHtml(line))
+    .join("<br/>");
+
+  return buildBrandedEmail(
+    `Collection confirmed — ${escapeHtml(job.reference)}`,
+    `<p style="color:#475569;margin:0 0 12px;">Dear ${escapeHtml(firstName)},</p>
+    <p style="color:#475569;margin:0 0 12px;">We can arrange collection on <strong>${dateLabel}</strong>; our driver <strong>${escapeHtml(details.driverName)}</strong> will be in vehicle <strong>${escapeHtml(details.vehicleReg)}</strong> and have all necessary paperwork with him.</p>
+    <table cellpadding="0" cellspacing="0" style="margin: 20px 0; border-left: 3px solid #0ea5e9; padding-left: 16px;">
+      ${infoRow("Collection address:", addressHtml, true)}
+      ${infoRow("Site access hours:", details.siteHours || "—")}
+      ${infoRow("Site contact:", details.siteContacts || "—")}
+      ${infoRow("Special loading instructions:", details.specialInstructions || "None")}
+    </table>
+    <p style="color:#475569;margin:0 0 12px;">If you can kindly confirm that the above date is agreeable with yourself, and of course if any of the information above is incorrect please let one of the team know and we will adjust.</p>
+    <p style="color:#475569;margin:0;">Finally, if we can assist in any other way please don't hesitate to contact one of the team.</p>`,
+    "You are receiving this because you requested this collection on the Itinium Battery Portal. Please pass these details to the site contact if that isn't you."
+  );
+}
+
+// Itinium confirmed the schedule — send the collection requester the
+// collection specifics, following Ingrid's template (11 Aug 2026).
+export async function notifySiteContactScheduleConfirmed(
+  job: JobRef,
+  details: {
+    collectionDate: string;
+    driverName: string;
+    vehicleReg: string;
+    siteAddress: string;
+    siteHours: string | null;
+    siteContacts: string | null;
+    specialInstructions: string | null;
+  }
+): Promise<void> {
+  if (!job.submittedById) return;
+
+  const [contact] = await db
+    .select({ fullName: usersTable.fullName })
+    .from(usersTable)
+    .where(eq(usersTable.id, job.submittedById));
+  const firstName = contact?.fullName?.split(" ")[0] || "there";
+
+  const dateLabel = new Date(`${details.collectionDate}T00:00:00Z`).toLocaleDateString("en-GB", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
+  });
+
+  const emailHtml = buildScheduleConfirmedEmailHtml(job, firstName, details);
+
+  await dispatchNotification(job.submittedById, {
+    type: "schedule_confirmed",
+    title: `Collection confirmed — ${job.reference}`,
+    body: `Collection on ${dateLabel}: ${details.driverName} in ${details.vehicleReg}.`,
+    link: `/jobs/${job.id}`,
+    emailSubject: `Collection Confirmed — ${dateLabel} — ${job.reference}`,
+    emailHtml,
+    emailPrefKey: "jobApprovedCompleted",
+  });
 }
 
 export async function pruneOldNotifications(): Promise<void> {

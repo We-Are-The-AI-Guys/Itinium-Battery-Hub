@@ -8,3 +8,4 @@ export * from "./collection-points";
 export * from "./notifications";
 export * from "./schedule-audit-log";
 export * from "./correction-audit-log";
+export * from "./collection-companies";

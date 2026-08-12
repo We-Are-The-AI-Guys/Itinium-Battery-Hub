@@ -46,6 +46,61 @@ async function bootstrap() {
     console.error("Bootstrap: failed to create weight reference table:", err);
   }
 
+  // Collection-company scheduling workflow (companies, vehicles, drivers,
+  // per-job schedule state, and collection-company portal logins).
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS collection_companies (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      )
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS company_vehicles (
+        id SERIAL PRIMARY KEY,
+        company_id INTEGER NOT NULL REFERENCES collection_companies(id) ON DELETE CASCADE,
+        registration VARCHAR(50) NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      )
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS company_drivers (
+        id SERIAL PRIMARY KEY,
+        company_id INTEGER NOT NULL REFERENCES collection_companies(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      )
+    `);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_company_vehicles_company ON company_vehicles (company_id)`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS idx_company_drivers_company ON company_drivers (company_id)`);
+    await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS collection_company_id INTEGER REFERENCES collection_companies(id)`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS collection_company_id INTEGER REFERENCES collection_companies(id)`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS proposed_collection_date DATE`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS schedule_status VARCHAR(30) NOT NULL DEFAULT 'unassigned'`);
+
+    // Seed CBL with its current fleet the first time (per Ingrid, 11 Aug).
+    const existing = await db.execute(sql`SELECT id FROM collection_companies LIMIT 1`);
+    if (existing.rows.length === 0) {
+      const inserted = await db.execute(sql`INSERT INTO collection_companies (name) VALUES ('CBL') RETURNING id`);
+      const cblId = (inserted.rows[0] as { id: number }).id;
+      // "Outside Transport" is a fleet choice (driver TBA), not a separate
+      // login — seeded alongside CBL's own vehicles/drivers.
+      for (const reg of ["K40 CBL", "SV68 ACY", "PN69 CVO", "NX21 UTU", "Outside Transport"]) {
+        await db.execute(sql`INSERT INTO company_vehicles (company_id, registration) VALUES (${cblId}, ${reg})`);
+      }
+      for (const name of ["Simon Rennison", "Kevin Reynolds", "Chris Johnson", "John Servey", "Colin Campbell", "TBA"]) {
+        await db.execute(sql`INSERT INTO company_drivers (company_id, name) VALUES (${cblId}, ${name})`);
+      }
+      console.log("Seeded collection companies (CBL + Outside Transport) with vehicles and drivers");
+    }
+  } catch (err) {
+    console.error("Bootstrap: failed to set up collection companies:", err);
+  }
+
   try {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS cell_models (

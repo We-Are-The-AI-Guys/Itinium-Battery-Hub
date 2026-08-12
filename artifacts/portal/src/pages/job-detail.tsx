@@ -80,6 +80,10 @@ interface JobData {
   siteContacts: string | null;
   siteHours: string | null;
   specialInstructions: string | null;
+  driverName: string | null;
+  vehicleReg: string | null;
+  proposedCollectionDate: string | null;
+  scheduleStatus: string;
 }
 
 interface BatteryData {
@@ -174,6 +178,8 @@ export default function JobDetailPage() {
   const [lmePrice, setLmePrice] = useState<LmePrice | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [downloadingInvoice, setDownloadingInvoice] = useState(false);
+  const [confirmDate, setConfirmDate] = useState("");
+  const [confirmingSchedule, setConfirmingSchedule] = useState(false);
   const cblLmeInitialRef = useRef<string | null>(null);
   const lmePriceRef = useRef<LmePrice | null>(null);
   const lmePrefillDoneRef = useRef(false);
@@ -687,6 +693,64 @@ export default function JobDetailPage() {
             </Badge>
           </div>
         </div>
+
+        {job.scheduleStatus === "proposed" && (userRole === "accounts" || userRole === "head_office_admin") && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6" data-testid="card-schedule-proposal">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="font-semibold text-[#0f2744]">Collection date proposed by the collection company</p>
+                <p className="text-sm text-slate-600 mt-1">
+                  Proposed: <strong>{formatDate(job.proposedCollectionDate)}</strong>
+                  {" · "}Driver: <strong>{job.driverName || "—"}</strong>
+                  {" · "}Vehicle: <strong>{job.vehicleReg || "—"}</strong>
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Confirming emails the collection details to the person who requested the collection.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  className="h-9 w-40 bg-white"
+                  value={confirmDate || job.proposedCollectionDate || ""}
+                  onChange={(e) => setConfirmDate(e.target.value)}
+                  data-testid="input-confirm-date"
+                />
+                <Button
+                  size="sm"
+                  className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
+                  disabled={confirmingSchedule}
+                  onClick={async () => {
+                    setConfirmingSchedule(true);
+                    try {
+                      const body: Record<string, string> = {};
+                      const chosen = confirmDate || job.proposedCollectionDate || "";
+                      if (chosen && chosen !== job.proposedCollectionDate) body.collectionDate = chosen;
+                      const res = await fetch(`/api/jobs/${job.id}/schedule/confirm`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        credentials: "include",
+                        body: JSON.stringify(body),
+                      });
+                      if (res.ok) {
+                        toast({ title: "Collection confirmed", description: "The collection details are being emailed to the person who requested the collection." });
+                        loadJob();
+                      } else {
+                        const data = await res.json().catch(() => null);
+                        toast({ title: "Could not confirm", description: data?.message || "Please try again.", variant: "destructive" });
+                      }
+                    } finally {
+                      setConfirmingSchedule(false);
+                    }
+                  }}
+                  data-testid="button-confirm-schedule"
+                >
+                  {confirmingSchedule ? "Confirming…" : "Confirm Collection Date"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="border-l-4 border-[#0ea5e9] px-6 py-4 bg-slate-50/50 border-b border-slate-100">

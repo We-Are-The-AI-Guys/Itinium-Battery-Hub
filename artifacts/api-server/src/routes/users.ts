@@ -89,6 +89,7 @@ router.get(
           depot: usersTable.depot,
           clientId: usersTable.clientId,
           locationId: usersTable.locationId,
+          collectionCompanyId: usersTable.collectionCompanyId,
           isActive: usersTable.isActive,
           lastActiveAt: usersTable.lastActiveAt,
           createdAt: usersTable.createdAt,
@@ -130,10 +131,11 @@ router.get(
 const createUserSchema = z.object({
   fullName: z.string().min(1),
   email: z.string().email(),
-  role: z.enum(["depot_user", "team_leader", "accounts", "head_office_admin"]),
+  role: z.enum(["depot_user", "team_leader", "accounts", "head_office_admin", "collection_company"]),
   depot: z.string().nullable().optional(),
   clientId: z.number().nullable().optional(),
   locationId: z.number().nullable().optional(),
+  collectionCompanyId: z.number().nullable().optional(),
   password: z.string().min(6).optional(),
 });
 
@@ -171,6 +173,18 @@ router.post(
             res.status(400).json({ message: "Location does not belong to your client" });
             return;
           }
+        }
+      }
+
+      const collectionCompanyId = parsed.data.collectionCompanyId ?? null;
+      if (role === "collection_company") {
+        if (req.user!.role !== "head_office_admin") {
+          res.status(403).json({ message: "Only head office admins can create collection company users" });
+          return;
+        }
+        if (!collectionCompanyId) {
+          res.status(400).json({ message: "Collection company is required for the Collection Company role" });
+          return;
         }
       }
 
@@ -226,6 +240,7 @@ router.post(
           depot: locationName || depot || null,
           clientId: clientId || null,
           locationId: locationId || null,
+          collectionCompanyId: role === "collection_company" ? collectionCompanyId : null,
           passwordHash,
           isActive: true,
         })
@@ -297,7 +312,8 @@ router.patch(
 
 const updateUserSchema = z.object({
   fullName: z.string().min(1).optional(),
-  role: z.enum(["depot_user", "team_leader", "accounts", "head_office_admin"]).optional(),
+  role: z.enum(["depot_user", "team_leader", "accounts", "head_office_admin", "collection_company"]).optional(),
+  collectionCompanyId: z.number().nullable().optional(),
   depot: z.string().nullable().optional(),
   clientId: z.number().nullable().optional(),
   locationId: z.number().nullable().optional(),
@@ -356,6 +372,7 @@ router.patch(
       if (req.user!.role === "head_office_admin") {
         if (parsed.data.clientId !== undefined) updates.clientId = parsed.data.clientId;
         if (parsed.data.locationId !== undefined) updates.locationId = parsed.data.locationId;
+        if (parsed.data.collectionCompanyId !== undefined) updates.collectionCompanyId = parsed.data.collectionCompanyId;
 
         const [existingUser] = await db
           .select({ clientId: usersTable.clientId, locationId: usersTable.locationId })
