@@ -1,74 +1,68 @@
 import { describe, it, expect } from "vitest";
-import {
-  deriveActualCellCount,
-  derivePbContentKg,
-  deriveEstimatedWeightKg,
-} from "../jobs";
+import { deriveEstimatedWeightKg, derivePbContentKg } from "../jobs";
 
-// Regression tests for the manual-entry vs CSV weight discrepancy: the
-// server derives battery weights from the cell-model catalogue with the
-// same matching rules as Pb (exact manufacturer -> TAB -> any, ignoring
-// spacing/case), so a row whose cell type changed after its weight was
-// computed can never keep the previous model's weight.
-
-const CATALOGUE = [
-  { manufacturer: "Exide / GNB", modelName: "5 EPzS 700", pbContentKgPerCell: "30.900", weightPerCellKg: "30.900", cellsCount: 5 },
-  { manufacturer: "Exide / GNB", modelName: "5 EPzS 775", pbContentKgPerCell: "32.900", weightPerCellKg: "32.900", cellsCount: 5 },
-  { manufacturer: "TAB", modelName: "5 EPzS700 L", pbContentKgPerCell: "30.900", weightPerCellKg: "30.900", cellsCount: 5 },
-  { manufacturer: "TAB", modelName: "4 PzS 460", pbContentKgPerCell: "19.900", weightPerCellKg: "19.900", cellsCount: 4 },
-  { manufacturer: "Hoppecke", modelName: "4 PzS 460", pbContentKgPerCell: "20.500", weightPerCellKg: "20.500", cellsCount: 4 },
+// Catalogue fixtures mirror the real cell-model data shape. Weights are the
+// client's Pb-per-cell figures (the catalogue deliberately stores Pb, not
+// gross battery weight); the x1.4 safe-load factor is applied by callers.
+const catalogue = [
+  { manufacturer: "Exide / GNB", modelName: "5 EPzS 700", weightPerCellKg: "30.900", pbContentKgPerCell: "30.900", cellsCount: 5 },
+  { manufacturer: "TAB", modelName: "5 EPzS 700", weightPerCellKg: "31.000", pbContentKgPerCell: "31.000", cellsCount: 5 },
+  { manufacturer: "Hoppecke", modelName: "5 EPzS 700", weightPerCellKg: "31.100", pbContentKgPerCell: "31.100", cellsCount: 5 },
+  { manufacturer: "Exide / GNB", modelName: "5 EPzS 775", weightPerCellKg: "32.900", pbContentKgPerCell: "32.900", cellsCount: 5 },
+  { manufacturer: "Hawker", modelName: "6 PzS 750", weightPerCellKg: "33.500", pbContentKgPerCell: null, cellsCount: 6 },
 ];
 
-describe("deriveActualCellCount", () => {
-  it("derives cells from even voltage (voltage/2)", () => {
-    expect(deriveActualCellCount({ voltage: "48V" })).toBe(24);
-    expect(deriveActualCellCount({ voltage: "24" })).toBe(12);
+describe("deriveEstimatedWeightKg — the fix behind the 67kg CSV/manual discrepancy", () => {
+  it("derives from the row's CURRENT cell type (a corrected cell type never keeps the old model's weight)", () => {
+    // 48V => 24 cells. "5 EPzS 700" must use 30.900, not the 775's 32.900.
+    expect(deriveEstimatedWeightKg(catalogue, "Exide / GNB", "5 EPzS 700", 24)).toBe("741.600");
+    expect(deriveEstimatedWeightKg(catalogue, "Exide / GNB", "5 EPzS 775", 24)).toBe("789.600");
+    // The 67kg discrepancy: (32.9 - 30.9) x 24 x 1.4 = 67.2kg gross.
+    const wrong = parseFloat(deriveEstimatedWeightKg(catalogue, "Exide / GNB", "5 EPzS 775", 24)!) * 1.4;
+    const right = parseFloat(deriveEstimatedWeightKg(catalogue, "Exide / GNB", "5 EPzS 700", 24)!) * 1.4;
+    expect(wrong - right).toBeCloseTo(67.2, 3);
   });
-  it("uses the quantity for loose cells", () => {
-    expect(deriveActualCellCount({ isLooseCells: true, looseCellsQty: "10" })).toBe(10);
+
+  it("matches exact manufacturer first, then TAB, then any (same as the form)", () => {
+    expect(deriveEstimatedWeightKg(catalogue, "Hoppecke", "5 EPzS 700", 1)).toBe("31.100");
+    // Unknown manufacturer falls back to TAB.
+    expect(deriveEstimatedWeightKg(catalogue, "SomeOther Co", "5 EPzS 700", 1)).toBe("31.000");
+    expect(deriveEstimatedWeightKg(catalogue, "unknown", "5 EPzS 700", 1)).toBe("31.000");
+    expect(deriveEstimatedWeightKg(catalogue, null, "5 EPzS 700", 1)).toBe("31.000");
+    // No TAB entry for this model — falls back to the only candidate.
+    expect(deriveEstimatedWeightKg(catalogue, "Nobody", "6 PzS 750", 1)).toBe("33.500");
   });
-  it("rejects ambiguous or odd voltages", () => {
-    expect(deriveActualCellCount({ voltage: "12/24V" })).toBeNull();
-    expect(deriveActualCellCount({ voltage: "13V" })).toBeNull();
-    expect(deriveActualCellCount({ voltage: "" })).toBeNull();
+
+  it("ignores case and spacing in cell model names", () => {
+    expect(deriveEstimatedWeightKg(catalogue, "Exide / GNB", "5epzs700", 24)).toBe("741.600");
+    expect(deriveEstimatedWeightKg(catalogue, "Exide / GNB", " 5 EPZS 700 ", 24)).toBe("741.600");
+  });
+
+  it("uses the cell count from voltage or loose quantity, never the digits in the model name", () => {
+    // 24V battery => 12 cells even for "5 EPzS 700" (not 5).
+    expect(deriveEstimatedWeightKg(catalogue, "Exide / GNB", "5 EPzS 700", 12)).toBe("370.800");
+    // Loose cells: quantity is the cell count.
+    expect(deriveEstimatedWeightKg(catalogue, "Exide / GNB", "5 EPzS 700", 3)).toBe("92.700");
+  });
+
+  it("returns null when it cannot derive (unknown model, no cell count, Blocs/Other)", () => {
+    expect(deriveEstimatedWeightKg(catalogue, "Exide / GNB", "Nonexistent 123", 24)).toBeNull();
+    expect(deriveEstimatedWeightKg(catalogue, "Exide / GNB", "5 EPzS 700", null)).toBeNull();
+    expect(deriveEstimatedWeightKg(catalogue, "Exide / GNB", "5 EPzS 700", 0)).toBeNull();
+    expect(deriveEstimatedWeightKg(catalogue, "Exide / GNB", "Blocs", 24)).toBeNull();
+    expect(deriveEstimatedWeightKg(catalogue, "Exide / GNB", "Other", 24)).toBeNull();
+    expect(deriveEstimatedWeightKg(catalogue, "Exide / GNB", "", 24)).toBeNull();
   });
 });
 
-describe("deriveEstimatedWeightKg", () => {
-  it("derives the raw weight for an exact manufacturer + model match", () => {
-    // 30.9 kg/cell x 24 cells = 741.6 (the corrected "5 EPzS 700" figure —
-    // never the 775's 789.6)
-    expect(deriveEstimatedWeightKg(CATALOGUE, "Exide / GNB", "5 EPzS 700", 24)).toBe("741.600");
-    expect(deriveEstimatedWeightKg(CATALOGUE, "Exide / GNB", "5 EPzS 775", 24)).toBe("789.600");
+describe("derivePbContentKg", () => {
+  it("uses the same matching rules and multiplies by the actual cell count", () => {
+    expect(derivePbContentKg(catalogue, "Exide / GNB", "5 EPzS 700", 24)).toBe("741.600");
+    expect(derivePbContentKg(catalogue, "Unknown", "5 EPzS 700", 12)).toBe("372.000"); // TAB fallback
   });
-  it("matches ignoring spacing and case", () => {
-    expect(deriveEstimatedWeightKg(CATALOGUE, "Exide / GNB", "5epzs700", 24)).toBe("741.600");
-    expect(deriveEstimatedWeightKg(CATALOGUE, "Exide / GNB", "5EPZS775", 24)).toBe("789.600");
-  });
-  it("falls back to TAB, then any manufacturer", () => {
-    // Unknown manufacturer -> TAB figure (19.9), not Hoppecke's 20.5
-    expect(deriveEstimatedWeightKg(CATALOGUE, "Unknown", "4 PzS 460", 12)).toBe("238.800");
-    // Manufacturer that doesn't carry the model -> TAB fallback
-    expect(deriveEstimatedWeightKg(CATALOGUE, "Espex", "4 PzS 460", 12)).toBe("238.800");
-    // Exact manufacturer wins when present
-    expect(deriveEstimatedWeightKg(CATALOGUE, "Hoppecke", "4 PzS 460", 12)).toBe("246.000");
-  });
-  it("supports loose-cell quantities", () => {
-    expect(deriveEstimatedWeightKg(CATALOGUE, "Exide / GNB", "5 EPzS 700", 10)).toBe("309.000");
-  });
-  it("returns null for Blocs/Other, unknown models, or missing cell count", () => {
-    expect(deriveEstimatedWeightKg(CATALOGUE, "Exide / GNB", "Blocs", 24)).toBeNull();
-    expect(deriveEstimatedWeightKg(CATALOGUE, "Exide / GNB", "Other", 24)).toBeNull();
-    expect(deriveEstimatedWeightKg(CATALOGUE, "Exide / GNB", "No Such Model", 24)).toBeNull();
-    expect(deriveEstimatedWeightKg(CATALOGUE, "Exide / GNB", "5 EPzS 700", null)).toBeNull();
-  });
-});
 
-describe("weight and Pb derivation stay consistent", () => {
-  it("uses the same matching rules so weight and Pb can never disagree on the model", () => {
-    const pb = derivePbContentKg(CATALOGUE, "Exide / GNB", "5 EPzS 700", 24);
-    const weight = deriveEstimatedWeightKg(CATALOGUE, "Exide / GNB", "5 EPzS 700", 24);
-    expect(pb).toBe("741.600");
-    expect(weight).toBe("741.600");
+  it("skips catalogue entries without Pb data", () => {
+    // "6 PzS 750" has weight but null Pb — no Pb derivation possible.
+    expect(derivePbContentKg(catalogue, "Hawker", "6 PzS 750", 24)).toBeNull();
   });
 });

@@ -38,14 +38,30 @@ router.get(
           return;
         }
 
-        const conditions = [eq(cellModelsTable.modelName, cellModel as string)];
-        if (manufacturer && typeof manufacturer === "string") {
-          conditions.push(eq(cellModelsTable.manufacturer, manufacturer));
-        }
-        const [model] = await db
+        // Same matching rules as the depot form and job submission: candidates
+        // are matched on the model name ignoring case/spacing/punctuation, then
+        // picked by exact manufacturer first, falling back to TAB, then any
+        // manufacturer. Keeping this endpoint aligned with the form prevents
+        // CSV validators or other callers from silently disagreeing with it.
+        const normalizedModel = (cellModel as string).toLowerCase().replace(/[^a-z0-9]/g, "");
+        const candidates = await db
           .select()
           .from(cellModelsTable)
-          .where(and(...conditions));
+          .where(
+            eq(
+              sql`lower(regexp_replace(${cellModelsTable.modelName}, '[^a-zA-Z0-9]', '', 'g'))`,
+              normalizedModel
+            )
+          );
+
+        const mfr = typeof manufacturer === "string" ? manufacturer.trim() : "";
+        const isUnknownMfr = !mfr || mfr.toLowerCase() === "unknown";
+        const model =
+          (!isUnknownMfr
+            ? candidates.find((m) => m.manufacturer.toLowerCase() === mfr.toLowerCase())
+            : undefined) ||
+          candidates.find((m) => m.manufacturer === "TAB") ||
+          candidates[0];
 
         if (model) {
           const numCells = voltageNum / 2;

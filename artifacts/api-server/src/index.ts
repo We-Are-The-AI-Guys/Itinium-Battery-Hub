@@ -124,6 +124,58 @@ async function bootstrap() {
     console.error("Bootstrap: failed to create job_documents table:", err);
   }
 
+  // One-off data correction (idempotent; self-heals production on republish):
+  // job JOB-0826-00015's row for serial LB01421840 kept the "5 EPzS 775"
+  // weight (1105.440) after its cell type was corrected to "5 EPzS 700",
+  // because the correction predated server-side weight re-derivation. Fix the
+  // stored weight (30.900 Pb/cell x 24 cells x 1.4 = 1038.240) and re-sync the
+  // job tonnage, but only while the exact stale values are present and the
+  // weight/tonnage were auto-derived (tonnage equals the sum of row weights).
+  try {
+    // Two sequential statements inside ONE transaction: a single CTE
+    // statement cannot re-sync the tonnage because the outer UPDATE's
+    // subselect would see the pre-update row weights (Postgres statement
+    // snapshot semantics), and running them non-transactionally could leave
+    // the job internally inconsistent if the second statement failed.
+    await db.transaction(async (tx) => {
+      const fixed = await tx.execute(sql`
+        UPDATE job_batteries jb
+        SET estimated_weight_kg = 1038.240,
+            pb_content_kg = 741.600
+        FROM jobs j
+        WHERE j.id = jb.job_id
+          AND j.reference = 'JOB-0826-00015'
+          AND jb.battery_serial = 'LB01421840'
+          AND jb.cell_type = '5 EPzS 700'
+          AND jb.estimated_weight_kg = 1105.440
+          AND jb.weight_manual = false
+          AND COALESCE(j.tonnage_manual_override, false) = false
+          AND j.tonnage = (
+            SELECT ROUND(SUM(b2.estimated_weight_kg) / 1000, 3)
+            FROM job_batteries b2 WHERE b2.job_id = j.id
+          )
+        RETURNING jb.job_id
+      `);
+      const fixedRows = (fixed as unknown as { rows?: { job_id: number }[] }).rows ?? [];
+      if (fixedRows.length > 0) {
+        const jobId = fixedRows[0].job_id;
+        const synced = await tx.execute(sql`
+          UPDATE jobs j
+          SET tonnage = (
+            SELECT ROUND(SUM(b2.estimated_weight_kg) / 1000, 3)
+            FROM job_batteries b2 WHERE b2.job_id = j.id
+          )
+          WHERE j.id = ${jobId}
+          RETURNING j.id, j.tonnage
+        `);
+        const rows = (synced as unknown as { rows?: unknown[] }).rows ?? [];
+        console.log("Bootstrap: corrected stale weight on JOB-0826-00015 (LB01421840), tonnage re-synced:", rows);
+      }
+    });
+  } catch (err) {
+    console.error("Bootstrap: failed stale-weight correction for JOB-0826-00015:", err);
+  }
+
   try {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS cell_models (
