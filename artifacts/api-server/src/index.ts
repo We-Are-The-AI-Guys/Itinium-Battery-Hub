@@ -328,6 +328,15 @@ async function bootstrap() {
     await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS site_contacts TEXT`);
     await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS site_hours VARCHAR(255)`);
     await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS special_instructions TEXT`);
+    await db.execute(sql`ALTER TABLE job_batteries ADD COLUMN IF NOT EXISTS receipt_reviewed BOOLEAN NOT NULL DEFAULT FALSE`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS receipt_sent_at TIMESTAMP`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS receipt_sent_by_id INTEGER REFERENCES users(id)`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS receipt_value_snapshot DECIMAL(12,2)`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS receipt_snapshot JSONB`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS receipt_client_delivery_status VARCHAR(20)`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS receipt_accounts_delivery_status VARCHAR(20)`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS receipt_client_recipients JSONB`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS receipt_accounts_recipients JSONB`);
   } catch {
   }
 

@@ -7,7 +7,24 @@ import { MANUFACTURERS } from "./manufacturers";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { createBrandedDoc } from "../lib/pdf-branding";
-import { notifyAdminsNewJob, notifyAdminsFlaggedBatteries, notifySubmitterStatusChange, notifyFlagResolved, notifyCollectionCompanyNewJob } from "../lib/notifications";
+import {
+  notifyAdminsNewJob,
+  notifyAdminsFlaggedBatteries,
+  notifySubmitterStatusChange,
+  notifyFlagResolved,
+  notifyCollectionCompanyNewJob,
+  sendCompletedReceiptToClient,
+  sendJobValueToAccounts,
+} from "../lib/notifications";
+import {
+  calculateReceiptValue,
+  generateAccountsCompletionPdf,
+  generateClientReceiptPdf,
+  getDeliveryTargets,
+  isReceiptReviewComplete,
+  selectClientReceiptRecipients,
+  type ReceiptItemSnapshot,
+} from "../lib/receipt-documents";
 
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
@@ -1623,6 +1640,230 @@ router.patch(
   }
 );
 
+type DeliveryRecipient = { id: number; email: string; fullName: string };
+
+async function resolveReceiptDeliveryRecipients(job: typeof jobsTable.$inferSelect): Promise<{
+  clientRecipients: DeliveryRecipient[];
+  accountsRecipients: DeliveryRecipient[];
+}> {
+  const accountsRecipients = await db
+    .select({ id: usersTable.id, email: usersTable.email, fullName: usersTable.fullName })
+    .from(usersTable)
+    .where(and(eq(usersTable.role, "accounts"), eq(usersTable.isActive, true)));
+
+  if (!job.clientId) return { clientRecipients: [], accountsRecipients };
+  const teamLeaders = await db
+    .select({
+      id: usersTable.id,
+      email: usersTable.email,
+      fullName: usersTable.fullName,
+      locationId: usersTable.locationId,
+      depot: usersTable.depot,
+    })
+    .from(usersTable)
+    .where(and(
+      eq(usersTable.role, "team_leader"),
+      eq(usersTable.clientId, job.clientId),
+      eq(usersTable.isActive, true)
+    ));
+
+  const selected = selectClientReceiptRecipients(teamLeaders, job.locationId, job.depot);
+  return {
+    clientRecipients: selected.map(({ id, email, fullName }) => ({ id, email, fullName })),
+    accountsRecipients,
+  };
+}
+
+function toReceiptSnapshot(battery: typeof jobBatteriesTable.$inferSelect): ReceiptItemSnapshot {
+  return {
+    palletNumber: battery.palletNumber,
+    assetNumber: battery.assetNumber,
+    batterySerial: battery.batterySerial,
+    manufacture: battery.manufacture,
+    cellType: battery.cellType,
+    voltage: battery.voltage,
+    looseCellsQty: battery.looseCellsQty,
+    receiptConfirmed: battery.receiptConfirmed === true,
+    adminNotes: battery.adminNotes,
+    valueGbp: battery.valueGbp,
+    receiptReviewed: battery.receiptReviewed,
+  };
+}
+
+router.get(
+  "/jobs/:id/receipt-delivery",
+  requireAuth,
+  requireRole("accounts", "head_office_admin"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const jobId = parseInt(String(req.params.id), 10);
+      if (isNaN(jobId)) {
+        res.status(400).json({ message: "Invalid job ID" });
+        return;
+      }
+      const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+      if (!job) {
+        res.status(404).json({ message: "Job not found" });
+        return;
+      }
+      const batteries = await db.select().from(jobBatteriesTable).where(eq(jobBatteriesTable.jobId, job.id));
+      const items = batteries.map(toReceiptSnapshot);
+      const { clientRecipients, accountsRecipients } = await resolveReceiptDeliveryRecipients(job);
+      res.json({
+        ready: isReceiptReviewComplete(items),
+        reviewedCount: items.filter((item) => item.receiptReviewed).length,
+        totalCount: items.length,
+        totalValue: job.receiptValueSnapshot || calculateReceiptValue(items),
+        clientRecipients: clientRecipients.map(({ email, fullName }) => ({ email, fullName })),
+        accountsRecipients: accountsRecipients.map(({ email, fullName }) => ({ email, fullName })),
+        sentAt: job.receiptSentAt,
+        sentById: job.receiptSentById,
+        clientStatus: job.receiptClientDeliveryStatus,
+        accountsStatus: job.receiptAccountsDeliveryStatus,
+      });
+    } catch (error) {
+      console.error("Receipt delivery preview error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+router.post(
+  "/jobs/:id/receipt-delivery",
+  requireAuth,
+  requireRole("accounts", "head_office_admin"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const jobId = parseInt(String(req.params.id), 10);
+      if (isNaN(jobId)) {
+        res.status(400).json({ message: "Invalid job ID" });
+        return;
+      }
+      const resend = req.body?.resend === true;
+      const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+      if (!job) {
+        res.status(404).json({ message: "Job not found" });
+        return;
+      }
+      const batteries = await db.select().from(jobBatteriesTable).where(eq(jobBatteriesTable.jobId, job.id));
+      const currentItems = batteries.map(toReceiptSnapshot);
+      if (!isReceiptReviewComplete(currentItems)) {
+        res.status(400).json({ message: "Every item must be reviewed and saved before documents can be sent" });
+        return;
+      }
+      if (
+        !resend
+        && job.receiptClientDeliveryStatus === "sent"
+        && job.receiptAccountsDeliveryStatus === "sent"
+      ) {
+        res.status(409).json({ message: "These documents have already been sent. Use Resend documents to send them again." });
+        return;
+      }
+      if (
+        job.receiptClientDeliveryStatus === "sending"
+        || job.receiptAccountsDeliveryStatus === "sending"
+      ) {
+        res.status(409).json({ message: "Document delivery is already in progress" });
+        return;
+      }
+
+      const { clientRecipients, accountsRecipients } = await resolveReceiptDeliveryRecipients(job);
+      if (clientRecipients.length === 0) {
+        res.status(400).json({ message: "No active team leader is linked to this client or depot" });
+        return;
+      }
+      if (accountsRecipients.length === 0) {
+        res.status(400).json({ message: "No active accounts users are available" });
+        return;
+      }
+
+      const storedItems = Array.isArray(job.receiptSnapshot)
+        ? job.receiptSnapshot as ReceiptItemSnapshot[]
+        : currentItems;
+      const totalValue = job.receiptValueSnapshot || calculateReceiptValue(storedItems);
+      const jobSnapshot = {
+        reference: job.reference,
+        clientName: job.clientName,
+        depot: job.depot,
+        collectionPoint: job.collectionPoint,
+        collectionDate: job.collectionDate,
+      };
+
+      const { sendClient, sendAccounts } = getDeliveryTargets(
+        job.receiptClientDeliveryStatus,
+        job.receiptAccountsDeliveryStatus,
+        resend
+      );
+
+      const claimed = await db.update(jobsTable).set({
+        receiptSnapshot: storedItems,
+        receiptValueSnapshot: totalValue,
+        receiptSentById: req.user!.id,
+        receiptClientRecipients: clientRecipients.map(({ email, fullName }) => ({ email, fullName })),
+        receiptAccountsRecipients: accountsRecipients.map(({ email, fullName }) => ({ email, fullName })),
+        ...(sendClient ? { receiptClientDeliveryStatus: "sending" } : {}),
+        ...(sendAccounts ? { receiptAccountsDeliveryStatus: "sending" } : {}),
+      }).where(and(
+        eq(jobsTable.id, job.id),
+        sql`COALESCE(${jobsTable.receiptClientDeliveryStatus}, '') <> 'sending'`,
+        sql`COALESCE(${jobsTable.receiptAccountsDeliveryStatus}, '') <> 'sending'`
+      )).returning({ id: jobsTable.id });
+      if (claimed.length === 0) {
+        res.status(409).json({ message: "Document delivery is already in progress" });
+        return;
+      }
+
+      let clientResult = null;
+      let accountsResult = null;
+      try {
+        const [clientPdf, accountsPdf] = await Promise.all([
+          sendClient ? generateClientReceiptPdf(jobSnapshot, storedItems) : Promise.resolve(null),
+          sendAccounts ? generateAccountsCompletionPdf(jobSnapshot, totalValue) : Promise.resolve(null),
+        ]);
+        [clientResult, accountsResult] = await Promise.all([
+          sendClient && clientPdf
+            ? sendCompletedReceiptToClient(clientRecipients, job, clientPdf)
+            : Promise.resolve(null),
+          sendAccounts && accountsPdf
+            ? sendJobValueToAccounts(accountsRecipients, job, totalValue, accountsPdf)
+            : Promise.resolve(null),
+        ]);
+      } catch (deliveryError) {
+        await db.update(jobsTable).set({
+          ...(sendClient ? { receiptClientDeliveryStatus: "failed" } : {}),
+          ...(sendAccounts ? { receiptAccountsDeliveryStatus: "failed" } : {}),
+        }).where(eq(jobsTable.id, job.id));
+        throw deliveryError;
+      }
+
+      const clientStatus = !sendClient
+        ? job.receiptClientDeliveryStatus
+        : clientResult?.failed.length === 0 ? "sent" : "failed";
+      const accountsStatus = !sendAccounts
+        ? job.receiptAccountsDeliveryStatus
+        : accountsResult?.failed.length === 0 ? "sent" : "failed";
+      const allSent = clientStatus === "sent" && accountsStatus === "sent";
+      const [updated] = await db.update(jobsTable).set({
+        receiptClientDeliveryStatus: clientStatus,
+        receiptAccountsDeliveryStatus: accountsStatus,
+        receiptSentAt: allSent ? new Date() : null,
+      }).where(eq(jobsTable.id, job.id)).returning();
+
+      res.status(allSent ? 200 : 502).json({
+        message: allSent
+          ? "Completed receipt and accounts document sent"
+          : "Some emails could not be sent. You can retry the failed deliveries.",
+        job: updated,
+        clientResult,
+        accountsResult,
+      });
+    } catch (error) {
+      console.error("Receipt delivery error:", error);
+      res.status(500).json({ message: "Failed to send completed receipt documents" });
+    }
+  }
+);
+
 router.patch(
   "/jobs/:id/status",
   requireAuth,
@@ -1688,7 +1929,10 @@ router.patch(
       };
 
       const updates: Record<string, string | boolean | number | Date | null> = {};
-      if (receiptConfirmed !== undefined) updates.receiptConfirmed = receiptConfirmed === true || receiptConfirmed === "true";
+      if (receiptConfirmed !== undefined) {
+        updates.receiptConfirmed = receiptConfirmed === true || receiptConfirmed === "true";
+        updates.receiptReviewed = true;
+      }
       if (pbContentKg !== undefined) updates.pbContentKg = toDecimal(pbContentKg);
       if (valueGbp !== undefined) updates.valueGbp = toDecimal(valueGbp);
       if (adminNotes !== undefined) updates.adminNotes = adminNotes !== null && adminNotes !== undefined && adminNotes !== "" ? String(adminNotes) : null;

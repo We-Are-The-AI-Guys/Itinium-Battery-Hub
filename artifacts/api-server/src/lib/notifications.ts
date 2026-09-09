@@ -85,6 +85,7 @@ export type NotificationPayload = {
   emailSubject?: string;
   emailHtml?: string;
   emailPrefKey?: string;
+  attachments?: Array<{ filename: string; content: Buffer; contentType: string }>;
 };
 
 export async function dispatchNotification(
@@ -120,10 +121,115 @@ export async function dispatchNotification(
       to: user.email,
       subject: payload.emailSubject,
       html: payload.emailHtml,
+      attachments: payload.attachments,
     });
   } catch (err) {
     console.error("[notifications] Failed to send email:", err);
   }
+}
+
+type RequiredDocumentRecipient = {
+  id: number;
+  email: string;
+  fullName: string;
+};
+
+export type DocumentDeliveryResult = {
+  sent: string[];
+  failed: Array<{ email: string; error: string }>;
+};
+
+async function deliverRequiredDocument(
+  recipients: RequiredDocumentRecipient[],
+  payload: NotificationPayload
+): Promise<DocumentDeliveryResult> {
+  const result: DocumentDeliveryResult = { sent: [], failed: [] };
+  for (const recipient of recipients) {
+    try {
+      await db.insert(notificationsTable).values({
+        userId: recipient.id,
+        type: payload.type,
+        title: payload.title,
+        body: payload.body,
+        link: payload.link ?? null,
+      });
+      if (!resend || !payload.emailSubject || !payload.emailHtml) {
+        throw new Error("Email service is not configured");
+      }
+      const response = await resend.emails.send({
+        from: FROM_ADDRESS,
+        to: recipient.email,
+        subject: payload.emailSubject,
+        html: payload.emailHtml,
+        attachments: payload.attachments,
+      });
+      if (response.error) throw new Error(response.error.message);
+      result.sent.push(recipient.email);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Email delivery failed";
+      console.error(`[notifications] Required document delivery to ${recipient.email} failed:`, error);
+      result.failed.push({ email: recipient.email, error: message });
+    }
+  }
+  return result;
+}
+
+export async function sendCompletedReceiptToClient(
+  recipients: RequiredDocumentRecipient[],
+  job: JobRef,
+  pdf: Buffer
+): Promise<DocumentDeliveryResult> {
+  const emailHtml = buildBrandedEmail(
+    `Completed collection receipt — ${escapeHtml(job.reference)}`,
+    `<p style="color:#475569;margin:0 0 12px;">The receipt review for collection <strong>${escapeHtml(job.reference)}</strong> is complete.</p>
+    <p style="color:#475569;margin:0;">The attached completed collection receipt shows which items were received and any notes recorded by Itinium.</p>`,
+    "This client copy intentionally excludes weights and financial information."
+  );
+  return deliverRequiredDocument(recipients, {
+    type: "completed_receipt_sent",
+    title: `Completed receipt — ${job.reference}`,
+    body: `The completed collection receipt for ${job.reference} is attached to your email.`,
+    link: `/`,
+    emailSubject: `Completed Collection Receipt — ${job.reference}`,
+    emailHtml,
+    attachments: [{
+      filename: `completed-collection-receipt-${job.reference.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.pdf`,
+      content: pdf,
+      contentType: "application/pdf",
+    }],
+  });
+}
+
+export async function sendJobValueToAccounts(
+  recipients: RequiredDocumentRecipient[],
+  job: JobRef,
+  totalValue: string,
+  pdf: Buffer
+): Promise<DocumentDeliveryResult> {
+  const formattedValue = Number(totalValue).toLocaleString("en-GB", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const emailHtml = buildBrandedEmail(
+    `Job complete — ${escapeHtml(job.reference)}`,
+    `<p style="color:#475569;margin:0 0 12px;">Collection <strong>${escapeHtml(job.reference)}</strong> is complete.</p>
+    ${infoRow("Total confirmed job value:", `£${formattedValue}`)}
+    <p style="color:#475569;margin:16px 0 0;">Use this value when preparing the invoice to Itinium. A minimal accounts completion document is attached.</p>`,
+    "This accounts message intentionally excludes item details, weights, Pb figures and receipt notes."
+  );
+  return deliverRequiredDocument(recipients, {
+    type: "job_value_sent_to_accounts",
+    title: `Job complete — ${job.reference}`,
+    body: `${job.reference} is complete. Confirmed value: £${formattedValue}.`,
+    link: `/jobs/${job.id}`,
+    emailSubject: `Job Complete — ${job.reference} — £${formattedValue}`,
+    emailHtml,
+    attachments: [{
+      filename: `accounts-job-complete-${job.reference.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.pdf`,
+      content: pdf,
+      contentType: "application/pdf",
+    }],
+  });
 }
 
 export async function dispatchToMany(
