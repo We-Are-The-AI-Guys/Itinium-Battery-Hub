@@ -844,7 +844,8 @@ router.get(
 
       const { doc, finalize } = createBrandedDoc(
         `Collection Sheet — ${job.reference}`,
-        `${job.clientName} | ${job.depot}`
+        `${job.clientName} | ${job.depot}`,
+        { layout: "landscape" }
       );
       doc.pipe(res);
 
@@ -892,13 +893,14 @@ router.get(
       doc.moveDown(1);
 
       const cols = [
-        { label: "Pallet", x: 40, w: 55 },
-        { label: "Asset", x: 99, w: 75 },
-        { label: "Serial", x: 178, w: 85 },
-        { label: "Manufacturer", x: 267, w: 85 },
-        { label: "Cell Type", x: 356, w: 85 },
-        { label: "Voltage", x: 445, w: 50 },
-        { label: "Loose Qty", x: 499, w: 56, align: "right" as const },
+        { label: "Pallet", x: 40, w: 50 },
+        { label: "Asset", x: 94, w: 75 },
+        { label: "Serial", x: 173, w: 90 },
+        { label: "Manufacturer", x: 267, w: 90 },
+        { label: "Cell Type", x: 361, w: 90 },
+        { label: "Voltage", x: 455, w: 45 },
+        { label: "Loose Qty", x: 504, w: 50, align: "right" as const },
+        { label: "Driver Notes", x: 566, w: contentW - 526 },
       ];
 
       function drawTableHeader() {
@@ -917,13 +919,14 @@ router.get(
 
       let rowIdx = 0;
       for (const b of batteries) {
-        if (doc.y + 20 > doc.page.height - 60) {
+        const rowHeight = 34;
+        if (doc.y + rowHeight > doc.page.height - 60) {
           doc.addPage();
           drawTableHeader();
         }
         const ry = doc.y;
         if (rowIdx % 2 === 1) {
-          doc.rect(40, ry - 2, contentW, 18).fill("#f8fafc");
+          doc.rect(40, ry - 2, contentW, rowHeight).fill("#f8fafc");
         }
         const looseQty = b.isLooseCells ? (b.looseCellsQty ? String(b.looseCellsQty) : "—") : "—";
         doc.fontSize(8.5).fillColor("#1e293b").font("Helvetica");
@@ -934,7 +937,16 @@ router.get(
         doc.text(b.cellType || "—", cols[4].x, ry, { width: cols[4].w, lineBreak: false });
         doc.text(b.voltage || "—", cols[5].x, ry, { width: cols[5].w, lineBreak: false });
         doc.text(looseQty, cols[6].x, ry, { width: cols[6].w, align: "right", lineBreak: false });
-        doc.y = ry + 18;
+        // Two full-width writing lines give the driver space to record
+        // discrepancies or site notes against every individual item.
+        const notes = cols[7];
+        doc.moveTo(notes.x, ry + 12).lineTo(notes.x + notes.w, ry + 12)
+          .strokeColor("#cbd5e1").lineWidth(0.5).stroke();
+        doc.moveTo(notes.x, ry + 27).lineTo(notes.x + notes.w, ry + 27)
+          .strokeColor("#cbd5e1").lineWidth(0.5).stroke();
+        doc.moveTo(40, ry + rowHeight - 2).lineTo(40 + contentW, ry + rowHeight - 2)
+          .strokeColor("#e2e8f0").lineWidth(0.5).stroke();
+        doc.y = ry + rowHeight;
         rowIdx++;
       }
 

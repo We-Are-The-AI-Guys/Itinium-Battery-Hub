@@ -96,11 +96,20 @@ export function drawPageFooter(doc: Doc, pageNum: number, totalPages: number) {
   doc.restore();
 }
 
-export function createBrandedDoc(docTitle: string, docSubtitle?: string): {
+export function createBrandedDoc(
+  docTitle: string,
+  docSubtitle?: string,
+  options?: { layout?: "portrait" | "landscape" }
+): {
   doc: InstanceType<typeof PDFDocument>;
   finalize: () => void;
 } {
-  const doc = new PDFDocument({ size: "A4", margin: MARGIN, bufferPages: true });
+  const doc = new PDFDocument({
+    size: "A4",
+    layout: options?.layout ?? "portrait",
+    margin: MARGIN,
+    bufferPages: true,
+  });
 
   drawPageHeader(doc, docTitle, docSubtitle);
 
