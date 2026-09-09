@@ -7,6 +7,36 @@ import { z } from "zod";
 
 const router: IRouter = Router();
 
+export function previousCalendarMonth(referenceDate: Date): {
+  startDate: string;
+  endDate: string;
+  label: string;
+} {
+  const year = referenceDate.getUTCFullYear();
+  const month = referenceDate.getUTCMonth();
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 1));
+  return {
+    startDate: start.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10),
+    label: start.toLocaleDateString("en-GB", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }),
+  };
+}
+
+export function averageGbpPrice(
+  rows: readonly { gbpPrice: string | number }[]
+): string | null {
+  const values = rows
+    .map((row) => Number(row.gbpPrice))
+    .filter((value) => Number.isFinite(value));
+  if (values.length === 0) return null;
+  return (values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2);
+}
+
 router.get(
   "/lme/current",
   requireAuth,
@@ -19,7 +49,23 @@ router.get(
         .orderBy(desc(lmePricesTable.createdAt))
         .limit(1);
 
-      res.json({ price: latest || null });
+      const month = previousCalendarMonth(new Date());
+      const previousMonthRows = await db
+        .select({ gbpPrice: lmePricesTable.gbpPrice })
+        .from(lmePricesTable)
+        .where(
+          sql`${lmePricesTable.priceDate} >= ${month.startDate}
+            AND ${lmePricesTable.priceDate} < ${month.endDate}`
+        );
+
+      res.json({
+        price: latest || null,
+        previousMonthAverage: {
+          month: month.label,
+          averageGbpPrice: averageGbpPrice(previousMonthRows),
+          sampleCount: previousMonthRows.length,
+        },
+      });
     } catch (error) {
       console.error("LME current price error:", error);
       res.status(500).json({ message: "Internal server error" });

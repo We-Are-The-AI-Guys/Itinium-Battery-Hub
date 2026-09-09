@@ -5,6 +5,10 @@ import {
   type CellModelLite,
 } from "@/lib/cell-type-suggestions";
 import { rankManufacturerSuggestions } from "@/lib/manufacturer-suggestions";
+import {
+  calculateCblLmeValue,
+  calculateGrossProfit,
+} from "@/lib/financial-calculations";
 import { useParams, useLocation } from "wouter";
 import {
   ChevronLeft,
@@ -38,6 +42,12 @@ interface LmePrice {
   exchangeRate: string;
   gbpPrice: string;
   source: string;
+}
+
+interface PreviousMonthAverage {
+  month: string;
+  averageGbpPrice: string | null;
+  sampleCount: number;
 }
 
 function calcValueGbp(
@@ -194,6 +204,7 @@ export default function JobDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [lmePrice, setLmePrice] = useState<LmePrice | null>(null);
+  const [previousMonthAverage, setPreviousMonthAverage] = useState<PreviousMonthAverage | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [downloadingInvoice, setDownloadingInvoice] = useState(false);
   const [confirmDate, setConfirmDate] = useState("");
@@ -374,6 +385,9 @@ export default function JobDetailPage() {
           lmePriceRef.current = data.price;
           setLmePrice(data.price);
         }
+        if (data?.previousMonthAverage) {
+          setPreviousMonthAverage(data.previousMonthAverage);
+        }
       })
       .catch(() => {});
     fetch("/api/auth/me", { credentials: "include" })
@@ -515,19 +529,21 @@ export default function JobDetailPage() {
   }
 
   useEffect(() => {
-    const tonnage = parseFloat(financials.tonnage) || 0;
-    const lmeRate = parseFloat(financials.cblLmeValue) || 0;
-    const lmePercent = parseFloat(financials.cblLmePercent) || 0;
-    const computed = tonnage * lmeRate * (lmePercent / 100);
-    setFinancials((prev) => ({ ...prev, cblLmePrice: computed.toFixed(2) }));
+    const computed = calculateCblLmeValue(
+      financials.tonnage,
+      financials.cblLmeValue,
+      financials.cblLmePercent
+    );
+    setFinancials((prev) => ({ ...prev, cblLmePrice: computed }));
   }, [financials.tonnage, financials.cblLmeValue, financials.cblLmePercent]);
 
   useEffect(() => {
-    const totalInvoice = parseFloat(financials.totalInvoiceValue) || 0;
-    const transport = parseFloat(financials.transportCost) || 0;
-    const cblLme = parseFloat(financials.cblLmePrice) || 0;
-    const gp = totalInvoice - transport - cblLme;
-    setFinancials((prev) => ({ ...prev, grossProfit: gp.toFixed(2) }));
+    const grossProfit = calculateGrossProfit(
+      financials.totalInvoiceValue,
+      financials.transportCost,
+      financials.cblLmePrice
+    );
+    setFinancials((prev) => ({ ...prev, grossProfit }));
   }, [financials.totalInvoiceValue, financials.transportCost, financials.cblLmePrice]);
 
   useEffect(() => {
@@ -1124,90 +1140,148 @@ export default function JobDetailPage() {
             </div>
 
             <div className="border-t border-slate-200 pt-6">
-              <h4 className="font-semibold text-[#0f2744] mb-4 flex items-center gap-2">
-                <Calculator className="w-4 h-4 text-[#0ea5e9]" />
-                Financial Details (Master Job Log)
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <FinancialField
-                  label="Actual Tonnage"
-                  value={financials.tonnage}
-                  onChange={(v) => setFinancials((p) => ({ ...p, tonnage: v }))}
-                  icon={<Truck className="w-3.5 h-3.5" />}
-                  suffix="t"
-                />
-                <FinancialField
-                  label="CBL LME Value £"
-                  value={financials.cblLmeValue}
-                  onChange={(v) => { setPrefilled((pf) => ({ ...pf, cblLmeValue: false })); setFinancials((p) => ({ ...p, cblLmeValue: v })); }}
-                  icon={<PoundSterling className="w-3.5 h-3.5" />}
-                  prefix="£"
-                  autoPrefilled={!!prefilled.cblLmeValue}
-                />
-                <FinancialField
-                  label="CBL LME %"
-                  value={financials.cblLmePercent}
-                  onChange={(v) => setFinancials((p) => ({ ...p, cblLmePercent: v }))}
-                  suffix="%"
-                />
-                <FinancialField
-                  label="CBL £ LME (Calculated)"
-                  value={financials.cblLmePrice}
-                  onChange={(v) => setFinancials((p) => ({ ...p, cblLmePrice: v }))}
-                  prefix="£"
-                  computed
-                />
-                <FinancialField
-                  label="Transport Cost"
-                  value={financials.transportCost}
-                  onChange={(v) => setFinancials((p) => ({ ...p, transportCost: v }))}
-                  prefix="£"
-                />
-                <FinancialField
-                  label="Customer Invoice Value £"
-                  value={financials.customerInvoiceValue}
-                  onChange={(v) => setFinancials((p) => ({ ...p, customerInvoiceValue: v }))}
-                  prefix="£"
-                />
-                <FinancialField
-                  label="Customer Invoice No."
-                  value={financials.customerInvoiceNo}
-                  onChange={(v) => setFinancials((p) => ({ ...p, customerInvoiceNo: v }))}
-                  icon={<Receipt className="w-3.5 h-3.5" />}
-                  type="text"
-                />
-                <FinancialField
-                  label="CBL Waste Advice Note No."
-                  value={financials.cblWasteAdviceNoteNo}
-                  onChange={(v) => setFinancials((p) => ({ ...p, cblWasteAdviceNoteNo: v }))}
-                  type="text"
-                />
-                <FinancialField
-                  label="CBL Date"
-                  value={financials.cblDate}
-                  onChange={(v) => setFinancials((p) => ({ ...p, cblDate: v }))}
-                  type="date"
-                />
-                <FinancialField
-                  label="Total Invoice Value £"
-                  value={financials.totalInvoiceValue}
-                  onChange={(v) => { setPrefilled((pf) => ({ ...pf, totalInvoiceValue: false })); setFinancials((p) => ({ ...p, totalInvoiceValue: v })); }}
-                  prefix="£"
-                  autoPrefilled={!!prefilled.totalInvoiceValue}
-                />
-                <FinancialField
-                  label="Gross Profit £ (Calculated)"
-                  value={financials.grossProfit}
-                  onChange={(v) => setFinancials((p) => ({ ...p, grossProfit: v }))}
-                  prefix="£"
-                  computed
-                />
-                <FinancialField
-                  label="Itinium Invoice No."
-                  value={financials.itiniumInvoiceNo}
-                  onChange={(v) => setFinancials((p) => ({ ...p, itiniumInvoiceNo: v }))}
-                  type="text"
-                />
+              <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <h4 className="font-semibold text-[#0f2744] flex items-center gap-2">
+                  <Calculator className="w-4 h-4 text-[#0ea5e9]" />
+                  Financial Details (Master Job Log)
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Layout aligned to Ingrid&apos;s proposed format; auto/blocs fields await confirmation.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.8fr_1.1fr_1.1fr]">
+                <section className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="mb-4 border-b border-slate-200 pb-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-600">Summary</p>
+                    <h5 className="mt-1 text-base font-bold text-[#0f2744]">LME / Profit</h5>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium uppercase text-slate-500">
+                        LME month average (prior month)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">£</span>
+                        <Input
+                          value={previousMonthAverage?.averageGbpPrice ?? ""}
+                          placeholder="Unavailable"
+                          readOnly
+                          className="bg-white pl-7 font-semibold text-[#0f2744]"
+                        />
+                      </div>
+                      <p className="mt-1.5 text-[11px] leading-4 text-slate-500">
+                        {previousMonthAverage?.averageGbpPrice
+                          ? `${previousMonthAverage.month} · ${previousMonthAverage.sampleCount} stored daily ${previousMonthAverage.sampleCount === 1 ? "rate" : "rates"}`
+                          : previousMonthAverage
+                          ? `No stored daily rates for ${previousMonthAverage.month}`
+                          : "Previous-month history unavailable"}
+                      </p>
+                    </div>
+                    <FinancialField
+                      label="Gross Profit £ (Current Calculation)"
+                      value={financials.grossProfit}
+                      onChange={(v) => setFinancials((p) => ({ ...p, grossProfit: v }))}
+                      prefix="£"
+                      computed
+                    />
+                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-800">
+                      Net profit will be added after Ingrid confirms the final formula.
+                    </p>
+                  </div>
+                </section>
+
+                <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-4 border-b border-slate-200 pb-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-600">Costs</p>
+                    <h5 className="mt-1 text-base font-bold text-[#0f2744]">Waste Collector</h5>
+                  </div>
+                  <div className="space-y-4">
+                    <FinancialField
+                      label="CBL LME Value £ (Spot)"
+                      value={financials.cblLmeValue}
+                      onChange={(v) => { setPrefilled((pf) => ({ ...pf, cblLmeValue: false })); setFinancials((p) => ({ ...p, cblLmeValue: v })); }}
+                      icon={<PoundSterling className="w-3.5 h-3.5" />}
+                      prefix="£"
+                      autoPrefilled={!!prefilled.cblLmeValue}
+                    />
+                    <FinancialField
+                      label="% of LME (CBL)"
+                      value={financials.cblLmePercent}
+                      onChange={(v) => setFinancials((p) => ({ ...p, cblLmePercent: v }))}
+                      suffix="%"
+                    />
+                    <FinancialField
+                      label="Calculated Value of LME (CBL)"
+                      value={financials.cblLmePrice}
+                      onChange={(v) => setFinancials((p) => ({ ...p, cblLmePrice: v }))}
+                      prefix="£"
+                      computed
+                    />
+                    <FinancialField
+                      label="Gross Tonnage (Actual)"
+                      value={financials.tonnage}
+                      onChange={(v) => setFinancials((p) => ({ ...p, tonnage: v }))}
+                      icon={<Truck className="w-3.5 h-3.5" />}
+                      suffix="t"
+                    />
+                    <FinancialField
+                      label="Transport Cost"
+                      value={financials.transportCost}
+                      onChange={(v) => setFinancials((p) => ({ ...p, transportCost: v }))}
+                      prefix="£"
+                    />
+                    <FinancialField
+                      label="CBL Waste Advice Note No."
+                      value={financials.cblWasteAdviceNoteNo}
+                      onChange={(v) => setFinancials((p) => ({ ...p, cblWasteAdviceNoteNo: v }))}
+                      type="text"
+                    />
+                    <FinancialField
+                      label="CBL Date"
+                      value={financials.cblDate}
+                      onChange={(v) => setFinancials((p) => ({ ...p, cblDate: v }))}
+                      type="date"
+                    />
+                    <FinancialField
+                      label="Total Invoice Value £"
+                      value={financials.totalInvoiceValue}
+                      onChange={(v) => { setPrefilled((pf) => ({ ...pf, totalInvoiceValue: false })); setFinancials((p) => ({ ...p, totalInvoiceValue: v })); }}
+                      prefix="£"
+                      autoPrefilled={!!prefilled.totalInvoiceValue}
+                    />
+                    <FinancialField
+                      label="Itinium Invoice No."
+                      value={financials.itiniumInvoiceNo}
+                      onChange={(v) => setFinancials((p) => ({ ...p, itiniumInvoiceNo: v }))}
+                      type="text"
+                    />
+                  </div>
+                </section>
+
+                <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-4 border-b border-slate-200 pb-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-600">Income</p>
+                    <h5 className="mt-1 text-base font-bold text-[#0f2744]">Customer</h5>
+                  </div>
+                  <div className="space-y-4">
+                    <FinancialField
+                      label="Customer Invoice Value £"
+                      value={financials.customerInvoiceValue}
+                      onChange={(v) => setFinancials((p) => ({ ...p, customerInvoiceValue: v }))}
+                      prefix="£"
+                    />
+                    <FinancialField
+                      label="Customer Invoice No."
+                      value={financials.customerInvoiceNo}
+                      onChange={(v) => setFinancials((p) => ({ ...p, customerInvoiceNo: v }))}
+                      icon={<Receipt className="w-3.5 h-3.5" />}
+                      type="text"
+                    />
+                    <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-4 text-slate-600">
+                      Customer LME percentage and Pb-tonnage calculations will be added after Ingrid confirms their basis.
+                    </p>
+                  </div>
+                </section>
               </div>
 
               <div className="border-t border-slate-100 pt-4 mt-4">
