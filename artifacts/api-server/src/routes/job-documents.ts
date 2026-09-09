@@ -3,11 +3,14 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { jobsTable, jobDocumentsTable, JOB_DOCUMENT_TYPES, type JobDocumentType } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage";
-import { notifyAccountsStatementUploaded } from "../lib/notifications";
+import {
+  notifyAccountsStatementUploaded,
+  notifyAdminsDocumentsComplete,
+} from "../lib/notifications";
 
 const router: IRouter = Router();
 const objectStorage = new ObjectStorageService();
@@ -36,6 +39,14 @@ export function canUploadDocuments(
 ): boolean {
   if (["received", "awaiting_invoice", "invoice", "completed"].includes(job.status)) return true;
   return job.scheduleStatus === "confirmed" && !!job.collectionDate && job.collectionDate <= today;
+}
+
+export function completesRequiredDocumentSet(
+  existingTypes: readonly string[],
+  uploadedType: string
+): boolean {
+  const available = new Set([...existingTypes, uploadedType]);
+  return JOB_DOCUMENT_TYPES.every((type) => available.has(type));
 }
 
 // ---- Upload intents ----------------------------------------------------------
@@ -259,29 +270,46 @@ router.post(
         return;
       }
 
-      const [document] = await db
-        .insert(jobDocumentsTable)
-        .values({
-          jobId: job.id,
-          docType,
-          fileName: name,
-          contentType: storedContentType || contentType,
-          sizeBytes: storedSize,
-          objectPath,
-          uploadedById: req.user!.id,
-        })
-        .onConflictDoUpdate({
-          target: [jobDocumentsTable.jobId, jobDocumentsTable.docType],
-          set: {
+      const { document, documentsBecameComplete } = await db.transaction(async (tx) => {
+        // Serialise uploads for this job so two simultaneous final uploads
+        // cannot miss or duplicate the one-time completion notification.
+        await tx.execute(sql`SELECT id FROM jobs WHERE id = ${job.id} FOR UPDATE`);
+        const existingDocuments = await tx
+          .select({ docType: jobDocumentsTable.docType })
+          .from(jobDocumentsTable)
+          .where(eq(jobDocumentsTable.jobId, job.id));
+        const existingTypes = existingDocuments.map((item) => item.docType);
+        const wasComplete = JOB_DOCUMENT_TYPES.every((type) => existingTypes.includes(type));
+
+        const [savedDocument] = await tx
+          .insert(jobDocumentsTable)
+          .values({
+            jobId: job.id,
+            docType,
             fileName: name,
             contentType: storedContentType || contentType,
             sizeBytes: storedSize,
             objectPath,
             uploadedById: req.user!.id,
-            uploadedAt: new Date(),
-          },
-        })
-        .returning();
+          })
+          .onConflictDoUpdate({
+            target: [jobDocumentsTable.jobId, jobDocumentsTable.docType],
+            set: {
+              fileName: name,
+              contentType: storedContentType || contentType,
+              sizeBytes: storedSize,
+              objectPath,
+              uploadedById: req.user!.id,
+              uploadedAt: new Date(),
+            },
+          })
+          .returning();
+
+        return {
+          document: savedDocument,
+          documentsBecameComplete: !wasComplete && completesRequiredDocumentSet(existingTypes, docType),
+        };
+      });
 
       // The statement triggers invoicing — tell accounts it has arrived.
       if (docType === "statement") {
@@ -297,6 +325,21 @@ router.post(
           },
           name
         ).catch((err) => console.error("Failed to notify accounts of statement upload:", err));
+      }
+      if (documentsBecameComplete) {
+        // Wait for the notification attempt before confirming the final
+        // document record to the uploader. Notification delivery remains
+        // non-blocking on provider failure inside the shared dispatcher, but
+        // the process cannot exit while this completion event is still queued.
+        await notifyAdminsDocumentsComplete({
+          id: job.id,
+          reference: job.reference,
+          clientName: job.clientName,
+          depot: job.depot,
+          collectionDate: job.collectionDate,
+          tonnage: job.tonnage,
+          submittedById: job.submittedById,
+        });
       }
 
       res.status(201).json({ document });

@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
   canUploadDocuments,
+  completesRequiredDocumentSet,
   signUploadIntent,
   verifyUploadIntent,
   type UploadIntent,
 } from "../job-documents";
+import { buildDocumentsCompleteEmailHtml } from "../../lib/notifications";
 
 const SECRET = "test-secret";
 
@@ -42,6 +44,44 @@ describe("canUploadDocuments", () => {
     for (const status of ["received", "awaiting_invoice", "invoice", "completed"]) {
       expect(canUploadDocuments({ scheduleStatus: "unassigned", status, collectionDate: null }, today)).toBe(true);
     }
+  });
+});
+
+describe("required document completion", () => {
+  it("becomes complete when the third required document is uploaded", () => {
+    expect(completesRequiredDocumentSet(
+      ["collection_sheet", "consignment_note"],
+      "statement"
+    )).toBe(true);
+  });
+
+  it("remains incomplete when a required document is still missing", () => {
+    expect(completesRequiredDocumentSet(["collection_sheet"], "statement")).toBe(false);
+  });
+
+  it("recognises completion regardless of upload order", () => {
+    expect(completesRequiredDocumentSet(
+      ["statement", "consignment_note"],
+      "collection_sheet"
+    )).toBe(true);
+  });
+});
+
+describe("documents-complete admin email", () => {
+  it("escapes collection details supplied by users", () => {
+    const html = buildDocumentsCompleteEmailHtml({
+      id: 42,
+      reference: "JOB-<script>",
+      clientName: "Client & Sons",
+      depot: `Depot "North"`,
+      collectionDate: "2026-09-09",
+      tonnage: "1.250",
+    });
+
+    expect(html).toContain("JOB-&lt;script&gt;");
+    expect(html).toContain("Client &amp; Sons");
+    expect(html).toContain("Depot &quot;North&quot;");
+    expect(html).not.toContain("<script>");
   });
 });
 

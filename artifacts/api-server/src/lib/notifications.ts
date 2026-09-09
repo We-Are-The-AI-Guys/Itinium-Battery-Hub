@@ -514,6 +514,31 @@ export async function notifyAccountsStatementUploaded(job: JobRef, fileName: str
   });
 }
 
+export function buildDocumentsCompleteEmailHtml(job: JobRef): string {
+  const link = portalLink(`/jobs/${job.id}`);
+  return buildBrandedEmail(
+    `Collection documents complete — ${escapeHtml(job.reference)}`,
+    `<p style="color:#475569;margin:0 0 4px;">CBL has uploaded all required documents for collection <strong>${escapeHtml(job.reference)}</strong>.</p>
+    ${jobTable(job)}
+    ${ctaButton(link, "Review Documents")}
+    <p style="color:#475569;margin:16px 0 0;font-size:13px;">The signed collection sheet, signed consignment note, and statement are now available in the portal.</p>`,
+    "You are receiving this because you are an administrator on the Itinium Battery Portal."
+  );
+}
+
+export async function notifyAdminsDocumentsComplete(job: JobRef): Promise<void> {
+  const adminIds = await recipientsWithRoles(["head_office_admin"]);
+  await dispatchToMany(adminIds, {
+    type: "collection_documents_complete",
+    title: `Documents complete — ${job.reference}`,
+    body: `CBL uploaded all required documents for ${job.reference}.`,
+    link: `/jobs/${job.id}`,
+    emailSubject: `Collection Documents Complete — ${job.reference}`,
+    emailHtml: buildDocumentsCompleteEmailHtml(job),
+    emailPrefKey: "jobApprovedCompleted",
+  });
+}
+
 export async function pruneOldNotifications(): Promise<void> {
   try {
     const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
