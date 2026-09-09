@@ -764,10 +764,21 @@ router.get(
   }
 );
 
+export function canDownloadRawCollectionSheet(
+  user: Pick<NonNullable<AuthenticatedRequest["user"]>, "role" | "collectionCompanyId">,
+  job: { collectionCompanyId: number | null; scheduleStatus: string | null }
+) {
+  if (["team_leader", "accounts", "head_office_admin"].includes(user.role)) return true;
+  return user.role === "collection_company"
+    && user.collectionCompanyId != null
+    && job.collectionCompanyId === user.collectionCompanyId
+    && job.scheduleStatus === "confirmed";
+}
+
 router.get(
   "/jobs/:id/collection-sheet.pdf",
   requireAuth,
-  requireRole("team_leader", "accounts", "head_office_admin"),
+  requireRole("team_leader", "accounts", "head_office_admin", "collection_company"),
   async (req: AuthenticatedRequest, res) => {
     try {
       const jobId = parseInt(String(req.params.id), 10);
@@ -779,6 +790,12 @@ router.get(
       const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
       if (!job) {
         res.status(404).json({ message: "Job not found" });
+        return;
+      }
+      if (!canDownloadRawCollectionSheet(req.user!, job)) {
+        res.status(403).json({
+          message: "The collection sheet is available to the assigned collection company after Itinium confirms the schedule",
+        });
         return;
       }
 

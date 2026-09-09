@@ -26,6 +26,7 @@ import {
   X,
   BookOpen,
   Settings,
+  Download,
 } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { JobDocumentsPanel } from "@/components/job-documents";
@@ -73,6 +74,29 @@ const scheduleBadge: Record<string, { label: string; className: string }> = {
   confirmed: { label: "Confirmed", className: "bg-green-100 text-green-800 border-green-200" },
 };
 
+async function downloadFromApi(url: string, fallbackFilename: string) {
+  const res = await fetch(url, { credentials: "include" });
+  if (!res.ok) {
+    let message = `Download failed (${res.status})`;
+    try {
+      const error = await res.json();
+      if (error?.message) message = error.message;
+    } catch {}
+    throw new Error(message);
+  }
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = match ? match[1] : fallbackFilename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
 export default function CollectionsPage() {
   const { user } = useAuth();
   const [tab, setTab] = useState<"collections" | "fleet">("collections");
@@ -86,6 +110,8 @@ export default function CollectionsPage() {
   const [assignForm, setAssignForm] = useState({ vehicleId: "", driverId: "", proposedDate: "" });
   const [assignError, setAssignError] = useState("");
   const [assignSaving, setAssignSaving] = useState(false);
+  const [downloadingSheetId, setDownloadingSheetId] = useState<number | null>(null);
+  const [downloadError, setDownloadError] = useState<{ jobId: number; message: string } | null>(null);
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -159,6 +185,24 @@ export default function CollectionsPage() {
       setAssignError("Failed to save the schedule. Please try again.");
     } finally {
       setAssignSaving(false);
+    }
+  }
+
+  async function downloadCollectionSheet(job: CollectionJob) {
+    setDownloadingSheetId(job.id);
+    setDownloadError(null);
+    try {
+      await downloadFromApi(
+        `/api/jobs/${job.id}/collection-sheet.pdf`,
+        `collection-sheet-${job.reference.toLowerCase().replace(/[^a-z0-9]/g, "-")}.pdf`
+      );
+    } catch (error) {
+      setDownloadError({
+        jobId: job.id,
+        message: error instanceof Error ? error.message : "Download failed. Please try again.",
+      });
+    } finally {
+      setDownloadingSheetId(null);
     }
   }
 
@@ -329,6 +373,27 @@ export default function CollectionsPage() {
                           <p className="text-xs font-medium text-slate-500 uppercase">Vehicle</p>
                           <p className="text-slate-700">{job.vehicleReg || "—"}</p>
                         </div>
+                      </div>
+                    )}
+
+                    {job.scheduleStatus === "confirmed" && (
+                      <div className="mt-4 pt-4 border-t border-slate-100">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-[#0ea5e9] border-[#0ea5e9]/40 hover:bg-[#0ea5e9] hover:text-white"
+                          onClick={() => downloadCollectionSheet(job)}
+                          disabled={downloadingSheetId === job.id}
+                          data-testid={`button-collection-sheet-${job.id}`}
+                        >
+                          <Download className="w-3.5 h-3.5 mr-1.5" />
+                          {downloadingSheetId === job.id ? "Preparing…" : "Collection Sheet PDF"}
+                        </Button>
+                        {downloadError?.jobId === job.id && (
+                          <p className="mt-2 text-sm text-red-600" role="alert">
+                            {downloadError.message}
+                          </p>
+                        )}
                       </div>
                     )}
 
