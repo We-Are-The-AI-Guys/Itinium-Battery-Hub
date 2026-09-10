@@ -937,7 +937,7 @@ router.get(
         { label: "Cell Type", x: 361, w: 90 },
         { label: "Voltage", x: 455, w: 45 },
         { label: "Loose Qty", x: 504, w: 50, align: "right" as const },
-        { label: "Driver Notes", x: 566, w: contentW - 526 },
+        { label: "Notes", x: 566, w: contentW - 526 },
       ];
 
       function drawTableHeader() {
