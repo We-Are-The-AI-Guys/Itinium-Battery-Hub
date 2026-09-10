@@ -903,6 +903,9 @@ router.get(
       doc.moveDown(0.3);
       doc.fontSize(9).fillColor("#475569").font("Helvetica")
         .text(`Job Reference: ${job.reference}    |    Collection Date: ${collectionLabel}`, 40);
+      doc.moveDown(0.2);
+      doc.fontSize(9).fillColor("#475569").font("Helvetica")
+        .text(`Allocated Driver: ${job.driverName || "—"}    |    Vehicle: ${job.vehicleReg || "—"}`, 40);
       doc.moveDown(0.8);
 
       const siteAddress = [locationAddress, job.collectionPoint].filter(Boolean).join(" — ") || job.depot;
@@ -917,8 +920,6 @@ router.get(
       infoBlock("Site Address", siteAddress);
       infoBlock("Site Contacts", job.siteContacts || "—");
       infoBlock("Site Hours", job.siteHours || "—");
-
-      drawDriverVehicleSection(doc, contentW, job.driverName, job.vehicleReg);
 
       ensureRoom(50);
       const instrY = doc.y;
