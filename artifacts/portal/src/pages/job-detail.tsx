@@ -206,6 +206,7 @@ export default function JobDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [autoConfirming, setAutoConfirming] = useState(false);
+  const [autofillingReview, setAutofillingReview] = useState(false);
   const [lmePrice, setLmePrice] = useState<LmePrice | null>(null);
   const [previousMonthAverage, setPreviousMonthAverage] = useState<PreviousMonthAverage | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -568,6 +569,56 @@ export default function JobDetailPage() {
       });
     } finally {
       setAutoConfirming(false);
+    }
+  }
+
+  async function autofillReviewFields() {
+    const flagged = batteries.filter((battery) =>
+      battery.serialFlagReason
+      || battery.manufacturerFlagReason
+      || battery.cellModelFlagReason
+      || battery.voltageFlagReason
+    );
+    if (flagged.length === 0) return;
+    if (!window.confirm(`Accept the existing values for all ${flagged.length} items under review?`)) return;
+
+    setAutofillingReview(true);
+    try {
+      const results = await Promise.all(flagged.map(async (battery) => {
+        const updates: Record<string, string | boolean | null> = {};
+        if (battery.serialFlagReason) {
+          if (battery.batterySerial) updates.batterySerial = battery.batterySerial;
+          else updates.clearSerialFlag = true;
+        }
+        if (battery.manufacturerFlagReason) updates.manufacture = battery.manufacture;
+        if (battery.cellModelFlagReason) updates.cellType = battery.cellType;
+        if (battery.voltageFlagReason) updates.voltage = battery.voltage;
+        const res = await fetch(`/api/jobs/${params.id}/batteries/${battery.id}/admin`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(updates),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || `Could not accept item ${battery.id}`);
+        return data.battery as BatteryData;
+      }));
+      const updatedById = new Map(results.map((battery) => [battery.id, battery]));
+      setBatteries((current) => current.map((battery) => updatedById.get(battery.id) || battery));
+      setReceiptDelivery(null);
+      toast({
+        title: "Review fields accepted",
+        description: `${results.length} ${results.length === 1 ? "item was" : "items were"} saved using the existing job data.`,
+      });
+    } catch (error) {
+      await loadJob();
+      toast({
+        title: "Autofill incomplete",
+        description: error instanceof Error ? error.message : "Some review fields could not be saved.",
+        variant: "destructive",
+      });
+    } finally {
+      setAutofillingReview(false);
     }
   }
 
@@ -952,9 +1003,27 @@ export default function JobDetailPage() {
             </div>
 
             <div className="border-t border-slate-100 pt-4">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2">
                 <Battery className="w-4 h-4 text-[#0ea5e9]" />
                 <h4 className="font-semibold text-[#0f2744]">Battery Items ({batteries.length})</h4>
+                </div>
+                {canEditResolved && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={autofillReviewFields}
+                    disabled={autofillingReview || !batteries.some((battery) =>
+                      battery.serialFlagReason
+                      || battery.manufacturerFlagReason
+                      || battery.cellModelFlagReason
+                      || battery.voltageFlagReason
+                    )}
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                    {autofillingReview ? "Autofilling…" : "Autofill"}
+                  </Button>
+                )}
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -987,78 +1056,6 @@ export default function JobDetailPage() {
                   </tbody>
                 </table>
               </div>
-              {(userRole === "accounts" || userRole === "head_office_admin") && (
-                <div className="mt-5 rounded-lg border border-sky-200 bg-sky-50/60 p-4">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <h5 className="font-semibold text-[#0f2744] flex items-center gap-2">
-                        <Mail className="h-4 w-4 text-sky-600" />
-                        Completed receipt delivery
-                      </h5>
-                      {!receiptDelivery ? (
-                        <p className="mt-1 text-sm text-slate-600">
-                          Check that every item has been reviewed, then preview the client and accounts recipients.
-                        </p>
-                      ) : (
-                        <div className="mt-2 space-y-2 text-sm">
-                          <p className={receiptDelivery.ready ? "text-green-700" : "text-amber-700"}>
-                            {receiptDelivery.reviewedCount} of {receiptDelivery.totalCount} items reviewed
-                            {" · "}Confirmed value £{Number(receiptDelivery.totalValue).toFixed(2)}
-                          </p>
-                          <div>
-                            <span className="font-medium text-slate-700">Client receipt: </span>
-                            <span className="text-slate-600">
-                              {receiptDelivery.clientRecipients.map((recipient) => `${recipient.fullName} (${recipient.email})`).join(", ") || "No recipient found"}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="font-medium text-slate-700">Accounts document: </span>
-                            <span className="text-slate-600">
-                              {receiptDelivery.accountsRecipients.map((recipient) => `${recipient.fullName} (${recipient.email})`).join(", ") || "No recipient found"}
-                            </span>
-                          </div>
-                          {(receiptDelivery.clientStatus || receiptDelivery.accountsStatus) && (
-                            <p className="text-xs text-slate-500">
-                              Client: {receiptDelivery.clientStatus || "not sent"} · Accounts: {receiptDelivery.accountsStatus || "not sent"}
-                              {receiptDelivery.sentAt ? ` · Completed ${formatDate(receiptDelivery.sentAt)}` : ""}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    {!receiptDelivery ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={loadReceiptDelivery}
-                        disabled={loadingReceiptDelivery}
-                      >
-                        {loadingReceiptDelivery ? "Checking…" : "Preview recipients"}
-                      </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        onClick={sendReceiptDocuments}
-                        disabled={
-                          sendingReceiptDelivery
-                          || !receiptDelivery.ready
-                          || receiptDelivery.clientRecipients.length === 0
-                          || receiptDelivery.accountsRecipients.length === 0
-                        }
-                      >
-                        <Mail className="mr-1.5 h-3.5 w-3.5" />
-                        {sendingReceiptDelivery
-                          ? "Sending…"
-                          : receiptDelivery.clientStatus === "failed" || receiptDelivery.accountsStatus === "failed"
-                          ? "Retry failed delivery"
-                          : receiptDelivery.clientStatus === "sent" && receiptDelivery.accountsStatus === "sent"
-                          ? "Resend documents"
-                          : "Send to client"}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -1433,6 +1430,79 @@ export default function JobDetailPage() {
                   {saving ? "Saving..." : "Save Financial Details"}
                 </Button>
               </div>
+
+              {(userRole === "accounts" || userRole === "head_office_admin") && (
+                <div className="mt-6 rounded-lg border border-sky-200 bg-sky-50/60 p-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <h5 className="font-semibold text-[#0f2744] flex items-center gap-2">
+                        <Mail className="h-4 w-4 text-sky-600" />
+                        Completed receipt delivery
+                      </h5>
+                      {!receiptDelivery ? (
+                        <p className="mt-1 text-sm text-slate-600">
+                          Once all receipt checks and financial values are complete, preview the client and accounts recipients.
+                        </p>
+                      ) : (
+                        <div className="mt-2 space-y-2 text-sm">
+                          <p className={receiptDelivery.ready ? "text-green-700" : "text-amber-700"}>
+                            {receiptDelivery.reviewedCount} of {receiptDelivery.totalCount} items reviewed
+                            {" · "}Confirmed value £{Number(receiptDelivery.totalValue).toFixed(2)}
+                          </p>
+                          <div>
+                            <span className="font-medium text-slate-700">Client receipt: </span>
+                            <span className="text-slate-600">
+                              {receiptDelivery.clientRecipients.map((recipient) => `${recipient.fullName} (${recipient.email})`).join(", ") || "No recipient found"}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="font-medium text-slate-700">Accounts document: </span>
+                            <span className="text-slate-600">
+                              {receiptDelivery.accountsRecipients.map((recipient) => `${recipient.fullName} (${recipient.email})`).join(", ") || "No recipient found"}
+                            </span>
+                          </div>
+                          {(receiptDelivery.clientStatus || receiptDelivery.accountsStatus) && (
+                            <p className="text-xs text-slate-500">
+                              Client: {receiptDelivery.clientStatus || "not sent"} · Accounts: {receiptDelivery.accountsStatus || "not sent"}
+                              {receiptDelivery.sentAt ? ` · Completed ${formatDate(receiptDelivery.sentAt)}` : ""}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {!receiptDelivery ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={loadReceiptDelivery}
+                        disabled={loadingReceiptDelivery}
+                      >
+                        {loadingReceiptDelivery ? "Checking…" : "Preview recipients"}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={sendReceiptDocuments}
+                        disabled={
+                          sendingReceiptDelivery
+                          || !receiptDelivery.ready
+                          || receiptDelivery.clientRecipients.length === 0
+                          || receiptDelivery.accountsRecipients.length === 0
+                        }
+                      >
+                        <Mail className="mr-1.5 h-3.5 w-3.5" />
+                        {sendingReceiptDelivery
+                          ? "Sending…"
+                          : receiptDelivery.clientStatus === "failed" || receiptDelivery.accountsStatus === "failed"
+                          ? "Retry failed delivery"
+                          : receiptDelivery.clientStatus === "sent" && receiptDelivery.accountsStatus === "sent"
+                          ? "Resend documents"
+                          : "Send to client"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="border-t border-slate-200 pt-6">
