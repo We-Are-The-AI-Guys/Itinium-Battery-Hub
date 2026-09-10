@@ -205,6 +205,7 @@ export default function JobDetailPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [autoConfirming, setAutoConfirming] = useState(false);
   const [lmePrice, setLmePrice] = useState<LmePrice | null>(null);
   const [previousMonthAverage, setPreviousMonthAverage] = useState<PreviousMonthAverage | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -529,6 +530,44 @@ export default function JobDetailPage() {
       }
     } catch {
       toast({ title: "Error", description: "Failed to recalculate.", variant: "destructive" });
+    }
+  }
+
+  async function autoConfirmAll() {
+    const pendingCount = batteries.filter((battery) => battery.receiptConfirmed !== true).length;
+    if (pendingCount === 0) return;
+    if (!window.confirm(`This will confirm all ${pendingCount} items with TAB weights — continue?`)) return;
+
+    setAutoConfirming(true);
+    try {
+      const res = await fetch(`/api/jobs/${params.id}/batteries/auto-confirm`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({
+          title: "Auto-confirm failed",
+          description: data.message || "The pending items could not be confirmed.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setBatteries(data.batteries || []);
+      if (data.job) setJob(data.job);
+      setReceiptDelivery(null);
+      toast({
+        title: "Items confirmed",
+        description: `${data.confirmedCount} pending ${data.confirmedCount === 1 ? "item was" : "items were"} confirmed with TAB weights.`,
+      });
+    } catch {
+      toast({
+        title: "Auto-confirm failed",
+        description: "Network error. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setAutoConfirming(false);
     }
   }
 
@@ -1092,6 +1131,16 @@ export default function JobDetailPage() {
                   Battery Receipt Confirmation & Pb Content
                 </h4>
                 <div className="flex items-center gap-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1 border-green-300 text-green-700 hover:bg-green-50"
+                      onClick={autoConfirmAll}
+                      disabled={autoConfirming || !batteries.some((battery) => battery.receiptConfirmed !== true)}
+                    >
+                      <CheckCircle2 className="w-3 h-3" />
+                      {autoConfirming ? "Confirming…" : "Auto-confirm all"}
+                    </Button>
                   {lmePrice && (
                     <div className="flex items-center gap-1.5 text-xs bg-sky-50 border border-sky-200 rounded-md px-2.5 py-1.5">
                       <PoundSterling className="w-3 h-3 text-sky-600" />

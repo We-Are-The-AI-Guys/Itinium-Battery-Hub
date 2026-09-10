@@ -134,6 +134,26 @@ export function deriveEstimatedWeightKg(
   return isFinite(total) && total > 0 ? total.toFixed(3) : null;
 }
 
+export function deriveTabGrossWeightKg(
+  catalogue: PbCatalogueEntry[],
+  cellType: string | null,
+  cellCount: number | null
+): string | null {
+  const cellStr = (cellType || "").trim();
+  if (!cellStr || cellStr === "Blocs" || cellStr === "Other") return null;
+  if (cellCount === null || !isFinite(cellCount) || cellCount <= 0) return null;
+  const normCell = normalizeCellKey(cellStr);
+  const tabEntry = catalogue.find(
+    (entry) =>
+      entry.manufacturer.toLowerCase() === "tab" &&
+      entry.weightPerCellKg != null &&
+      normalizeCellKey(entry.modelName) === normCell
+  );
+  if (!tabEntry) return null;
+  const grossWeight = parseFloat(tabEntry.weightPerCellKg!) * cellCount * SAFE_LOAD_FACTOR;
+  return isFinite(grossWeight) && grossWeight > 0 ? grossWeight.toFixed(3) : null;
+}
+
 // Sort battery rows by pallet number in natural/numeric order (1, 2, … 10,
 // 17 — not text order), handling values like "PALLET 2". Rows without a
 // pallet number sort last; ties keep insertion (id) order so corrected rows
@@ -1504,6 +1524,121 @@ router.post(
         res.status(409).json({ message });
         return;
       }
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+router.post(
+  "/jobs/:id/batteries/auto-confirm",
+  requireAuth,
+  requireRole("team_leader", "accounts", "head_office_admin"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const jobId = parseInt(String(req.params.id), 10);
+      if (isNaN(jobId)) {
+        res.status(400).json({ message: "Invalid job ID" });
+        return;
+      }
+
+      const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+      if (!job) {
+        res.status(404).json({ message: "Job not found" });
+        return;
+      }
+
+      const pending = await db
+        .select()
+        .from(jobBatteriesTable)
+        .where(and(
+          eq(jobBatteriesTable.jobId, jobId),
+          sql`${jobBatteriesTable.receiptConfirmed} IS DISTINCT FROM TRUE`
+        ));
+
+      if (pending.length === 0) {
+        const batteries = await db
+          .select()
+          .from(jobBatteriesTable)
+          .where(eq(jobBatteriesTable.jobId, jobId))
+          .orderBy(asc(jobBatteriesTable.id));
+        res.json({ confirmedCount: 0, batteries, job });
+        return;
+      }
+
+      const catalogue = await db
+        .select({
+          manufacturer: cellModelsTable.manufacturer,
+          modelName: cellModelsTable.modelName,
+          pbContentKgPerCell: cellModelsTable.pbContentKgPerCell,
+          weightPerCellKg: cellModelsTable.weightPerCellKg,
+          cellsCount: cellModelsTable.cellsCount,
+        })
+        .from(cellModelsTable);
+
+      const prepared = pending.map((battery) => {
+        const cellCount = deriveActualCellCount({
+          isLooseCells: battery.isLooseCells,
+          looseCellsQty: battery.looseCellsQty,
+          voltage: battery.voltage,
+        });
+        return {
+          battery,
+          tabWeightKg: deriveTabGrossWeightKg(catalogue, battery.cellType, cellCount),
+        };
+      });
+      const missing = prepared.filter((item) => item.tabWeightKg === null);
+      if (missing.length > 0) {
+        const labels = missing
+          .slice(0, 5)
+          .map(({ battery }) => battery.batterySerial || battery.assetNumber || battery.palletNumber || `item ${battery.id}`);
+        const extra = missing.length > labels.length ? ` and ${missing.length - labels.length} more` : "";
+        res.status(422).json({
+          message: `Cannot auto-confirm because no TAB weight could be found for ${labels.join(", ")}${extra}. Confirm these items individually.`,
+        });
+        return;
+      }
+
+      await db.transaction(async (tx) => {
+        for (const { battery, tabWeightKg } of prepared) {
+          await tx
+            .update(jobBatteriesTable)
+            .set({
+              receiptConfirmed: true,
+              receiptReviewed: true,
+              estimatedWeightKg: tabWeightKg!,
+              weightManual: false,
+            })
+            .where(and(
+              eq(jobBatteriesTable.id, battery.id),
+              eq(jobBatteriesTable.jobId, jobId)
+            ));
+        }
+
+        if (job.tonnageManualOverride !== true) {
+          const rows = await tx
+            .select({ estimatedWeightKg: jobBatteriesTable.estimatedWeightKg })
+            .from(jobBatteriesTable)
+            .where(eq(jobBatteriesTable.jobId, jobId));
+          const totalKg = rows.reduce((sum, row) => {
+            const weight = parseFloat(String(row.estimatedWeightKg ?? ""));
+            return sum + (isFinite(weight) && weight > 0 ? weight : 0);
+          }, 0);
+          await tx
+            .update(jobsTable)
+            .set({ tonnage: (totalKg / 1000).toFixed(3) })
+            .where(eq(jobsTable.id, jobId));
+        }
+      });
+
+      const batteries = await db
+        .select()
+        .from(jobBatteriesTable)
+        .where(eq(jobBatteriesTable.jobId, jobId))
+        .orderBy(asc(jobBatteriesTable.id));
+      const [updatedJob] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+      res.json({ confirmedCount: pending.length, batteries, job: updatedJob });
+    } catch (error) {
+      console.error("Auto-confirm batteries error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   }

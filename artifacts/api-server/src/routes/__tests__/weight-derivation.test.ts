@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deriveEstimatedWeightKg, derivePbContentKg } from "../jobs";
+import { deriveEstimatedWeightKg, derivePbContentKg, deriveTabGrossWeightKg } from "../jobs";
 
 // Catalogue fixtures mirror the real cell-model data shape. Weights are the
 // client's Pb-per-cell figures (the catalogue deliberately stores Pb, not
@@ -64,5 +64,16 @@ describe("derivePbContentKg", () => {
   it("skips catalogue entries without Pb data", () => {
     // "6 PzS 750" has weight but null Pb — no Pb derivation possible.
     expect(derivePbContentKg(catalogue, "Hawker", "6 PzS 750", 24)).toBeNull();
+  });
+});
+
+describe("deriveTabGrossWeightKg", () => {
+  it("uses TAB even when the item has another manufacturer and applies the safe-load factor", () => {
+    expect(deriveTabGrossWeightKg(catalogue, "5 EPzS 700", 24)).toBe("1041.600");
+  });
+
+  it("fails explicitly when TAB has no matching default", () => {
+    expect(deriveTabGrossWeightKg(catalogue, "6 PzS 750", 24)).toBeNull();
+    expect(deriveTabGrossWeightKg(catalogue, "Other", 24)).toBeNull();
   });
 });
