@@ -350,7 +350,61 @@ router.post(
   }
 );
 
-// ---- Download (staff + owning collection company) ---------------------------
+// ---- View/download (staff + owning collection company) ----------------------
+
+async function serveDocument(
+  req: AuthenticatedRequest,
+  res: Parameters<Parameters<typeof router.get>[1]>[1],
+  disposition: "inline" | "attachment"
+) {
+  const docType = String(req.params.docType);
+  if (!(JOB_DOCUMENT_TYPES as readonly string[]).includes(docType)) {
+    res.status(400).json({ message: "Unknown document type" });
+    return;
+  }
+  const job = await loadJobForCompany(req, parseInt(String(req.params.id), 10));
+  if (!job) {
+    res.status(404).json({ message: "Job not found" });
+    return;
+  }
+  const [doc] = await db
+    .select()
+    .from(jobDocumentsTable)
+    .where(and(eq(jobDocumentsTable.jobId, job.id), eq(jobDocumentsTable.docType, docType)));
+  if (!doc) {
+    res.status(404).json({ message: "Document not uploaded yet" });
+    return;
+  }
+  const file = await objectStorage.getObjectEntityFile(doc.objectPath);
+  const response = await objectStorage.downloadObject(file);
+  res.status(response.status);
+  response.headers.forEach((value, key) => res.setHeader(key, value));
+  res.setHeader("Content-Type", doc.contentType);
+  res.setHeader("Content-Disposition", `${disposition}; filename="${doc.fileName.replace(/["\\\r\n]/g, "_")}"`);
+  if (response.body) {
+    Readable.fromWeb(response.body as ReadableStream<Uint8Array>).pipe(res);
+  } else {
+    res.end();
+  }
+}
+
+router.get(
+  "/jobs/:id/documents/:docType/view",
+  requireAuth,
+  requireRole("accounts", "head_office_admin", "collection_company"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      await serveDocument(req, res, "inline");
+    } catch (error) {
+      if (error instanceof ObjectNotFoundError) {
+        res.status(404).json({ message: "Document file not found in storage" });
+        return;
+      }
+      console.error("View job document error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
 
 router.get(
   "/jobs/:id/documents/:docType/download",
@@ -358,35 +412,7 @@ router.get(
   requireRole("accounts", "head_office_admin", "collection_company"),
   async (req: AuthenticatedRequest, res) => {
     try {
-      const docType = String(req.params.docType);
-      if (!(JOB_DOCUMENT_TYPES as readonly string[]).includes(docType)) {
-        res.status(400).json({ message: "Unknown document type" });
-        return;
-      }
-      const job = await loadJobForCompany(req, parseInt(String(req.params.id), 10));
-      if (!job) {
-        res.status(404).json({ message: "Job not found" });
-        return;
-      }
-      const [doc] = await db
-        .select()
-        .from(jobDocumentsTable)
-        .where(and(eq(jobDocumentsTable.jobId, job.id), eq(jobDocumentsTable.docType, docType)));
-      if (!doc) {
-        res.status(404).json({ message: "Document not uploaded yet" });
-        return;
-      }
-      const file = await objectStorage.getObjectEntityFile(doc.objectPath);
-      const response = await objectStorage.downloadObject(file);
-      res.status(response.status);
-      response.headers.forEach((value, key) => res.setHeader(key, value));
-      res.setHeader("Content-Type", doc.contentType);
-      res.setHeader("Content-Disposition", `attachment; filename="${doc.fileName.replace(/["\\\r\n]/g, "_")}"`);
-      if (response.body) {
-        Readable.fromWeb(response.body as ReadableStream<Uint8Array>).pipe(res);
-      } else {
-        res.end();
-      }
+      await serveDocument(req, res, "attachment");
     } catch (error) {
       if (error instanceof ObjectNotFoundError) {
         res.status(404).json({ message: "Document file not found in storage" });

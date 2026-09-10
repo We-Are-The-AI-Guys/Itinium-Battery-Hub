@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Upload, Download, CheckCircle2, CircleDashed } from "lucide-react";
+import { FileText, Upload, Download, Eye, CheckCircle2, CircleDashed } from "lucide-react";
 
 const API_BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
@@ -133,6 +133,11 @@ export function JobDocumentsPanel({
     }
   }
 
+  function view(docType: string) {
+    const url = `${API_BASE}/api/jobs/${jobId}/documents/${docType}/view`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   if (!state) return null;
   if (mode === "review" && state.documents.length === 0 && !state.canUpload) return null;
 
@@ -186,15 +191,24 @@ export function JobDocumentsPanel({
                 )}
               </div>
               {doc && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="shrink-0"
-                  onClick={() => download(type, doc.fileName)}
-                  data-testid={`button-download-${type}-${jobId}`}
-                >
-                  <Download className="w-3.5 h-3.5 mr-1.5" /> Download
-                </Button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    size="sm"
+                    className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
+                    onClick={() => view(type)}
+                    data-testid={`button-view-${type}-${jobId}`}
+                  >
+                    <Eye className="w-3.5 h-3.5 mr-1.5" /> View
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => download(type, doc.fileName)}
+                    data-testid={`button-download-${type}-${jobId}`}
+                  >
+                    <Download className="w-3.5 h-3.5 mr-1.5" /> Download
+                  </Button>
+                </div>
               )}
               {mode === "upload" && state.canUpload && (
                 <Button
