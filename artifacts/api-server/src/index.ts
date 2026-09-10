@@ -328,6 +328,7 @@ async function bootstrap() {
     await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS site_contacts TEXT`);
     await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS site_hours VARCHAR(255)`);
     await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS special_instructions TEXT`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS customer_lme_percent DECIMAL(5,2)`);
     await db.execute(sql`ALTER TABLE job_batteries ADD COLUMN IF NOT EXISTS receipt_reviewed BOOLEAN NOT NULL DEFAULT FALSE`);
     await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS receipt_sent_at TIMESTAMP`);
     await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS receipt_sent_by_id INTEGER REFERENCES users(id)`);

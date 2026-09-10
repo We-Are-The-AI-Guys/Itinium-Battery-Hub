@@ -7,6 +7,7 @@ import {
 import { rankManufacturerSuggestions } from "@/lib/manufacturer-suggestions";
 import {
   calculateCblLmeValue,
+  calculateCustomerLmeValue,
   calculateGrossProfit,
 } from "@/lib/financial-calculations";
 import { useParams, useLocation } from "wouter";
@@ -78,6 +79,7 @@ interface JobData {
   cblLmePercent: string | null;
   cblLmePrice: string | null;
   transportCost: string | null;
+  customerLmePercent: string | null;
   customerInvoiceValue: string | null;
   customerInvoiceNo: string | null;
   cblWasteAdviceNoteNo: string | null;
@@ -222,6 +224,7 @@ export default function JobDetailPage() {
     cblLmePercent: "",
     cblLmePrice: "",
     transportCost: "",
+    customerLmePercent: "",
     customerInvoiceValue: "",
     customerInvoiceNo: "",
     cblWasteAdviceNoteNo: "",
@@ -343,6 +346,7 @@ export default function JobDetailPage() {
             cblLmePercent: data.job.cblLmePercent || "",
             cblLmePrice: data.job.cblLmePrice || "",
             transportCost: data.job.transportCost || "",
+            customerLmePercent: data.job.customerLmePercent || "",
             customerInvoiceValue: data.job.customerInvoiceValue || "",
             customerInvoiceNo: data.job.customerInvoiceNo || "",
             cblWasteAdviceNoteNo: data.job.cblWasteAdviceNoteNo || "",
@@ -536,6 +540,19 @@ export default function JobDetailPage() {
     );
     setFinancials((prev) => ({ ...prev, cblLmePrice: computed }));
   }, [financials.tonnage, financials.cblLmeValue, financials.cblLmePercent]);
+
+  useEffect(() => {
+    const netPbWeightKg = batteries.reduce(
+      (sum, battery) => sum + (parseFloat(battery.pbContentKg || "0") || 0),
+      0
+    );
+    const customerInvoiceValue = calculateCustomerLmeValue(
+      netPbWeightKg,
+      financials.cblLmeValue,
+      financials.customerLmePercent
+    );
+    setFinancials((prev) => ({ ...prev, customerInvoiceValue }));
+  }, [batteries, financials.cblLmeValue, financials.customerLmePercent]);
 
   useEffect(() => {
     const grossProfit = calculateGrossProfit(
@@ -1265,11 +1282,22 @@ export default function JobDetailPage() {
                   </div>
                   <div className="space-y-4">
                     <FinancialField
+                      label="% LME"
+                      value={financials.customerLmePercent}
+                      onChange={(v) => setFinancials((p) => ({ ...p, customerLmePercent: v }))}
+                      suffix="%"
+                    />
+                    <FinancialField
                       label="Customer Invoice Value £"
                       value={financials.customerInvoiceValue}
                       onChange={(v) => setFinancials((p) => ({ ...p, customerInvoiceValue: v }))}
                       prefix="£"
+                      computed
                     />
+                    <p className="-mt-2 text-[11px] leading-4 text-slate-500">
+                      CBL LME rate × % LME × net Pb weight (
+                      {batteries.reduce((sum, battery) => sum + (parseFloat(battery.pbContentKg || "0") || 0), 0).toFixed(3)} kg)
+                    </p>
                     <FinancialField
                       label="Customer Invoice No."
                       value={financials.customerInvoiceNo}
@@ -1277,9 +1305,6 @@ export default function JobDetailPage() {
                       icon={<Receipt className="w-3.5 h-3.5" />}
                       type="text"
                     />
-                    <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-4 text-slate-600">
-                      Customer LME percentage and Pb-tonnage calculations will be added after Ingrid confirms their basis.
-                    </p>
                   </div>
                 </section>
               </div>

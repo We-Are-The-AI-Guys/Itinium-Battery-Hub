@@ -25,8 +25,12 @@ describe("financial master-log field grouping", () => {
     const customerStart = source.indexOf(">Customer</h5>");
     const customerEnd = source.indexOf("</section>", customerStart);
     const customer = source.slice(customerStart, customerEnd);
+    expect(customer).toContain('label="% LME"');
     expect(customer).toContain('label="Customer Invoice Value £"');
     expect(customer).toContain('label="Customer Invoice No."');
+    expect(customer.indexOf('label="% LME"')).toBeLessThan(
+      customer.indexOf('label="Customer Invoice Value £"')
+    );
     expect(customer).not.toContain('label="Total Invoice Value £"');
     expect(customer).not.toContain('label="Itinium Invoice No."');
   });

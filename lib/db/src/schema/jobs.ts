@@ -31,6 +31,7 @@ export const jobsTable = pgTable("jobs", {
   cblLmePercent: decimal("cbl_lme_percent", { precision: 5, scale: 2 }),
   cblLmePrice: decimal("cbl_lme_price", { precision: 12, scale: 2 }),
   transportCost: decimal("transport_cost", { precision: 12, scale: 2 }),
+  customerLmePercent: decimal("customer_lme_percent", { precision: 5, scale: 2 }),
   customerInvoiceValue: decimal("customer_invoice_value", { precision: 12, scale: 2 }),
   customerInvoiceNo: varchar("customer_invoice_no", { length: 100 }),
   cblWasteAdviceNoteNo: varchar("cbl_waste_advice_note_no", { length: 100 }),

@@ -1523,7 +1523,7 @@ router.patch(
 
       const {
         cblLmeValue, cblLmePercent, cblLmePrice, transportCost,
-        customerInvoiceValue, customerInvoiceNo, cblWasteAdviceNoteNo,
+        customerLmePercent, customerInvoiceValue, customerInvoiceNo, cblWasteAdviceNoteNo,
         cblDate, totalInvoiceValue, grossProfit, itiniumInvoiceNo,
         tonnage, lmeRateUsed, calculatedValue, invoiceStatus,
         invoiceReceivedDate, dueDate, datePaid,
@@ -1541,6 +1541,7 @@ router.patch(
       if (cblLmePercent !== undefined) updates.cblLmePercent = toDecimal(cblLmePercent);
       if (cblLmePrice !== undefined) updates.cblLmePrice = toDecimal(cblLmePrice);
       if (transportCost !== undefined) updates.transportCost = toDecimal(transportCost);
+      if (customerLmePercent !== undefined) updates.customerLmePercent = toDecimal(customerLmePercent);
       if (customerInvoiceValue !== undefined) updates.customerInvoiceValue = toDecimal(customerInvoiceValue);
       if (customerInvoiceNo !== undefined) updates.customerInvoiceNo = toStr(customerInvoiceNo);
       if (cblWasteAdviceNoteNo !== undefined) updates.cblWasteAdviceNoteNo = toStr(cblWasteAdviceNoteNo);
