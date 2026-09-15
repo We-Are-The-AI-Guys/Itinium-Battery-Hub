@@ -154,6 +154,15 @@ const statusStyles: Record<string, string> = {
   completed: "bg-green-100 text-green-800 border-green-200",
 };
 
+const statusDotStyles: Record<string, string> = {
+  request: "bg-amber-500",
+  confirmed: "bg-teal-500",
+  received: "bg-blue-500",
+  invoice: "bg-violet-500",
+  awaiting_invoice: "bg-orange-500",
+  completed: "bg-green-500",
+};
+
 const statusLabels: Record<string, string> = {
   request: "Request",
   confirmed: "Confirmed",
@@ -901,16 +910,15 @@ export default function JobDetailPage() {
   return (
     <SidebarLayout title={job.reference} subtitle={`${job.clientName} — ${job.depot}`}>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => setLocation("/jobs")}
-            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-[#0f2744] transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Back to Jobs
-          </button>
-
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setLocation("/jobs")}
+              className="mr-2 flex items-center gap-1.5 text-sm text-slate-500 hover:text-[#0f2744] transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Back to Jobs
+            </button>
             <Button
               size="sm"
               variant="outline"
@@ -933,9 +941,11 @@ export default function JobDetailPage() {
                 {downloadingInvoice ? "Preparing…" : "Confirmed Collection Sheet PDF"}
               </Button>
             )}
-            <Badge variant="outline" className={`font-medium text-sm px-3 py-1 ${statusStyles[job.status] || ""}`}>
-              {statusLabels[job.status] || job.status}
-            </Badge>
+          </div>
+          <div className="flex items-center gap-2 text-sm" role="status" aria-label={`Request status: ${statusLabels[job.status] || job.status}`}>
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Request status</span>
+            <span className={`h-2.5 w-2.5 rounded-full ${statusDotStyles[job.status] || "bg-slate-400"}`} aria-hidden="true" />
+            <span className="font-semibold text-slate-700">{statusLabels[job.status] || job.status}</span>
           </div>
         </div>
 
