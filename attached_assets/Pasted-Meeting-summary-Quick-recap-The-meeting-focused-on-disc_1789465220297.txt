@@ -1,0 +1,34 @@
+Meeting summary
+
+
+Quick recap
+The meeting focused on discussing system improvements for battery collection and financial tracking. Andreas and Ingrid Anderson reviewed issues with the auto-confirm button functionality and discussed adding editing capabilities to handle ambiguous battery specifications before confirmation. They decided to simplify the approach by allowing non-confirmed rows to be added as new rows below rather than splitting existing entries. The team also addressed the need to accommodate stillage collections by adding a dropdown option or checkbox for non-battery items. Regarding financial calculations, they identified issues with the LME value calculations and discussed changing from gross profit to net profit displays across the system. Ingrid Anderson agreed to provide a detailed breakdown of the financial formulas and calculations, particularly for the waste collector pricing structure, which would be manually inputted due to daily varying spot rates. The conversation ended with plans to reconvene on Tuesday at 12:00 to finalize the financial system improvements before addressing other minor issues like invoice payment tracking.
+
+Next steps
+Andreas
+Add a function to the battery receipt confirmation screen to allow editing of cell type and voltage before confirming.
+Add an "Add" button to the battery receipt confirmation screen to allow adding new rows for additional items (e.g., extra pallets, stillages).
+Modify the "Add" button functionality to default to "Battery" but allow selection of "Stillage" as an option, with appropriate fields for each.
+Allow manual adjustment of weight for stillages once the actual weight is received from CBL.
+Move the "Auto-confirm all" button above the "Receipt confirmed" section on the battery receipt confirmation screen.
+Change all references from "gross profit" to "net profit" in the financials.
+Implement the financial calculations as per the mock-up and formulas to be provided by Ingrid, including correct calculation of total invoice value.
+Address the issue with the job number not displaying correctly on the schedule and ensure JSON data is properly siloed.
+Ingrid
+Send the mock-up and breakdown of the financials with formulas to Andreas.
+Send a Teams meeting invite to Andreas for a follow-up meeting on Tuesday at 12:00.
+Summary
+Business Partnership Dispute Resolution
+Andreas discussed a business dispute where he had to end a partnership due to someone stealing money and equipment worth approximately 3-4 thousand dollars. Ingrid advised Andreas to cut his losses rather than pursue legal action, suggesting it would be more costly and potentially send the wrong message to the perpetrator. The conversation ended with both participants agreeing to start with the financial portion of their meeting.
+
+Auto-Confirm Button Functionality Updates
+Ingrid and Andreas discussed adding functionality to the auto-confirm button to show when items have been auto-confirmed, and addressed issues with battery item tracking and confirmation. They identified the need to edit cell types and voltages before confirmation to avoid overpaying for incorrect items. Andreas suggested adding editing capabilities within the existing table and proposed adding a button or split functionality to allow for reference tracking between customer input and confirmed details.
+
+Battery Collection Data Entry Improvements
+Andreas and Ingrid discussed improvements to a data entry system for battery collections. They agreed to simplify the process by allowing unconfirmed rows to be added as new entries below rather than splitting existing entries. They also decided to add a dropdown or checkbox option to distinguish between standard battery entries and stillage collections, with the system defaulting to battery entries since stillages are rare. The solution will include the ability to add notes for special cases like stillage collections.
+
+Stillage Weight and Financial Calculations
+The team discussed weight calculations for stillages, agreeing to keep measurements in tonnes but manually adjust weights once actual figures from CBL are received. Ingrid requested moving the auto-confirm button above the receipt confirmation section in the system. They also reviewed financial calculations, specifically discussing the change from gross profit to net profit and the proper calculation method for the waste collector column, which involves using spot rates and percentage calculations based on daily lead rates from weighbridge notices.
+
+Invoice Calculation System Issues
+Andreas and Ingrid discussed issues with the total invoice value calculation in their system, which Ingrid identified should be 55012. They reviewed a mock-up Ingrid had sent showing how different components like LME pricing, waste collector values, and manual entries should be structured. Ingrid explained that most inputs would require manual entry until the system can automatically read customer files. They agreed to postpone work on invoice payment tracking until the financial calculations are properly sorted, with Ingrid committing to provide a breakdown of formulas and calculations for the waste collector by Tuesday at 12pm for a follow-up meeting.
