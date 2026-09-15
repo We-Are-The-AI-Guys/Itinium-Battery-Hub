@@ -27,6 +27,8 @@ import {
   Download,
   Pencil,
   Mail,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -743,6 +745,51 @@ export default function JobDetailPage() {
     }
   }
 
+  async function addReplacementBattery() {
+    const cellType = window.prompt("Cell type for the replacement row:");
+    if (cellType === null) return;
+    const voltage = window.prompt("Voltage (optional):") ?? "";
+    const manufacture = window.prompt("Manufacturer (optional):") ?? "";
+    const batterySerial = window.prompt("Battery serial or identifier (optional):") ?? "";
+    const weight = window.prompt("Estimated weight in kg (required):");
+    if (weight === null) return;
+    try {
+      const res = await fetch(`/api/jobs/${params.id}/batteries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ cellType, voltage, manufacture, batterySerial, estimatedWeightKg: weight }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Could not add the row");
+      setBatteries((current) => [...current, data.battery]);
+      if (data.job) setJob(data.job);
+      setReceiptDelivery(null);
+      toast({ title: "Row added", description: "The replacement battery row is ready for receipt confirmation." });
+    } catch (error) {
+      toast({ title: "Could not add row", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+    }
+  }
+
+  async function removeBattery(battery: BatteryData) {
+    const label = battery.batterySerial || battery.assetNumber || battery.palletNumber || `item ${battery.id}`;
+    if (!window.confirm(`Remove ${label} from this job? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`/api/jobs/${params.id}/batteries/${battery.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Could not remove the row");
+      setBatteries((current) => current.filter((item) => item.id !== battery.id));
+      if (data.job) setJob(data.job);
+      setReceiptDelivery(null);
+      toast({ title: "Row removed", description: `${label} was removed from the job.` });
+    } catch (error) {
+      toast({ title: "Could not remove row", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+    }
+  }
+
   async function loadReceiptDelivery() {
     setLoadingReceiptDelivery(true);
     try {
@@ -1128,6 +1175,17 @@ export default function JobDetailPage() {
                   Battery Receipt Confirmation & Pb Content
                 </h4>
                 <div className="flex items-center gap-3">
+                    {canEditResolved && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={addReplacementBattery}
+                      >
+                        <Plus className="w-3 h-3" />
+                        Add row
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -1180,6 +1238,7 @@ export default function JobDetailPage() {
                         battery={b}
                         index={i}
                         onSave={updateBatteryAdmin}
+                        onRemove={canEditResolved ? removeBattery : undefined}
                         lmeGbpRate={getEffectiveLmeRate()}
                       />
                     ))}
@@ -1980,11 +2039,13 @@ function BatteryAdminRow({
   battery,
   index,
   onSave,
+  onRemove,
   lmeGbpRate,
 }: {
   battery: BatteryData;
   index: number;
   onSave: (id: number, updates: Record<string, string | boolean | null>) => void;
+  onRemove?: (battery: BatteryData) => void;
   lmeGbpRate: number | null;
 }) {
   const [receipt, setReceipt] = useState(battery.receiptConfirmed ?? false);
@@ -2098,6 +2159,17 @@ function BatteryAdminRow({
           >
             Save
           </Button>
+          {onRemove && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-red-600 hover:bg-red-50 hover:text-red-700"
+              onClick={() => onRemove(battery)}
+              title="Remove row"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          )}
         </div>
       </td>
     </tr>

@@ -1531,6 +1531,98 @@ router.post(
 );
 
 router.post(
+  "/jobs/:id/batteries",
+  requireAuth,
+  requireRole("accounts", "head_office_admin"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const jobId = parseInt(String(req.params.id), 10);
+      if (isNaN(jobId)) return void res.status(400).json({ message: "Invalid job ID" });
+      const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+      if (!job) return void res.status(404).json({ message: "Job not found" });
+      if (job.receiptSentAt) return void res.status(409).json({ message: "Rows cannot be added after completed receipt documents have been sent" });
+
+      const clean = (value: unknown) => {
+        const text = String(value ?? "").trim();
+        return text || null;
+      };
+      const estimatedWeight = Number(req.body.estimatedWeightKg);
+      if (!Number.isFinite(estimatedWeight) || estimatedWeight <= 0) {
+        return void res.status(400).json({ message: "Enter a valid estimated weight in kg" });
+      }
+      if (![req.body.palletNumber, req.body.assetNumber, req.body.batterySerial, req.body.cellType].some(clean)) {
+        return void res.status(400).json({ message: "Enter at least a pallet, asset, serial, or cell type" });
+      }
+
+      const battery = await db.transaction(async (tx) => {
+        const [created] = await tx.insert(jobBatteriesTable).values({
+          jobId,
+          palletNumber: clean(req.body.palletNumber),
+          assetNumber: clean(req.body.assetNumber),
+          batterySerial: clean(req.body.batterySerial),
+          manufacture: clean(req.body.manufacture),
+          cellType: clean(req.body.cellType),
+          voltage: clean(req.body.voltage),
+          notes: clean(req.body.notes),
+          estimatedWeightKg: estimatedWeight.toFixed(3),
+          weightManual: true,
+          receiptConfirmed: false,
+          receiptReviewed: false,
+          resolvedById: req.user!.id,
+          resolvedAt: new Date(),
+        }).returning();
+        if (job.tonnageManualOverride !== true) {
+          const rows = await tx.select({ weight: jobBatteriesTable.estimatedWeightKg })
+            .from(jobBatteriesTable).where(eq(jobBatteriesTable.jobId, jobId));
+          const totalKg = rows.reduce((sum, row) => sum + (Number(row.weight) || 0), 0);
+          await tx.update(jobsTable).set({ tonnage: (totalKg / 1000).toFixed(3) }).where(eq(jobsTable.id, jobId));
+        }
+        return created;
+      });
+      const [updatedJob] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+      res.status(201).json({ battery, job: updatedJob });
+    } catch (error) {
+      console.error("Add job battery error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+router.delete(
+  "/jobs/:id/batteries/:batteryId",
+  requireAuth,
+  requireRole("accounts", "head_office_admin"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const jobId = parseInt(String(req.params.id), 10);
+      const batteryId = parseInt(String(req.params.batteryId), 10);
+      if (isNaN(jobId) || isNaN(batteryId)) return void res.status(400).json({ message: "Invalid ID" });
+      const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+      if (!job) return void res.status(404).json({ message: "Job not found" });
+      if (job.receiptSentAt) return void res.status(409).json({ message: "Rows cannot be removed after completed receipt documents have been sent" });
+
+      await db.transaction(async (tx) => {
+        const [deleted] = await tx.delete(jobBatteriesTable)
+          .where(and(eq(jobBatteriesTable.id, batteryId), eq(jobBatteriesTable.jobId, jobId))).returning();
+        if (!deleted) throw new Error("BATTERY_NOT_FOUND");
+        if (job.tonnageManualOverride !== true) {
+          const rows = await tx.select({ weight: jobBatteriesTable.estimatedWeightKg })
+            .from(jobBatteriesTable).where(eq(jobBatteriesTable.jobId, jobId));
+          const totalKg = rows.reduce((sum, row) => sum + (Number(row.weight) || 0), 0);
+          await tx.update(jobsTable).set({ tonnage: (totalKg / 1000).toFixed(3) }).where(eq(jobsTable.id, jobId));
+        }
+      });
+      const [updatedJob] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+      res.json({ job: updatedJob });
+    } catch (error) {
+      if (error instanceof Error && error.message === "BATTERY_NOT_FOUND") return void res.status(404).json({ message: "Battery not found" });
+      console.error("Remove job battery error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+router.post(
   "/jobs/:id/batteries/auto-confirm",
   requireAuth,
   requireRole("team_leader", "accounts", "head_office_admin"),
