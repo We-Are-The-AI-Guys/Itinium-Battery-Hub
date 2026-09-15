@@ -1780,8 +1780,12 @@ function CollectionBatteryRow({
   return (
     <tr className={`${hasAnyFlag ? "bg-amber-50/60 border-l-4 border-l-amber-400" : (index % 2 === 0 ? "bg-white" : "bg-slate-50/30")}`}>
       <td className="px-3 py-2.5 text-slate-500">{index + 1}</td>
-      <td className="px-3 py-2.5 text-slate-700">{battery.palletNumber || "—"}</td>
-      <td className="px-3 py-2.5 text-slate-700">{battery.assetNumber || "—"}</td>
+      <td className="px-3 py-2.5 text-slate-700">
+        {canEdit ? <InlineFlagEdit initialValue={battery.palletNumber} placeholder="Pallet" onSave={(v) => onSaveField(battery.id, { palletNumber: v })} subtle allowEmpty /> : battery.palletNumber || "—"}
+      </td>
+      <td className="px-3 py-2.5 text-slate-700">
+        {canEdit ? <InlineFlagEdit initialValue={battery.assetNumber} placeholder="Asset" onSave={(v) => onSaveField(battery.id, { assetNumber: v })} subtle allowEmpty /> : battery.assetNumber || "—"}
+      </td>
       <td className="px-3 py-2.5 font-medium text-[#0f2744]">
         {battery.serialFlagReason ? (
           <InlineFlagEdit
@@ -1793,6 +1797,8 @@ function CollectionBatteryRow({
               onClick: () => onSaveField(battery.id, { clearSerialFlag: true }),
             }}
           />
+        ) : canEdit ? (
+          <InlineFlagEdit initialValue={battery.batterySerial} placeholder="Serial" onSave={(v) => onSaveField(battery.id, { batterySerial: v })} subtle allowEmpty />
         ) : (
           battery.batterySerial || "—"
         )}
@@ -1859,11 +1865,24 @@ function CollectionBatteryRow({
             placeholder="Voltage"
             onSave={(v) => onSaveField(battery.id, { voltage: v })}
           />
+        ) : canEdit ? (
+          <InlineFlagEdit initialValue={battery.voltage} placeholder="Voltage" onSave={(v) => onSaveField(battery.id, { voltage: v })} subtle allowEmpty />
         ) : (
           battery.voltage || "—"
         )}
       </td>
-      <td className="px-3 py-2.5 text-slate-700">{battery.looseCellsQty ?? "—"}</td>
+      <td className="px-3 py-2.5 text-slate-700">
+        {canEdit ? (
+          <InlineFlagEdit
+            initialValue={battery.looseCellsQty == null ? null : String(battery.looseCellsQty)}
+            placeholder="Loose qty"
+            onSave={(v) => onSaveField(battery.id, { looseCellsQty: v })}
+            subtle
+            allowEmpty
+            inputType="number"
+          />
+        ) : battery.looseCellsQty ?? "—"}
+      </td>
       <td className="px-3 py-2.5">
         {hasAnyFlag ? (
           <div className="flex flex-col gap-1">
@@ -1894,9 +1913,13 @@ function CollectionBatteryRow({
           </span>
         )}
       </td>
-      <td className="px-3 py-2.5 text-slate-500 max-w-[200px] truncate">
+      <td className="px-3 py-2.5 text-slate-500 max-w-[240px]">
         <div className="flex flex-col gap-0.5">
-          <span className="truncate">{battery.notes || "—"}</span>
+          {canEdit ? (
+            <InlineFlagEdit initialValue={battery.notes} placeholder="Notes" onSave={(v) => onSaveField(battery.id, { notes: v })} subtle allowEmpty />
+          ) : (
+            <span className="truncate">{battery.notes || "—"}</span>
+          )}
           {battery.resolvedByName && battery.resolvedAt && (
             <span className="text-[10px] text-slate-400" title={new Date(battery.resolvedAt).toLocaleString("en-GB")}>
               Resolved by {battery.resolvedByName} on {formatDate(battery.resolvedAt)}
@@ -1915,6 +1938,8 @@ function InlineFlagEdit({
   extraAction,
   suggestions,
   subtle,
+  allowEmpty = false,
+  inputType = "text",
 }: {
   initialValue: string | null;
   placeholder: string;
@@ -1922,6 +1947,8 @@ function InlineFlagEdit({
   extraAction?: { label: string; onClick: () => void };
   suggestions?: { label: string; hint?: string }[];
   subtle?: boolean;
+  allowEmpty?: boolean;
+  inputType?: "text" | "number";
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(initialValue || "");
@@ -1985,10 +2012,13 @@ function InlineFlagEdit({
     <div className="flex items-center gap-1 flex-wrap">
       <Input
         autoFocus
+        type={inputType}
+        min={inputType === "number" ? 0 : undefined}
+        step={inputType === "number" ? 1 : undefined}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && value.trim()) {
+          if (e.key === "Enter" && (allowEmpty || value.trim())) {
             onSave(value.trim());
             setEditing(false);
           } else if (e.key === "Escape") {
@@ -2004,9 +2034,9 @@ function InlineFlagEdit({
         variant="outline"
         size="sm"
         className="h-7 px-2 text-[11px]"
-        disabled={!value.trim()}
+        disabled={!allowEmpty && !value.trim()}
         onClick={() => {
-          if (!value.trim()) return;
+          if (!allowEmpty && !value.trim()) return;
           onSave(value.trim());
           setEditing(false);
         }}

@@ -2147,7 +2147,21 @@ router.patch(
         return;
       }
 
-      const { receiptConfirmed, pbContentKg, valueGbp, adminNotes, manufacture, cellType, voltage, batterySerial, clearSerialFlag } = req.body;
+      const {
+        receiptConfirmed,
+        pbContentKg,
+        valueGbp,
+        adminNotes,
+        palletNumber,
+        assetNumber,
+        manufacture,
+        cellType,
+        voltage,
+        batterySerial,
+        looseCellsQty,
+        notes,
+        clearSerialFlag,
+      } = req.body;
 
       const toDecimal = (v: unknown): string | null =>
         v !== undefined && v !== null && v !== "" ? String(v) : null;
@@ -2165,6 +2179,9 @@ router.patch(
       if (pbContentKg !== undefined) updates.pbContentKg = toDecimal(pbContentKg);
       if (valueGbp !== undefined) updates.valueGbp = toDecimal(valueGbp);
       if (adminNotes !== undefined) updates.adminNotes = adminNotes !== null && adminNotes !== undefined && adminNotes !== "" ? String(adminNotes) : null;
+      if (palletNumber !== undefined) updates.palletNumber = toTrimmedStr(palletNumber);
+      if (assetNumber !== undefined) updates.assetNumber = toTrimmedStr(assetNumber);
+      if (notes !== undefined) updates.notes = toTrimmedStr(notes);
 
       const [existing] = await db
         .select()
@@ -2187,6 +2204,19 @@ router.patch(
       if (clearSerialFlag === true || clearSerialFlag === "true") {
         updates.serialFlagReason = null;
         if (existing.serialFlagReason) clearedAnyFlag = true;
+      }
+      if (looseCellsQty !== undefined) {
+        const trimmed = String(looseCellsQty ?? "").trim();
+        if (trimmed === "") {
+          updates.looseCellsQty = null;
+        } else {
+          const qty = Number(trimmed);
+          if (!Number.isInteger(qty) || qty < 0) {
+            res.status(400).json({ message: "Loose quantity must be a whole number of zero or more" });
+            return;
+          }
+          updates.looseCellsQty = qty;
+        }
       }
 
       if (manufacture !== undefined) {
@@ -2237,7 +2267,7 @@ router.patch(
       // independent of a manual Pb value: a correction that supplies Pb must
       // still not leave a stale weight from the old model behind (the +67kg
       // manual-vs-CSV discrepancy Ingrid reported).
-      if (cellType !== undefined || manufacture !== undefined || voltage !== undefined) {
+      if (cellType !== undefined || manufacture !== undefined || voltage !== undefined || looseCellsQty !== undefined) {
         const finalCellType =
           (updates.cellType as string | null | undefined) !== undefined
             ? (updates.cellType as string | null)
@@ -2257,9 +2287,13 @@ router.patch(
             cellsCount: cellModelsTable.cellsCount,
           })
           .from(cellModelsTable);
+        const finalLooseCellsQty =
+          looseCellsQty !== undefined
+            ? (updates.looseCellsQty as number | null)
+            : existing.looseCellsQty;
         const cellCount = deriveActualCellCount({
           isLooseCells: existing.isLooseCells,
-          looseCellsQty: existing.looseCellsQty,
+          looseCellsQty: finalLooseCellsQty,
           voltage: finalVoltage,
         });
         if (pbContentKg === undefined) {
