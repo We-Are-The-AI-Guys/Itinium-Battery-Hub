@@ -13,10 +13,12 @@ function sectionBetween(startHeading: string, endHeading: string): string {
 }
 
 describe("financial master-log field grouping", () => {
-  it("keeps the Itinium invoice pair under Waste Collector", () => {
+  it("keeps the separate Spot traction and blocs calculation under Waste Collector", () => {
     const wasteCollector = sectionBetween("Waste Collector", "Customer");
-    expect(wasteCollector).toContain('label="Total Invoice Value £"');
-    expect(wasteCollector).toContain('label="Itinium Invoice No."');
+    expect(wasteCollector).toContain('label="% Spot Traction"');
+    expect(wasteCollector).toContain('label="% Spot Blocs"');
+    expect(wasteCollector).toContain('label="Invoice Value"');
+    expect(wasteCollector).toContain('label="Invoice No."');
     expect(wasteCollector).not.toContain('label="Customer Invoice Value £"');
     expect(wasteCollector).not.toContain('label="Customer Invoice No."');
   });
@@ -25,13 +27,13 @@ describe("financial master-log field grouping", () => {
     const customerStart = source.indexOf(">Customer</h5>");
     const customerEnd = source.indexOf("</section>", customerStart);
     const customer = source.slice(customerStart, customerEnd);
-    expect(customer).toContain('label="% LME"');
+    expect(customer).toContain('label="% LME Traction"');
+    expect(customer).toContain('label="% LME Blocs"');
     expect(customer).toContain('label="Customer Invoice Value £"');
     expect(customer).toContain('label="Customer Invoice No."');
-    expect(customer.indexOf('label="% LME"')).toBeLessThan(
+    expect(customer.indexOf('label="% LME Traction"')).toBeLessThan(
       customer.indexOf('label="Customer Invoice Value £"')
     );
-    expect(customer).not.toContain('label="Total Invoice Value £"');
-    expect(customer).not.toContain('label="Itinium Invoice No."');
+    expect(customer).not.toContain('label="% Spot Traction"');
   });
 });

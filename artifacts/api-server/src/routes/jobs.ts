@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable, locationsTable, clientsTable, usersTable, jobDraftsTable, scheduleRescheduleLogTable, correctionAuditLogTable, collectionCompaniesTable } from "@workspace/db/schema";
-import { eq, sql, and, count, ilike, or, inArray, desc, asc } from "drizzle-orm";
+import { eq, sql, and, count, ilike, or, inArray, desc, asc, getTableColumns } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { MANUFACTURERS } from "./manufacturers";
 import ExcelJS from "exceljs";
@@ -559,7 +559,7 @@ router.get(
       const [jobs, [totalResult]] = await Promise.all([
         db
           .select({
-            ...jobsTable,
+            ...getTableColumns(jobsTable),
             batteryValueSum: sql<string | null>`(
               SELECT CAST(SUM(jb.value_gbp) AS TEXT)
               FROM job_batteries jb
@@ -1757,6 +1757,12 @@ router.patch(
         invoiceReceivedDate, dueDate, datePaid,
         siteContacts, siteHours, specialInstructions,
         collectionDate,
+        wasteSpotRate, wasteTractionPercent, wasteBlocsPercent, wasteTractionRate,
+        wasteBlocsRate, wasteTractionTonnage, wasteBlocsTonnage, wasteAdHocCosts,
+        wasteTransportCost, wasteInvoiceValue, wasteInvoiceNo,
+        customerTractionPercent, customerBlocsPercent, customerTractionRate,
+        customerBlocsRate, customerTractionTonnage, customerBlocsTonnage,
+        customerAdHocCosts, customerTransportCost, netProfit,
       } = req.body;
 
       const toDecimal = (v: unknown): string | null =>
@@ -1780,6 +1786,17 @@ router.patch(
       if (tonnage !== undefined) updates.tonnage = toDecimal(tonnage);
       if (lmeRateUsed !== undefined) updates.lmeRateUsed = toDecimal(lmeRateUsed);
       if (calculatedValue !== undefined) updates.calculatedValue = toDecimal(calculatedValue);
+      const financialDecimals = {
+        wasteSpotRate, wasteTractionPercent, wasteBlocsPercent, wasteTractionRate,
+        wasteBlocsRate, wasteTractionTonnage, wasteBlocsTonnage, wasteAdHocCosts,
+        wasteTransportCost, wasteInvoiceValue, customerTractionPercent, customerBlocsPercent,
+        customerTractionRate, customerBlocsRate, customerTractionTonnage,
+        customerBlocsTonnage, customerAdHocCosts, customerTransportCost, netProfit,
+      };
+      for (const [key, value] of Object.entries(financialDecimals)) {
+        if (value !== undefined) updates[key] = toDecimal(value);
+      }
+      if (wasteInvoiceNo !== undefined) updates.wasteInvoiceNo = toStr(wasteInvoiceNo);
       if (siteContacts !== undefined) updates.siteContacts = toStr(siteContacts);
       if (siteHours !== undefined) updates.siteHours = toStr(siteHours);
       if (specialInstructions !== undefined) updates.specialInstructions = toStr(specialInstructions);

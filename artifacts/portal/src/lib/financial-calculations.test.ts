@@ -3,6 +3,9 @@ import {
   calculateCblLmeValue,
   calculateCustomerLmeValue,
   calculateGrossProfit,
+  calculateNetProfit,
+  calculatePercentageRate,
+  calculateSectionInvoiceValue,
 } from "./financial-calculations";
 
 describe("existing financial calculations", () => {
@@ -25,5 +28,19 @@ describe("existing financial calculations", () => {
 
   it("converts net Pb kilograms to tonnes before applying the LME rate", () => {
     expect(calculateCustomerLmeValue(500, "2000", "75")).toBe("750.00");
+  });
+});
+
+describe("financial master log calculations", () => {
+  it("calculates a percentage rate from the relevant LME rate", () => {
+    expect(calculatePercentageRate("2000", "39")).toBe("780.00");
+  });
+
+  it("combines traction and blocs values then deducts section costs", () => {
+    expect(calculateSectionInvoiceValue("2", "780", "1", "500", "100", "60")).toBe("1900.00");
+  });
+
+  it("calculates net profit as waste invoice less customer invoice", () => {
+    expect(calculateNetProfit("5000", "4200")).toBe("800.00");
   });
 });

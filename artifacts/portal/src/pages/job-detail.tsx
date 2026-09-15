@@ -9,6 +9,9 @@ import {
   calculateCblLmeValue,
   calculateCustomerLmeValue,
   calculateGrossProfit,
+  calculateNetProfit,
+  calculatePercentageRate,
+  calculateSectionInvoiceValue,
 } from "@/lib/financial-calculations";
 import { useParams, useLocation } from "wouter";
 import {
@@ -88,6 +91,26 @@ interface JobData {
   cblDate: string | null;
   totalInvoiceValue: string | null;
   grossProfit: string | null;
+  wasteSpotRate: string | null;
+  wasteTractionPercent: string | null;
+  wasteBlocsPercent: string | null;
+  wasteTractionRate: string | null;
+  wasteBlocsRate: string | null;
+  wasteTractionTonnage: string | null;
+  wasteBlocsTonnage: string | null;
+  wasteAdHocCosts: string | null;
+  wasteTransportCost: string | null;
+  wasteInvoiceValue: string | null;
+  wasteInvoiceNo: string | null;
+  customerTractionPercent: string | null;
+  customerBlocsPercent: string | null;
+  customerTractionRate: string | null;
+  customerBlocsRate: string | null;
+  customerTractionTonnage: string | null;
+  customerBlocsTonnage: string | null;
+  customerAdHocCosts: string | null;
+  customerTransportCost: string | null;
+  netProfit: string | null;
   itiniumInvoiceNo: string | null;
   invoiceReceivedDate: string | null;
   dueDate: string | null;
@@ -250,6 +273,26 @@ export default function JobDetailPage() {
     invoiceReceivedDate: "",
     dueDate: "",
     datePaid: "",
+    wasteSpotRate: "",
+    wasteTractionPercent: "",
+    wasteBlocsPercent: "",
+    wasteTractionRate: "",
+    wasteBlocsRate: "",
+    wasteTractionTonnage: "",
+    wasteBlocsTonnage: "",
+    wasteAdHocCosts: "",
+    wasteTransportCost: "",
+    wasteInvoiceValue: "",
+    wasteInvoiceNo: "",
+    customerTractionPercent: "",
+    customerBlocsPercent: "",
+    customerTractionRate: "",
+    customerBlocsRate: "",
+    customerTractionTonnage: "",
+    customerBlocsTonnage: "",
+    customerAdHocCosts: "",
+    customerTransportCost: "",
+    netProfit: "",
   });
 
   const [siteDetails, setSiteDetails] = useState({
@@ -372,6 +415,26 @@ export default function JobDetailPage() {
             invoiceReceivedDate: data.job.invoiceReceivedDate || "",
             dueDate: data.job.dueDate || "",
             datePaid: data.job.datePaid || "",
+            wasteSpotRate: data.job.wasteSpotRate || data.job.cblLmeValue || "",
+            wasteTractionPercent: data.job.wasteTractionPercent || "",
+            wasteBlocsPercent: data.job.wasteBlocsPercent || "",
+            wasteTractionRate: data.job.wasteTractionRate || "",
+            wasteBlocsRate: data.job.wasteBlocsRate || "",
+            wasteTractionTonnage: data.job.wasteTractionTonnage || "",
+            wasteBlocsTonnage: data.job.wasteBlocsTonnage || "",
+            wasteAdHocCosts: data.job.wasteAdHocCosts || "",
+            wasteTransportCost: data.job.wasteTransportCost || data.job.transportCost || "",
+            wasteInvoiceValue: data.job.wasteInvoiceValue || data.job.totalInvoiceValue || "",
+            wasteInvoiceNo: data.job.wasteInvoiceNo || data.job.itiniumInvoiceNo || "",
+            customerTractionPercent: data.job.customerTractionPercent || data.job.customerLmePercent || "",
+            customerBlocsPercent: data.job.customerBlocsPercent || "",
+            customerTractionRate: data.job.customerTractionRate || "",
+            customerBlocsRate: data.job.customerBlocsRate || "",
+            customerTractionTonnage: data.job.customerTractionTonnage || "",
+            customerBlocsTonnage: data.job.customerBlocsTonnage || "",
+            customerAdHocCosts: data.job.customerAdHocCosts || "",
+            customerTransportCost: data.job.customerTransportCost || "",
+            netProfit: data.job.netProfit || "",
           });
 
           setSiteDetails({
@@ -663,6 +726,46 @@ export default function JobDetailPage() {
     );
     setFinancials((prev) => ({ ...prev, grossProfit }));
   }, [financials.totalInvoiceValue, financials.transportCost, financials.cblLmePrice]);
+
+  useEffect(() => {
+    const customerLmeAverage = previousMonthAverage?.averageGbpPrice || "";
+    const confirmedPbTonnage = (
+      batteries.reduce((sum, battery) => sum + (parseFloat(battery.pbContentKg || "0") || 0), 0) / 1000
+    ).toFixed(3);
+    const wasteTractionRate = calculatePercentageRate(financials.wasteSpotRate, financials.wasteTractionPercent);
+    const wasteBlocsRate = calculatePercentageRate(financials.wasteSpotRate, financials.wasteBlocsPercent);
+    const customerTractionRate = calculatePercentageRate(customerLmeAverage, financials.customerTractionPercent);
+    const customerBlocsRate = calculatePercentageRate(customerLmeAverage, financials.customerBlocsPercent);
+    const wasteInvoiceValue = calculateSectionInvoiceValue(
+      financials.wasteTractionTonnage, wasteTractionRate,
+      financials.wasteBlocsTonnage, wasteBlocsRate,
+      financials.wasteTransportCost, financials.wasteAdHocCosts
+    );
+    const customerInvoiceValue = calculateSectionInvoiceValue(
+      confirmedPbTonnage, customerTractionRate,
+      financials.customerBlocsTonnage, customerBlocsRate,
+      financials.customerTransportCost, financials.customerAdHocCosts
+    );
+    const netProfit = calculateNetProfit(wasteInvoiceValue, customerInvoiceValue);
+    setFinancials((prev) => ({
+      ...prev,
+      wasteTractionRate,
+      wasteBlocsRate,
+      customerTractionRate,
+      customerBlocsRate,
+      customerTractionTonnage: confirmedPbTonnage,
+      wasteInvoiceValue,
+      customerInvoiceValue,
+      netProfit,
+    }));
+  }, [
+    batteries, previousMonthAverage?.averageGbpPrice,
+    financials.wasteSpotRate, financials.wasteTractionPercent, financials.wasteBlocsPercent,
+    financials.wasteTractionTonnage, financials.wasteBlocsTonnage,
+    financials.wasteTransportCost, financials.wasteAdHocCosts,
+    financials.customerTractionPercent, financials.customerBlocsPercent,
+    financials.customerBlocsTonnage, financials.customerTransportCost, financials.customerAdHocCosts,
+  ]);
 
   useEffect(() => {
     if (cblLmeInitialRef.current === null) return;
@@ -1278,7 +1381,7 @@ export default function JobDetailPage() {
                   Financial Details (Master Job Log)
                 </h4>
                 <p className="text-xs text-slate-500">
-                  Layout aligned to Ingrid&apos;s proposed format; auto/blocs fields await confirmation.
+                  Traction and Blocs are calculated separately using the workbook rules.
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.8fr_1.1fr_1.1fr]">
@@ -1309,15 +1412,9 @@ export default function JobDetailPage() {
                           : "Previous-month history unavailable"}
                       </p>
                     </div>
-                    <FinancialField
-                      label="Gross Profit £ (Current Calculation)"
-                      value={financials.grossProfit}
-                      onChange={(v) => setFinancials((p) => ({ ...p, grossProfit: v }))}
-                      prefix="£"
-                      computed
-                    />
-                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-800">
-                      Net profit will be added after Ingrid confirms the final formula.
+                    <FinancialField label="Net Profit" value={financials.netProfit} onChange={() => {}} prefix="£" computed />
+                    <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-[11px] leading-4 text-sky-800">
+                      Waste Collector invoice value less Customer invoice value.
                     </p>
                   </div>
                 </section>
@@ -1329,39 +1426,22 @@ export default function JobDetailPage() {
                   </div>
                   <div className="space-y-4">
                     <FinancialField
-                      label="CBL LME Value £ (Spot)"
-                      value={financials.cblLmeValue}
-                      onChange={(v) => { setPrefilled((pf) => ({ ...pf, cblLmeValue: false })); setFinancials((p) => ({ ...p, cblLmeValue: v })); }}
+                      label="Spot (LME)"
+                      value={financials.wasteSpotRate}
+                      onChange={(v) => setFinancials((p) => ({ ...p, wasteSpotRate: v }))}
                       icon={<PoundSterling className="w-3.5 h-3.5" />}
                       prefix="£"
-                      autoPrefilled={!!prefilled.cblLmeValue}
                     />
-                    <FinancialField
-                      label="% of LME (CBL)"
-                      value={financials.cblLmePercent}
-                      onChange={(v) => setFinancials((p) => ({ ...p, cblLmePercent: v }))}
-                      suffix="%"
-                    />
-                    <FinancialField
-                      label="Calculated Value of LME (CBL)"
-                      value={financials.cblLmePrice}
-                      onChange={(v) => setFinancials((p) => ({ ...p, cblLmePrice: v }))}
-                      prefix="£"
-                      computed
-                    />
-                    <FinancialField
-                      label="Gross Tonnage (Actual)"
-                      value={financials.tonnage}
-                      onChange={(v) => setFinancials((p) => ({ ...p, tonnage: v }))}
-                      icon={<Truck className="w-3.5 h-3.5" />}
-                      suffix="t"
-                    />
-                    <FinancialField
-                      label="Transport Cost"
-                      value={financials.transportCost}
-                      onChange={(v) => setFinancials((p) => ({ ...p, transportCost: v }))}
-                      prefix="£"
-                    />
+                    <div className="grid grid-cols-2 gap-3">
+                      <FinancialField label="% Spot Traction" value={financials.wasteTractionPercent} onChange={(v) => setFinancials((p) => ({ ...p, wasteTractionPercent: v }))} suffix="%" />
+                      <FinancialField label="% Spot Blocs" value={financials.wasteBlocsPercent} onChange={(v) => setFinancials((p) => ({ ...p, wasteBlocsPercent: v }))} suffix="%" />
+                      <FinancialField label="£/t Traction" value={financials.wasteTractionRate} onChange={() => {}} prefix="£" computed />
+                      <FinancialField label="£/t Blocs" value={financials.wasteBlocsRate} onChange={() => {}} prefix="£" computed />
+                      <FinancialField label="Pb tonnage Traction" value={financials.wasteTractionTonnage} onChange={(v) => setFinancials((p) => ({ ...p, wasteTractionTonnage: v }))} suffix="t" />
+                      <FinancialField label="Pb tonnage Blocs" value={financials.wasteBlocsTonnage} onChange={(v) => setFinancials((p) => ({ ...p, wasteBlocsTonnage: v }))} suffix="t" />
+                    </div>
+                    <FinancialField label="Ad hoc costs" value={financials.wasteAdHocCosts} onChange={(v) => setFinancials((p) => ({ ...p, wasteAdHocCosts: v }))} prefix="£" />
+                    <FinancialField label="Transport" value={financials.wasteTransportCost} onChange={(v) => setFinancials((p) => ({ ...p, wasteTransportCost: v }))} prefix="£" />
                     <FinancialField
                       label="CBL Waste Advice Note No."
                       value={financials.cblWasteAdviceNoteNo}
@@ -1375,16 +1455,16 @@ export default function JobDetailPage() {
                       type="date"
                     />
                     <FinancialField
-                      label="Total Invoice Value £"
-                      value={financials.totalInvoiceValue}
-                      onChange={(v) => { setPrefilled((pf) => ({ ...pf, totalInvoiceValue: false })); setFinancials((p) => ({ ...p, totalInvoiceValue: v })); }}
+                      label="Invoice Value"
+                      value={financials.wasteInvoiceValue}
+                      onChange={() => {}}
                       prefix="£"
-                      autoPrefilled={!!prefilled.totalInvoiceValue}
+                      computed
                     />
                     <FinancialField
-                      label="Itinium Invoice No."
-                      value={financials.itiniumInvoiceNo}
-                      onChange={(v) => setFinancials((p) => ({ ...p, itiniumInvoiceNo: v }))}
+                      label="Invoice No."
+                      value={financials.wasteInvoiceNo}
+                      onChange={(v) => setFinancials((p) => ({ ...p, wasteInvoiceNo: v }))}
                       type="text"
                     />
                   </div>
@@ -1396,23 +1476,23 @@ export default function JobDetailPage() {
                     <h5 className="mt-1 text-base font-bold text-[#0f2744]">Customer</h5>
                   </div>
                   <div className="space-y-4">
-                    <FinancialField
-                      label="% LME"
-                      value={financials.customerLmePercent}
-                      onChange={(v) => setFinancials((p) => ({ ...p, customerLmePercent: v }))}
-                      suffix="%"
-                    />
+                    <div className="grid grid-cols-2 gap-3">
+                      <FinancialField label="% LME Traction" value={financials.customerTractionPercent} onChange={(v) => setFinancials((p) => ({ ...p, customerTractionPercent: v }))} suffix="%" />
+                      <FinancialField label="% LME Blocs" value={financials.customerBlocsPercent} onChange={(v) => setFinancials((p) => ({ ...p, customerBlocsPercent: v }))} suffix="%" />
+                      <FinancialField label="£/t Traction" value={financials.customerTractionRate} onChange={() => {}} prefix="£" computed />
+                      <FinancialField label="£/t Blocs" value={financials.customerBlocsRate} onChange={() => {}} prefix="£" computed />
+                      <FinancialField label="Pb tonnage Traction" value={financials.customerTractionTonnage} onChange={() => {}} suffix="t" computed />
+                      <FinancialField label="Pb tonnage Blocs" value={financials.customerBlocsTonnage} onChange={(v) => setFinancials((p) => ({ ...p, customerBlocsTonnage: v }))} suffix="t" />
+                    </div>
+                    <FinancialField label="Ad hoc costs" value={financials.customerAdHocCosts} onChange={(v) => setFinancials((p) => ({ ...p, customerAdHocCosts: v }))} prefix="£" />
+                    <FinancialField label="Transport" value={financials.customerTransportCost} onChange={(v) => setFinancials((p) => ({ ...p, customerTransportCost: v }))} prefix="£" />
                     <FinancialField
                       label="Customer Invoice Value £"
                       value={financials.customerInvoiceValue}
-                      onChange={(v) => setFinancials((p) => ({ ...p, customerInvoiceValue: v }))}
+                      onChange={() => {}}
                       prefix="£"
                       computed
                     />
-                    <p className="-mt-2 text-[11px] leading-4 text-slate-500">
-                      CBL LME rate × % LME × net Pb weight (
-                      {batteries.reduce((sum, battery) => sum + (parseFloat(battery.pbContentKg || "0") || 0), 0).toFixed(3)} kg)
-                    </p>
                     <FinancialField
                       label="Customer Invoice No."
                       value={financials.customerInvoiceNo}
