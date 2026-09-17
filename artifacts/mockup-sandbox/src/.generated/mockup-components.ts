@@ -4,6 +4,6 @@ export const modules: ModuleMap = {
   "./components/mockups/admin-dashboard/AdminDashboard.tsx": () => import("../components/mockups/admin-dashboard/AdminDashboard.tsx"),
   "./components/mockups/depot-form/DepotForm.tsx": () => import("../components/mockups/depot-form/DepotForm.tsx"),
   "./components/mockups/login-page/LoginPage.tsx": () => import("../components/mockups/login-page/LoginPage.tsx"),
-  "./components/mockups/user-management/UserManagement.tsx": () => import("../components/mockups/user-management/UserManagement.tsx"),
-  "./components/mockups/pricing-accounts/PricingAccounts.tsx": () => import("../components/mockups/pricing-accounts/PricingAccounts.tsx")
+  "./components/mockups/pricing-accounts/PricingAccounts.tsx": () => import("../components/mockups/pricing-accounts/PricingAccounts.tsx"),
+  "./components/mockups/user-management/UserManagement.tsx": () => import("../components/mockups/user-management/UserManagement.tsx")
 };
