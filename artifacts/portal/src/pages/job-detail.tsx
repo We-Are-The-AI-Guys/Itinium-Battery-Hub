@@ -37,9 +37,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { JobDocumentsPanel } from "@/components/job-documents";
 import { useToast } from "@/hooks/use-toast";
+import {
+  getJobNextStep,
+  isBackwardJobStatusChange,
+  JOB_STATUS_JOURNEY,
+} from "@/lib/job-status";
 
 interface LmePrice {
   id: number;
@@ -167,15 +179,6 @@ interface ReceiptDeliveryInfo {
   clientStatus: string | null;
   accountsStatus: string | null;
 }
-
-const statusStyles: Record<string, string> = {
-  request: "bg-amber-100 text-amber-800 border-amber-200",
-  confirmed: "bg-teal-100 text-teal-800 border-teal-200",
-  received: "bg-blue-100 text-blue-800 border-blue-200",
-  invoice: "bg-violet-100 text-violet-800 border-violet-200",
-  awaiting_invoice: "bg-orange-100 text-orange-800 border-orange-200",
-  completed: "bg-green-100 text-green-800 border-green-200",
-};
 
 const statusDotStyles: Record<string, string> = {
   request: "bg-amber-500",
@@ -315,6 +318,7 @@ export default function JobDetailPage() {
   // Reviewers can edit cell type / manufacturer on any row (including
   // resolved and never-flagged ones) to fix later-discovered mistakes.
   const canEditResolved = userRole === "accounts" || userRole === "head_office_admin";
+  const canManageStatus = userRole === "accounts" || userRole === "head_office_admin";
 
   const hasFlaggedCellTypes = batteries.some((b) => b.cellModelFlagReason);
   const hasFlaggedManufacturers = batteries.some((b) => b.manufacturerFlagReason);
@@ -785,11 +789,18 @@ export default function JobDetailPage() {
   async function saveFinancials() {
     setSaving(true);
     try {
+      const payload = userRole === "team_leader"
+        ? Object.fromEntries(
+            Object.entries(financials).filter(([key]) =>
+              !["invoiceStatus", "invoiceReceivedDate", "datePaid"].includes(key)
+            )
+          )
+        : financials;
       const res = await fetch(`/api/jobs/${params.id}/admin`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(financials),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         const data = await res.json();
@@ -814,6 +825,15 @@ export default function JobDetailPage() {
   }
 
   async function updateStatus(newStatus: string) {
+    if (!job || newStatus === job.status) return;
+    if (
+      isBackwardJobStatusChange(job.status, newStatus)
+      && !window.confirm(
+        `Move this job back to ${statusLabels[newStatus]}?\n\nLater workflow information may already have been recorded. Automatic progression can move the job forward again when a later milestone is completed.`
+      )
+    ) {
+      return;
+    }
     try {
       const res = await fetch(`/api/jobs/${params.id}/status`, {
         method: "PATCH",
@@ -824,7 +844,7 @@ export default function JobDetailPage() {
       if (res.ok) {
         const data = await res.json();
         setJob(data.job);
-        toast({ title: "Status updated", description: `Job marked as ${newStatus}.` });
+        toast({ title: "Status updated", description: `Job marked as ${statusLabels[newStatus] || newStatus}.` });
       } else {
         toast({ title: "Error", description: "Failed to update status.", variant: "destructive" });
       }
@@ -846,6 +866,7 @@ export default function JobDetailPage() {
         setBatteries((prev) =>
           prev.map((b) => (b.id === batteryId ? data.battery : b))
         );
+        if (data.job) setJob(data.job);
         setReceiptDelivery(null);
         toast({ title: "Saved", description: "Battery details updated." });
       } else {
@@ -943,6 +964,7 @@ export default function JobDetailPage() {
       const data = await res.json().catch(() => ({}));
       await loadReceiptDelivery();
       if (!res.ok) throw new Error(data.message || "Some documents could not be sent");
+      if (data.job) setJob(data.job);
       toast({ title: "Documents sent", description: "The client receipt and accounts value document were sent successfully." });
     } catch (error) {
       toast({
@@ -1045,10 +1067,79 @@ export default function JobDetailPage() {
               </Button>
             )}
           </div>
-          <div className="flex items-center gap-2 text-sm" role="status" aria-label={`Request status: ${statusLabels[job.status] || job.status}`}>
-            <span className="text-xs font-medium uppercase tracking-wide text-slate-400">Request status</span>
-            <span className={`h-2.5 w-2.5 rounded-full ${statusDotStyles[job.status] || "bg-slate-400"}`} aria-hidden="true" />
-            <span className="font-semibold text-slate-700">{statusLabels[job.status] || job.status}</span>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="job-status-journey">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Job progress</p>
+                  <div className="mt-1 flex items-center gap-2" role="status" aria-label={`Current job status: ${statusLabels[job.status] || job.status}`}>
+                    <span className={`h-2.5 w-2.5 rounded-full ${statusDotStyles[job.status] || "bg-slate-400"}`} aria-hidden="true" />
+                    <span className="font-semibold text-[#0f2744]">{statusLabels[job.status] || job.status}</span>
+                  </div>
+                </div>
+              </div>
+              <ol className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" aria-label="Job status journey">
+                {JOB_STATUS_JOURNEY.map((status, index) => {
+                  const currentIndex = JOB_STATUS_JOURNEY.indexOf(job.status as (typeof JOB_STATUS_JOURNEY)[number]);
+                  const isCurrent = status === job.status;
+                  const isComplete = index < currentIndex;
+                  return (
+                    <li
+                      key={status}
+                      aria-current={isCurrent ? "step" : undefined}
+                      aria-label={`${statusLabels[status]}: ${isCurrent ? "Current" : isComplete ? "Completed" : "Upcoming"}`}
+                      className={`rounded-lg border px-3 py-2 text-xs font-medium ${
+                        isCurrent
+                          ? "border-sky-300 bg-sky-50 text-sky-800"
+                          : isComplete
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            : "border-slate-200 bg-slate-50 text-slate-500"
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        {isComplete && <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                        {statusLabels[status]}
+                        <span className="sr-only"> — {isCurrent ? "Current" : isComplete ? "Completed" : "Upcoming"}</span>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+              <p className="mt-4 text-sm text-slate-600" data-testid="job-next-step">
+                <span className="font-semibold text-slate-700">Next step: </span>
+                {getJobNextStep({
+                  status: job.status,
+                  scheduleStatus: job.scheduleStatus,
+                  invoiceReceivedDate: job.invoiceReceivedDate,
+                  invoiceStatus: job.invoiceStatus,
+                  datePaid: job.datePaid,
+                  receiptClientDeliveryStatus: job.receiptClientDeliveryStatus,
+                  receiptAccountsDeliveryStatus: job.receiptAccountsDeliveryStatus,
+                  remainingReviewCount: batteries.filter((battery) => !battery.receiptReviewed).length,
+                })}
+              </p>
+            </div>
+            {canManageStatus && (
+              <div className="w-full shrink-0 xl:w-52">
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500" htmlFor="manual-job-status">
+                  Change status
+                </label>
+                <Select value={job.status} onValueChange={updateStatus}>
+                  <SelectTrigger id="manual-job-status" aria-label="Change job status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {JOB_STATUS_JOURNEY.map((status) => (
+                      <SelectItem key={status} value={status}>{statusLabels[status]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="mt-2 text-xs text-slate-500">Use only for exceptions. Normal progress updates automatically.</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1654,68 +1745,6 @@ export default function JobDetailPage() {
               )}
             </div>
 
-            <div className="border-t border-slate-200 pt-6">
-              <h4 className="font-semibold text-[#0f2744] mb-3">Update Job Status</h4>
-              <div className="flex flex-wrap gap-2">
-                {job.status !== "request" && (
-                  <Button
-                    variant="outline"
-                    className="border-amber-300 text-amber-700 hover:bg-amber-50"
-                    onClick={() => updateStatus("request")}
-                  >
-                    Request
-                  </Button>
-                )}
-                {job.status !== "confirmed" && (
-                  <Button
-                    variant="outline"
-                    className="border-teal-300 text-teal-700 hover:bg-teal-50"
-                    onClick={() => updateStatus("confirmed")}
-                  >
-                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                    Confirmed
-                  </Button>
-                )}
-                {job.status !== "received" && (
-                  <Button
-                    variant="outline"
-                    className="border-blue-300 text-blue-700 hover:bg-blue-50"
-                    onClick={() => updateStatus("received")}
-                  >
-                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                    Received
-                  </Button>
-                )}
-                {job.status !== "invoice" && (
-                  <Button
-                    variant="outline"
-                    className="border-violet-300 text-violet-700 hover:bg-violet-50"
-                    onClick={() => updateStatus("invoice")}
-                  >
-                    Invoice
-                  </Button>
-                )}
-                {job.status !== "awaiting_invoice" && (
-                  <Button
-                    variant="outline"
-                    className="border-orange-300 text-orange-700 hover:bg-orange-50"
-                    onClick={() => updateStatus("awaiting_invoice")}
-                  >
-                    Awaiting Invoice
-                  </Button>
-                )}
-                {job.status !== "completed" && (
-                  <Button
-                    variant="outline"
-                    className="border-green-300 text-green-700 hover:bg-green-50"
-                    onClick={() => updateStatus("completed")}
-                  >
-                    <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                    Completed
-                  </Button>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       </div>

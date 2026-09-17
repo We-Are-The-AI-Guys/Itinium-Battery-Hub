@@ -15,6 +15,7 @@ import {
   notifySiteContactScheduleConfirmed,
   type JobRef,
 } from "../lib/notifications";
+import { advanceJobStatusSql } from "../lib/job-status";
 
 const router: IRouter = Router();
 
@@ -426,7 +427,11 @@ router.post(
 
       const [updated] = await db
         .update(jobsTable)
-        .set({ collectionDate: finalDate, scheduleStatus: "confirmed" })
+        .set({
+          collectionDate: finalDate,
+          scheduleStatus: "confirmed",
+          status: advanceJobStatusSql("confirmed"),
+        })
         .where(eq(jobsTable.id, jobId))
         .returning();
 

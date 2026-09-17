@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable, locationsTable, clientsTable, usersTable, jobDraftsTable, scheduleRescheduleLogTable, correctionAuditLogTable, collectionCompaniesTable } from "@workspace/db/schema";
-import { eq, sql, and, count, ilike, or, inArray, desc, asc, getTableColumns } from "drizzle-orm";
+import { eq, sql, and, count, ilike, or, inArray, desc, asc, getTableColumns, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { MANUFACTURERS } from "./manufacturers";
 import ExcelJS from "exceljs";
@@ -25,6 +25,12 @@ import {
   selectClientReceiptRecipients,
   type ReceiptItemSnapshot,
 } from "../lib/receipt-documents";
+import {
+  advanceJobStatusSql,
+  canUpdateInvoiceMilestones,
+  isJobStatus,
+  JOB_STATUSES,
+} from "../lib/job-status";
 
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
@@ -1645,16 +1651,21 @@ router.post(
         .from(jobBatteriesTable)
         .where(and(
           eq(jobBatteriesTable.jobId, jobId),
-          sql`${jobBatteriesTable.receiptConfirmed} IS DISTINCT FROM TRUE`
+          sql`${jobBatteriesTable.receiptReviewed} IS DISTINCT FROM TRUE`
         ));
 
       if (pending.length === 0) {
+        const [updatedJob] = await db
+          .update(jobsTable)
+          .set({ status: advanceJobStatusSql("received") })
+          .where(eq(jobsTable.id, jobId))
+          .returning();
         const batteries = await db
           .select()
           .from(jobBatteriesTable)
           .where(eq(jobBatteriesTable.jobId, jobId))
           .orderBy(asc(jobBatteriesTable.id));
-        res.json({ confirmedCount: 0, batteries, job });
+        res.json({ confirmedCount: 0, batteries, job: updatedJob });
         return;
       }
 
@@ -1691,9 +1702,10 @@ router.post(
         return;
       }
 
+      let confirmedCount = 0;
       await db.transaction(async (tx) => {
         for (const { battery, tabWeightKg } of prepared) {
-          await tx
+          const changed = await tx
             .update(jobBatteriesTable)
             .set({
               receiptConfirmed: true,
@@ -1703,8 +1715,11 @@ router.post(
             })
             .where(and(
               eq(jobBatteriesTable.id, battery.id),
-              eq(jobBatteriesTable.jobId, jobId)
-            ));
+              eq(jobBatteriesTable.jobId, jobId),
+              sql`${jobBatteriesTable.receiptReviewed} IS DISTINCT FROM TRUE`
+            ))
+            .returning({ id: jobBatteriesTable.id });
+          confirmedCount += changed.length;
         }
 
         if (job.tonnageManualOverride !== true) {
@@ -1716,9 +1731,20 @@ router.post(
             const weight = parseFloat(String(row.estimatedWeightKg ?? ""));
             return sum + (isFinite(weight) && weight > 0 ? weight : 0);
           }, 0);
+          await tx.update(jobsTable).set({ tonnage: (totalKg / 1000).toFixed(3) }).where(eq(jobsTable.id, jobId));
+        }
+
+        const [{ remaining }] = await tx
+          .select({ remaining: count() })
+          .from(jobBatteriesTable)
+          .where(and(
+            eq(jobBatteriesTable.jobId, jobId),
+            sql`${jobBatteriesTable.receiptReviewed} IS DISTINCT FROM TRUE`
+          ));
+        if (Number(remaining) === 0) {
           await tx
             .update(jobsTable)
-            .set({ tonnage: (totalKg / 1000).toFixed(3) })
+            .set({ status: advanceJobStatusSql("received") })
             .where(eq(jobsTable.id, jobId));
         }
       });
@@ -1729,7 +1755,7 @@ router.post(
         .where(eq(jobBatteriesTable.jobId, jobId))
         .orderBy(asc(jobBatteriesTable.id));
       const [updatedJob] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
-      res.json({ confirmedCount: pending.length, batteries, job: updatedJob });
+      res.json({ confirmedCount, batteries, job: updatedJob });
     } catch (error) {
       console.error("Auto-confirm batteries error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -1764,13 +1790,25 @@ router.patch(
         customerBlocsRate, customerTractionTonnage, customerBlocsTonnage,
         customerAdHocCosts, customerTransportCost, netProfit,
       } = req.body;
+      if (
+        !canUpdateInvoiceMilestones(req.user!.role)
+        && (invoiceStatus !== undefined || invoiceReceivedDate !== undefined || datePaid !== undefined)
+      ) {
+        res.status(403).json({ message: "Only accounts and head office admins can update invoice milestones" });
+        return;
+      }
 
       const toDecimal = (v: unknown): string | null =>
         v !== undefined && v !== null && v !== "" ? String(v) : null;
       const toStr = (v: unknown): string | null =>
         v !== undefined && v !== null && v !== "" ? String(v) : null;
+      const [existingJob] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+      if (!existingJob) {
+        res.status(404).json({ message: "Job not found" });
+        return;
+      }
 
-      const updates: Partial<Record<string, string | number | null>> = {};
+      const updates: Partial<Record<string, string | number | null | SQL>> = {};
       if (cblLmeValue !== undefined) updates.cblLmeValue = toDecimal(cblLmeValue);
       if (cblLmePercent !== undefined) updates.cblLmePercent = toDecimal(cblLmePercent);
       if (cblLmePrice !== undefined) updates.cblLmePrice = toDecimal(cblLmePrice);
@@ -1838,17 +1876,14 @@ router.patch(
       }
 
       if (datePaid && toStr(datePaid)) {
-        const [existingJob] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
-        if (existingJob) {
-          const effectiveInvoiceReceivedDate = (invoiceReceivedDate !== undefined ? toStr(invoiceReceivedDate) : existingJob.invoiceReceivedDate);
-          const referenceDate = effectiveInvoiceReceivedDate || existingJob.collectionDate;
-          if (referenceDate) {
-            const paidDate = new Date(datePaid);
-            const refDate = new Date(referenceDate);
-            const diffMs = paidDate.getTime() - refDate.getTime();
-            const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-            updates.daysToPay = diffDays;
-          }
+        const effectiveInvoiceReceivedDate = (invoiceReceivedDate !== undefined ? toStr(invoiceReceivedDate) : existingJob.invoiceReceivedDate);
+        const referenceDate = effectiveInvoiceReceivedDate || existingJob.collectionDate;
+        if (referenceDate) {
+          const paidDate = new Date(datePaid);
+          const refDate = new Date(referenceDate);
+          const diffMs = paidDate.getTime() - refDate.getTime();
+          const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+          updates.daysToPay = diffDays;
         }
         updates.invoiceStatus = "paid";
       } else if (datePaid !== undefined && !toStr(datePaid)) {
@@ -1860,6 +1895,21 @@ router.patch(
 
       if (invoiceStatus !== undefined && !(datePaid && toStr(datePaid))) {
         updates.invoiceStatus = toStr(invoiceStatus);
+      }
+
+      const effectiveDatePaid = datePaid !== undefined ? toStr(datePaid) : existingJob.datePaid;
+      const effectiveInvoiceReceivedDate = invoiceReceivedDate !== undefined
+        ? toStr(invoiceReceivedDate)
+        : existingJob.invoiceReceivedDate;
+      const effectiveInvoiceStatus = String(updates.invoiceStatus ?? existingJob.invoiceStatus ?? "");
+      const automaticTarget =
+        effectiveDatePaid
+          ? "completed"
+          : effectiveInvoiceReceivedDate || effectiveInvoiceStatus === "invoiced" || effectiveInvoiceStatus === "paid"
+            ? "invoice"
+            : null;
+      if (automaticTarget) {
+        updates.status = advanceJobStatusSql(automaticTarget);
       }
 
       if (Object.keys(updates).length === 0) {
@@ -2093,6 +2143,7 @@ router.post(
         receiptClientDeliveryStatus: clientStatus,
         receiptAccountsDeliveryStatus: accountsStatus,
         receiptSentAt: allSent ? new Date() : null,
+        ...(allSent ? { status: advanceJobStatusSql("awaiting_invoice") } : {}),
       }).where(eq(jobsTable.id, job.id)).returning();
 
       res.status(allSent ? 200 : 502).json({
@@ -2113,7 +2164,7 @@ router.post(
 router.patch(
   "/jobs/:id/status",
   requireAuth,
-  requireRole("team_leader", "accounts", "head_office_admin"),
+  requireRole("accounts", "head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
       const jobId = parseInt(String(req.params.id), 10);
@@ -2123,9 +2174,8 @@ router.patch(
       }
 
       const { status } = req.body;
-      const validStatuses = ["request", "confirmed", "received", "invoice", "awaiting_invoice", "completed"];
-      if (!status || !validStatuses.includes(status)) {
-        res.status(400).json({ message: "Invalid status. Must be one of: " + validStatuses.join(", ") });
+      if (!isJobStatus(status)) {
+        res.status(400).json({ message: "Invalid status. Must be one of: " + JOB_STATUSES.join(", ") });
         return;
       }
 
@@ -2370,6 +2420,29 @@ router.patch(
         return;
       }
 
+      let updatedJob: typeof jobsTable.$inferSelect | undefined;
+      if (receiptConfirmed !== undefined) {
+        updatedJob = await db.transaction(async (tx) => {
+          await tx.execute(sql`SELECT ${jobsTable.id} FROM ${jobsTable} WHERE ${jobsTable.id} = ${jobId} FOR UPDATE`);
+          const [{ remaining }] = await tx
+            .select({ remaining: count() })
+            .from(jobBatteriesTable)
+            .where(and(
+              eq(jobBatteriesTable.jobId, jobId),
+              sql`${jobBatteriesTable.receiptReviewed} IS DISTINCT FROM TRUE`
+            ));
+          if (Number(remaining) === 0) {
+            const [advanced] = await tx
+              .update(jobsTable)
+              .set({ status: advanceJobStatusSql("received") })
+              .where(eq(jobsTable.id, jobId))
+              .returning();
+            return advanced;
+          }
+          return undefined;
+        });
+      }
+
       // Keep the job's tonnage in sync when a row's weight was re-derived —
       // otherwise a corrected cell type would fix the row but leave the job
       // total (and downstream reports/PDFs) showing the old weight. Only do
@@ -2422,7 +2495,7 @@ router.patch(
         resolvedByName = resolver?.fullName || null;
       }
 
-      res.json({ battery: { ...updated, resolvedByName } });
+      res.json({ battery: { ...updated, resolvedByName }, ...(updatedJob ? { job: updatedJob } : {}) });
 
       // Fire-and-forget: record manual reviewer corrections in the audit
       // trail (covers resolved and never-flagged rows too).
