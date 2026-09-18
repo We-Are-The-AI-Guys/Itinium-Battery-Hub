@@ -8,6 +8,7 @@ import { rankManufacturerSuggestions } from "@/lib/manufacturer-suggestions";
 import {
   calculateCblLmeValue,
   calculateCustomerLmeValue,
+  calculateCustomerFinanceMasterValues,
   calculateGrossProfit,
   calculateNetProfit,
   calculatePercentageRate,
@@ -755,9 +756,10 @@ export default function JobDetailPage() {
 
   useEffect(() => {
     const customerLmeAverage = previousMonthAverage?.averageGbpPrice || "";
-    const confirmedPbTonnage = (
-      batteries.reduce((sum, battery) => sum + (parseFloat(battery.pbContentKg || "0") || 0), 0) / 1000
-    ).toFixed(3);
+    const confirmedPbKg = batteries.reduce(
+      (sum, battery) => sum + (parseFloat(battery.pbContentKg || "0") || 0),
+      0
+    );
     const wasteTractionRate = calculatePercentageRate(financials.wasteSpotRate, financials.wasteTractionPercent);
     const wasteBlocsRate = calculatePercentageRate(financials.wasteSpotRate, financials.wasteBlocsPercent);
     const customerTractionRate = calculatePercentageRate(customerLmeAverage, financials.customerTractionPercent);
@@ -767,11 +769,13 @@ export default function JobDetailPage() {
       financials.wasteBlocsTonnage, wasteBlocsRate,
       financials.wasteTransportCost, financials.wasteAdHocCosts
     );
-    const customerInvoiceValue = calculateSectionInvoiceValue(
-      confirmedPbTonnage, customerTractionRate,
+    const customerFinanceMaster = calculateCustomerFinanceMasterValues(
+      confirmedPbKg, customerTractionRate,
       financials.customerBlocsTonnage, customerBlocsRate,
       financials.customerTransportCost, financials.customerAdHocCosts
     );
+    const confirmedPbTonnage = customerFinanceMaster.tractionTonnage;
+    const customerInvoiceValue = customerFinanceMaster.invoiceValue;
     const netProfit = calculateNetProfit(wasteInvoiceValue, customerInvoiceValue);
     setFinancials((prev) => ({
       ...prev,

@@ -67,6 +67,28 @@ export function calculateSectionInvoiceValue(
   return (gross - (parseFloat(transportCost) || 0) - (parseFloat(adHocCosts) || 0)).toFixed(2);
 }
 
+export function calculateCustomerFinanceMasterValues(
+  confirmedPbKg: number,
+  tractionRate: string,
+  blocsTonnage: string,
+  blocsRate: string,
+  transportCost: string,
+  adHocCosts: string
+): { tractionTonnage: string; invoiceValue: string } {
+  const exactTractionTonnage = (Number.isFinite(confirmedPbKg) ? confirmedPbKg : 0) / 1000;
+  return {
+    tractionTonnage: exactTractionTonnage.toFixed(3),
+    invoiceValue: calculateSectionInvoiceValue(
+      String(exactTractionTonnage),
+      tractionRate,
+      blocsTonnage,
+      blocsRate,
+      transportCost,
+      adHocCosts
+    ),
+  };
+}
+
 export function calculateNetProfit(wasteInvoiceValue: string, customerInvoiceValue: string): string {
   return ((parseFloat(wasteInvoiceValue) || 0) - (parseFloat(customerInvoiceValue) || 0)).toFixed(2);
 }

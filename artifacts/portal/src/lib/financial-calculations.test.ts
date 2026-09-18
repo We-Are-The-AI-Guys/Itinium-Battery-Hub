@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateCblLmeValue,
   calculateCustomerLmeValue,
+  calculateCustomerFinanceMasterValues,
   calculateGrossProfit,
   calculateNetProfit,
   calculatePercentageRate,
@@ -44,6 +45,15 @@ describe("existing financial calculations", () => {
   it("uses the visible traction percentage before the legacy customer percentage", () => {
     expect(resolveCustomerLmePercent("75", "80")).toBe("75");
     expect(resolveCustomerLmePercent("", "80")).toBe("80");
+  });
+
+  it("uses exact Pb kilograms for the invoice while displaying tonnes to three decimals", () => {
+    expect(
+      calculateCustomerFinanceMasterValues(14085.6, "496.02", "", "0", "", "")
+    ).toEqual({
+      tractionTonnage: "14.086",
+      invoiceValue: "6986.74",
+    });
   });
 });
 
