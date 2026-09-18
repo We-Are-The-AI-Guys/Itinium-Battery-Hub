@@ -39,6 +39,11 @@ describe("financial master-log field grouping", () => {
 });
 
 describe("job-detail save controls", () => {
+  it("keeps the battery admin update handler used by collection rows", () => {
+    expect(source).toContain("async function updateBatteryAdmin");
+    expect(source).toContain("onSaveField={updateBatteryAdmin}");
+  });
+
   it("requires explicit edit mode before saving Financial Master", () => {
     expect(source).toContain("Edit Financial Master");
     expect(source).toContain("Save Financial Master");

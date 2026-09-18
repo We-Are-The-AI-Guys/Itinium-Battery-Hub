@@ -1066,6 +1066,45 @@ export default function JobDetailPage() {
     }
   }
 
+  async function updateBatteryAdmin(
+    batteryId: number,
+    updates: Record<string, string | boolean | null>
+  ) {
+    try {
+      const res = await fetch(`/api/jobs/${params.id}/batteries/${batteryId}/admin`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(updates),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to update battery");
+      }
+      setBatteries((current) =>
+        current.map((battery) => (battery.id === batteryId ? data.battery : battery))
+      );
+      setReceiptDrafts((current) => ({
+        ...current,
+        [batteryId]: receiptDraftFromBattery(data.battery),
+      }));
+      setDirtyReceiptIds((current) => {
+        const next = new Set(current);
+        next.delete(batteryId);
+        return next;
+      });
+      if (data.job) setJob(data.job);
+      setReceiptDelivery(null);
+      toast({ title: "Saved", description: "Battery details updated." });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to update battery.",
+        variant: "destructive",
+      });
+    }
+  }
+
   async function addReplacementBattery() {
     const cellType = window.prompt("Cell type for the replacement row:");
     if (cellType === null) return;
@@ -1717,7 +1756,7 @@ export default function JobDetailPage() {
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">£</span>
                         <Input
-                          value={collectionLmeUsable ? collectionLmePrice.gbpPrice : ""}
+                          value={collectionLmeUsable && collectionLmePrice ? collectionLmePrice.gbpPrice : ""}
                           placeholder="Unavailable"
                           readOnly
                           className="bg-white pl-7 font-semibold text-[#0f2744]"
