@@ -1771,7 +1771,7 @@ router.patch(
         tonnage, lmeRateUsed, calculatedValue, invoiceStatus,
         invoiceReceivedDate, dueDate, datePaid,
         siteContacts, siteHours, specialInstructions,
-        collectionDate,
+        collectionDate, notes,
         wasteSpotRate, wasteTractionPercent, wasteBlocsPercent, wasteTractionRate,
         wasteBlocsRate, wasteTractionTonnage, wasteBlocsTonnage, wasteAdHocCosts,
         wasteTransportCost, wasteInvoiceValue, wasteInvoiceNo,
@@ -1827,6 +1827,7 @@ router.patch(
       if (siteContacts !== undefined) updates.siteContacts = toStr(siteContacts);
       if (siteHours !== undefined) updates.siteHours = toStr(siteHours);
       if (specialInstructions !== undefined) updates.specialInstructions = toStr(specialInstructions);
+      if (notes !== undefined) updates.notes = toStr(notes);
       const isValidDate = (v: unknown): boolean => {
         if (!v || typeof v !== "string") return false;
         const match = /^\d{4}-\d{2}-\d{2}$/.test(v);

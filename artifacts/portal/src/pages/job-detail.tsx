@@ -316,6 +316,7 @@ export default function JobDetailPage() {
     siteHours: "",
     specialInstructions: "",
     collectionDate: "",
+    notes: "",
   });
   const collectionLmeUsable = isCollectionLmeUsable(
     collectionLmeStatus,
@@ -496,6 +497,7 @@ export default function JobDetailPage() {
             siteHours: data.job.siteHours || "",
             specialInstructions: data.job.specialInstructions || "",
             collectionDate: data.job.collectionDate || "",
+            notes: data.job.notes || "",
           });
         } else if (result.status === 404) {
           setLoadError("not_found");
@@ -1461,10 +1463,6 @@ export default function JobDetailPage() {
                 <p className="text-sm text-slate-700">{job.collectionPoint || "—"}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-slate-500 uppercase mb-1">Collection Date</p>
-                <p className="text-sm text-slate-700">{formatDate(job.collectionDate)}</p>
-              </div>
-              <div>
                 <p className="text-xs font-medium text-slate-500 uppercase mb-1">Submitted</p>
                 <p className="text-sm text-slate-700">{formatDate(job.submittedAt)}</p>
               </div>
@@ -1472,12 +1470,6 @@ export default function JobDetailPage() {
                 <p className="text-xs font-medium text-slate-500 uppercase mb-1">Tonnage (Depot)</p>
                 <p className="text-sm text-slate-700">{parseFloat(job.tonnage).toFixed(3)}t</p>
               </div>
-              {job.notes && (
-                <div className="col-span-2 md:col-span-4">
-                  <p className="text-xs font-medium text-slate-500 uppercase mb-1">Notes</p>
-                  <p className="text-sm text-slate-700">{job.notes}</p>
-                </div>
-              )}
             </div>
 
             <div className="border-t border-slate-100 pt-4">
@@ -1505,8 +1497,74 @@ export default function JobDetailPage() {
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-y border-slate-100">
-                    <tr>
+                  <thead>
+                    <tr className="border-y border-slate-200 bg-sky-50/50">
+                      <th colSpan={10} className="px-4 py-4 text-left font-normal">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <Truck className="h-4 w-4 text-[#0f2744]" />
+                            <span className="font-semibold text-[#0f2744]">Collection Sheet Details</span>
+                          </div>
+                          <Button size="sm" onClick={saveSiteDetails} disabled={savingSiteDetails}>
+                            <Save className="mr-1.5 h-3.5 w-3.5" />
+                            {savingSiteDetails ? "Saving…" : "Save collection details"}
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium uppercase text-slate-500">Driver Name</label>
+                            <Input value={job.driverName || ""} placeholder="Not assigned" disabled />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium uppercase text-slate-500">Vehicle Registration</label>
+                            <Input value={job.vehicleReg || ""} placeholder="Not assigned" disabled />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium uppercase text-slate-500">Collection Date</label>
+                            <Input
+                              type="date"
+                              value={siteDetails.collectionDate}
+                              onChange={(e) => setSiteDetails((prev) => ({ ...prev, collectionDate: e.target.value }))}
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium uppercase text-slate-500">Site Contacts</label>
+                            <Input
+                              value={siteDetails.siteContacts}
+                              onChange={(e) => setSiteDetails((prev) => ({ ...prev, siteContacts: e.target.value }))}
+                              placeholder="e.g. John Smith 07700 900123"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium uppercase text-slate-500">Site Hours</label>
+                            <Input
+                              value={siteDetails.siteHours}
+                              onChange={(e) => setSiteDetails((prev) => ({ ...prev, siteHours: e.target.value }))}
+                              placeholder="e.g. Mon–Fri 07:00–16:00"
+                            />
+                          </div>
+                          <div className="xl:col-span-3">
+                            <label className="mb-1 block text-xs font-medium uppercase text-slate-500">Special / Loading Instructions</label>
+                            <Input
+                              value={siteDetails.specialInstructions}
+                              onChange={(e) => setSiteDetails((prev) => ({ ...prev, specialInstructions: e.target.value }))}
+                              placeholder='Leave blank for "None"'
+                            />
+                          </div>
+                          <div className="md:col-span-2 xl:col-span-4">
+                            <label className="mb-1 block text-xs font-medium uppercase text-slate-500">Collection Notes</label>
+                            <textarea
+                              value={siteDetails.notes}
+                              onChange={(e) => setSiteDetails((prev) => ({ ...prev, notes: e.target.value }))}
+                              placeholder="Add any additional notes for this collection"
+                              rows={3}
+                              className="flex w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-2"
+                            />
+                          </div>
+                        </div>
+                      </th>
+                    </tr>
+                    <tr className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500">
                       <th className="px-3 py-2.5 text-left font-semibold">#</th>
                       <th className="px-3 py-2.5 text-left font-semibold">Pallet</th>
                       <th className="px-3 py-2.5 text-left font-semibold">Asset</th>
@@ -1534,58 +1592,6 @@ export default function JobDetailPage() {
                   </tbody>
                 </table>
               </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="border-l-4 border-[#0f2744] px-6 py-4 bg-slate-50/50 border-b border-slate-100">
-            <div className="flex items-center gap-2">
-              <Truck className="w-5 h-5 text-[#0f2744]" />
-              <h3 className="font-bold text-[#0f2744] text-lg">Collection Sheet Details</h3>
-              <span className="text-sm text-slate-500">(Shown on the transport company PDF)</span>
-            </div>
-          </div>
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="text-xs font-medium text-slate-500 uppercase mb-1 block">Site Contacts</label>
-                <Input
-                  value={siteDetails.siteContacts}
-                  onChange={(e) => setSiteDetails((prev) => ({ ...prev, siteContacts: e.target.value }))}
-                  placeholder="e.g. John Smith 07700 900123"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 uppercase mb-1 block">Site Hours</label>
-                <Input
-                  value={siteDetails.siteHours}
-                  onChange={(e) => setSiteDetails((prev) => ({ ...prev, siteHours: e.target.value }))}
-                  placeholder="e.g. Mon–Fri 07:00–16:00"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 uppercase mb-1 block">Collection Date</label>
-                <Input
-                  type="date"
-                  value={siteDetails.collectionDate}
-                  onChange={(e) => setSiteDetails((prev) => ({ ...prev, collectionDate: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 uppercase mb-1 block">Special / Loading Instructions</label>
-                <Input
-                  value={siteDetails.specialInstructions}
-                  onChange={(e) => setSiteDetails((prev) => ({ ...prev, specialInstructions: e.target.value }))}
-                  placeholder='Leave blank for "None"'
-                />
-              </div>
-            </div>
-            <div className="flex justify-end">
-              <Button size="sm" onClick={saveSiteDetails} disabled={savingSiteDetails}>
-                <Save className="w-3.5 h-3.5 mr-1.5" />
-                {savingSiteDetails ? "Saving…" : "Save Collection Sheet Details"}
-              </Button>
             </div>
           </div>
         </div>
