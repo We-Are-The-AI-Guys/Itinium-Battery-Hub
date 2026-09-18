@@ -121,11 +121,16 @@ router.post(
       let backfilledCount = 0;
       if (isFinite(gbpNum) && gbpNum > 0) {
         const backfillResult = await db.execute(
-          sql`UPDATE job_batteries
-              SET value_gbp = ROUND((pb_content_kg::numeric * ${gbpNum} / 1000), 2)
-              WHERE pb_content_kg IS NOT NULL
-                AND pb_content_kg::numeric > 0
-                AND (value_gbp IS NULL OR value_gbp::numeric = 0)`
+          sql`UPDATE job_batteries AS jb
+              SET value_gbp = ROUND(
+                (jb.pb_content_kg::numeric * ${gbpNum} * COALESCE(j.customer_traction_percent, j.customer_lme_percent, 0) / 100000),
+                2
+              )
+              FROM jobs AS j
+              WHERE jb.job_id = j.id
+                AND jb.pb_content_kg IS NOT NULL
+                AND jb.pb_content_kg::numeric > 0
+                AND (jb.value_gbp IS NULL OR jb.value_gbp::numeric = 0)`
         );
         backfilledCount = Number(backfillResult.rowCount) || 0;
       }

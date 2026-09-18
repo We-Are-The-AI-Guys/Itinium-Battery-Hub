@@ -11,6 +11,8 @@ import {
   calculateGrossProfit,
   calculateNetProfit,
   calculatePercentageRate,
+  calculateReceiptValueGbp,
+  resolveCustomerLmePercent,
   calculateSectionInvoiceValue,
 } from "@/lib/financial-calculations";
 import { useParams, useLocation } from "wouter";
@@ -66,16 +68,6 @@ interface PreviousMonthAverage {
   month: string;
   averageGbpPrice: string | null;
   sampleCount: number;
-}
-
-function calcValueGbp(
-  pbContentKg: number | null,
-  lmeGbpRate: number | null,
-): number | null {
-  if (pbContentKg === null || lmeGbpRate === null) return null;
-  if (!isFinite(pbContentKg) || !isFinite(lmeGbpRate)) return null;
-  const result = (pbContentKg * lmeGbpRate) / 1000;
-  return isFinite(result) ? result : null;
 }
 
 interface JobData {
@@ -251,6 +243,8 @@ export default function JobDetailPage() {
   const [confirmDate, setConfirmDate] = useState("");
   const [confirmingSchedule, setConfirmingSchedule] = useState(false);
   const cblLmeInitialRef = useRef<string | null>(null);
+  const receiptValueInputsRef = useRef<string | null>(null);
+  const previousReceiptLmeRateRef = useRef<number | null>(null);
   const lmePriceRef = useRef<LmePrice | null>(null);
   const lmePrefillDoneRef = useRef(false);
   const [prefilled, setPrefilled] = useState<Record<string, boolean>>({});
@@ -374,7 +368,6 @@ export default function JobDetailPage() {
         if (result.ok) {
           const data = result.data;
           setJob(data.job);
-          setBatteries(data.batteries);
 
           const prefilledFlags: Record<string, boolean> = {};
 
@@ -388,6 +381,22 @@ export default function JobDetailPage() {
             }
           }
           cblLmeInitialRef.current = cblLmeValue;
+          const customerLmePercent = data.job.customerLmePercent || "";
+          const customerTractionPercent =
+            data.job.customerTractionPercent || customerLmePercent;
+          const effectiveReceiptPercent = resolveCustomerLmePercent(
+            customerTractionPercent,
+            customerLmePercent
+          );
+          receiptValueInputsRef.current = `${cblLmeValue}|${effectiveReceiptPercent}`;
+          const historicalReceiptRate = parseFloat(
+            data.job.cblLmeValue || data.job.lmeRateUsed || ""
+          );
+          previousReceiptLmeRateRef.current =
+            isFinite(historicalReceiptRate) && historicalReceiptRate > 0
+              ? historicalReceiptRate
+              : null;
+          setBatteries(data.batteries);
 
           let totalInvoiceValue = data.job.totalInvoiceValue || "";
           if (!totalInvoiceValue) {
@@ -406,7 +415,7 @@ export default function JobDetailPage() {
             cblLmePercent: data.job.cblLmePercent || "",
             cblLmePrice: data.job.cblLmePrice || "",
             transportCost: data.job.transportCost || "",
-            customerLmePercent: data.job.customerLmePercent || "",
+            customerLmePercent,
             customerInvoiceValue: data.job.customerInvoiceValue || "",
             customerInvoiceNo: data.job.customerInvoiceNo || "",
             cblWasteAdviceNoteNo: data.job.cblWasteAdviceNoteNo || "",
@@ -430,7 +439,7 @@ export default function JobDetailPage() {
             wasteTransportCost: data.job.wasteTransportCost || data.job.transportCost || "",
             wasteInvoiceValue: data.job.wasteInvoiceValue || data.job.totalInvoiceValue || "",
             wasteInvoiceNo: data.job.wasteInvoiceNo || data.job.itiniumInvoiceNo || "",
-            customerTractionPercent: data.job.customerTractionPercent || data.job.customerLmePercent || "",
+            customerTractionPercent,
             customerBlocsPercent: data.job.customerBlocsPercent || "",
             customerTractionRate: data.job.customerTractionRate || "",
             customerBlocsRate: data.job.customerBlocsRate || "",
@@ -566,7 +575,14 @@ export default function JobDetailPage() {
   function recalculateBattery(battery: BatteryData, rate?: number | null): { pb: string; value: string } {
     const pbNum = battery.pbContentKg ? parseFloat(battery.pbContentKg) : null;
     const effectiveRate = rate !== undefined ? rate : getEffectiveLmeRate();
-    const valNum = calcValueGbp(pbNum, effectiveRate);
+    const valNum = calculateReceiptValueGbp(
+      pbNum,
+      effectiveRate,
+      resolveCustomerLmePercent(
+        financials.customerTractionPercent,
+        financials.customerLmePercent
+      )
+    );
     return {
       pb: pbNum !== null && isFinite(pbNum) ? pbNum.toFixed(3) : "",
       value: valNum !== null ? valNum.toFixed(2) : "",
@@ -580,7 +596,13 @@ export default function JobDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(rate !== null ? { lmeGbpRate: rate } : {}),
+        body: JSON.stringify({
+          ...(rate !== null ? { lmeGbpRate: rate } : {}),
+          customerLmePercent: resolveCustomerLmePercent(
+            financials.customerTractionPercent,
+            financials.customerLmePercent
+          ),
+        }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -601,7 +623,7 @@ export default function JobDetailPage() {
           description:
             "Pb content re-derived from the cell model catalogue and £ Value recalculated using " +
             (parseFloat(financials.cblLmeValue) > 0 ? "CBL LME Value" : "latest LME price") +
-            ".",
+            ` at ${parseFloat(resolveCustomerLmePercent(financials.customerTractionPercent, financials.customerLmePercent) || "0") || 0}% Customer LME.`,
         });
       } else {
         const err = await res.json().catch(() => ({}));
@@ -773,18 +795,50 @@ export default function JobDetailPage() {
 
   useEffect(() => {
     if (cblLmeInitialRef.current === null) return;
-    if (financials.cblLmeValue === cblLmeInitialRef.current) return;
+    const effectiveReceiptPercent = resolveCustomerLmePercent(
+      financials.customerTractionPercent,
+      financials.customerLmePercent
+    );
+    const calculationKey = `${financials.cblLmeValue}|${effectiveReceiptPercent}`;
+    if (calculationKey === receiptValueInputsRef.current) return;
+    const previousInputs = receiptValueInputsRef.current?.split("|") ?? [];
+    const previousRate = previousReceiptLmeRateRef.current;
+    const previousPercent = previousInputs[1] || "";
     cblLmeInitialRef.current = financials.cblLmeValue;
+    receiptValueInputsRef.current = calculationKey;
     const rate = parseFloat(financials.cblLmeValue);
     if (!isFinite(rate) || rate <= 0) return;
+    previousReceiptLmeRateRef.current = rate;
     setBatteries((prev) =>
       prev.map((b) => {
         const pbNum = b.pbContentKg ? parseFloat(b.pbContentKg) : null;
-        const valNum = calcValueGbp(pbNum, rate);
+        const previousAutoValue = calculateReceiptValueGbp(
+          pbNum,
+          previousRate,
+          previousPercent
+        );
+        const legacyGrossValue = calculateReceiptValueGbp(
+          pbNum,
+          previousRate,
+          "100"
+        );
+        const savedValue = parseFloat(b.valueGbp || "");
+        const isAutomatic =
+          !isFinite(savedValue)
+          || savedValue === 0
+          || [previousAutoValue, legacyGrossValue].some(
+            (candidate) => candidate !== null && Number(candidate.toFixed(2)) === savedValue
+          );
+        if (!isAutomatic) return b;
+        const valNum = calculateReceiptValueGbp(pbNum, rate, effectiveReceiptPercent);
         return valNum !== null ? { ...b, valueGbp: valNum.toFixed(2) } : b;
       })
     );
-  }, [financials.cblLmeValue]);
+  }, [
+    financials.cblLmeValue,
+    financials.customerLmePercent,
+    financials.customerTractionPercent,
+  ]);
 
   async function saveFinancials() {
     setSaving(true);
@@ -805,6 +859,7 @@ export default function JobDetailPage() {
       if (res.ok) {
         const data = await res.json();
         setJob(data.job);
+        if (Array.isArray(data.batteries)) setBatteries(data.batteries);
         setFinancials((prev) => ({
           ...prev,
           invoiceStatus: data.job.invoiceStatus || prev.invoiceStatus,
@@ -1444,6 +1499,10 @@ export default function JobDetailPage() {
                         onSave={updateBatteryAdmin}
                         onRemove={canEditResolved ? removeBattery : undefined}
                         lmeGbpRate={getEffectiveLmeRate()}
+                        customerLmePercent={resolveCustomerLmePercent(
+                          financials.customerTractionPercent,
+                          financials.customerLmePercent
+                        )}
                       />
                     ))}
                   </tbody>
@@ -2190,12 +2249,14 @@ function BatteryAdminRow({
   onSave,
   onRemove,
   lmeGbpRate,
+  customerLmePercent,
 }: {
   battery: BatteryData;
   index: number;
   onSave: (id: number, updates: Record<string, string | boolean | null>) => void;
   onRemove?: (battery: BatteryData) => void;
   lmeGbpRate: number | null;
+  customerLmePercent: string;
 }) {
   const [receipt, setReceipt] = useState(battery.receiptConfirmed ?? false);
   const [pb, setPb] = useState(battery.pbContentKg || "");
@@ -2212,17 +2273,17 @@ function BatteryAdminRow({
     if (lmeGbpRate === null) return;
     const pbNum = battery.pbContentKg ? parseFloat(battery.pbContentKg) : null;
     if (pbNum !== null && isFinite(pbNum) && !battery.valueGbp) {
-      const valNum = calcValueGbp(pbNum, lmeGbpRate);
+      const valNum = calculateReceiptValueGbp(pbNum, lmeGbpRate, customerLmePercent);
       if (valNum !== null) {
         setValue(valNum.toFixed(2));
         setIsAutoCalced(true);
       }
     }
-  }, [battery.pbContentKg, battery.valueGbp, lmeGbpRate]);
+  }, [battery.pbContentKg, battery.valueGbp, lmeGbpRate, customerLmePercent]);
 
   function handleRecalculate() {
     const pbNum = pb ? parseFloat(pb) : null;
-    const valNum = calcValueGbp(pbNum, lmeGbpRate);
+    const valNum = calculateReceiptValueGbp(pbNum, lmeGbpRate, customerLmePercent);
     if (valNum !== null) setValue(valNum.toFixed(2));
     setIsAutoCalced(true);
   }

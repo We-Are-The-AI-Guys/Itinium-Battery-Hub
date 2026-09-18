@@ -32,6 +32,12 @@ import {
   JOB_STATUSES,
 } from "../lib/job-status";
 import { drawConfirmedCollectionTable } from "../lib/confirmed-collection-table";
+import {
+  calculateReceiptValueGbp,
+  isAutomaticReceiptValue,
+  resolveCustomerLmePercent,
+  resolvePreviousReceiptLmeRate,
+} from "../lib/receipt-value";
 
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
@@ -1322,8 +1328,7 @@ router.post(
           );
           let valueGbp: string | null = null;
           if (pbContentKg && latestLmeGbpPrice !== null) {
-            const val = (parseFloat(pbContentKg) * latestLmeGbpPrice) / 1000;
-            if (isFinite(val)) valueGbp = val.toFixed(2);
+            valueGbp = calculateReceiptValueGbp(pbContentKg, latestLmeGbpPrice, null);
           }
           return {
             jobId: job.id,
@@ -1865,18 +1870,82 @@ router.patch(
         return;
       }
 
-      const [updated] = await db
-        .update(jobsTable)
-        .set(updates)
-        .where(eq(jobsTable.id, jobId))
-        .returning();
+      const result = await db.transaction(async (tx) => {
+        const [lockedExistingJob] = await tx
+          .select()
+          .from(jobsTable)
+          .where(eq(jobsTable.id, jobId))
+          .for("update");
+        if (!lockedExistingJob) return null;
 
-      if (!updated) {
+        const [updated] = await tx
+          .update(jobsTable)
+          .set(updates)
+          .where(eq(jobsTable.id, jobId))
+          .returning();
+        if (!updated) return null;
+
+        const oldEffectivePercent = resolveCustomerLmePercent(
+          lockedExistingJob.customerTractionPercent,
+          lockedExistingJob.customerLmePercent
+        );
+        const newEffectivePercent = resolveCustomerLmePercent(
+          updated.customerTractionPercent,
+          updated.customerLmePercent
+        );
+        const financialInputChanged =
+          Number(updated.cblLmeValue) !== Number(lockedExistingJob.cblLmeValue)
+          || Number(newEffectivePercent) !== Number(oldEffectivePercent);
+        let updatedBatteries: Array<typeof jobBatteriesTable.$inferSelect> | undefined;
+        if (financialInputChanged) {
+          const latestFallbackRate = await getEffectiveLmeRateForJob(null);
+          const oldRate = resolvePreviousReceiptLmeRate(
+            lockedExistingJob.cblLmeValue,
+            lockedExistingJob.lmeRateUsed,
+            latestFallbackRate
+          );
+          const rate = await getEffectiveLmeRateForJob(updated.cblLmeValue);
+          const batteries = await tx
+            .select()
+            .from(jobBatteriesTable)
+            .where(eq(jobBatteriesTable.jobId, jobId));
+          updatedBatteries = [];
+          for (const battery of batteries) {
+            const shouldRecalculate = isAutomaticReceiptValue(
+              battery.valueGbp,
+              battery.pbContentKg,
+              oldRate,
+              oldEffectivePercent
+            );
+            const adjustedValue = shouldRecalculate
+              ? calculateReceiptValueGbp(
+                  battery.pbContentKg,
+                  rate,
+                  newEffectivePercent
+                )
+              : battery.valueGbp;
+            if (adjustedValue !== null && adjustedValue !== battery.valueGbp) {
+              const [saved] = await tx
+                .update(jobBatteriesTable)
+                .set({ valueGbp: adjustedValue })
+                .where(eq(jobBatteriesTable.id, battery.id))
+                .returning();
+              updatedBatteries.push(saved);
+            } else {
+              updatedBatteries.push(battery);
+            }
+          }
+        }
+
+        return { updated, updatedBatteries };
+      });
+
+      if (!result) {
         res.status(404).json({ message: "Job not found" });
         return;
       }
 
-      res.json({ job: updated });
+      res.json({ job: result.updated, batteries: result.updatedBatteries });
     } catch (error) {
       console.error("Job admin update error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -2317,13 +2386,23 @@ router.patch(
             updates.pbContentKg = derivedPb;
             if (valueGbp === undefined) {
               const [parentJob] = await db
-                .select({ cblLmeValue: jobsTable.cblLmeValue })
+                .select({
+                  cblLmeValue: jobsTable.cblLmeValue,
+                  customerLmePercent: jobsTable.customerLmePercent,
+                  customerTractionPercent: jobsTable.customerTractionPercent,
+                })
                 .from(jobsTable)
                 .where(eq(jobsTable.id, jobId));
               const rate = await getEffectiveLmeRateForJob(parentJob?.cblLmeValue ?? null);
               if (rate !== null) {
-                const val = (parseFloat(derivedPb) * rate) / 1000;
-                if (isFinite(val)) updates.valueGbp = val.toFixed(2);
+                updates.valueGbp = calculateReceiptValueGbp(
+                  derivedPb,
+                  rate,
+                  resolveCustomerLmePercent(
+                    parentJob?.customerTractionPercent ?? null,
+                    parentJob?.customerLmePercent ?? null
+                  )
+                );
               }
             }
           }
@@ -2522,6 +2601,14 @@ router.post(
         if (isFinite(parsed) && parsed > 0) rate = parsed;
       }
       if (rate === null) rate = await getEffectiveLmeRateForJob(job.cblLmeValue);
+      const requestedPercent = req.body?.customerLmePercent;
+      const effectiveCustomerLmePercent =
+        requestedPercent !== undefined
+          ? String(requestedPercent)
+          : resolveCustomerLmePercent(
+              job.customerTractionPercent,
+              job.customerLmePercent
+            );
 
       const batteries = await db
         .select()
@@ -2555,8 +2642,7 @@ router.post(
         const pbNum = pbStr ? parseFloat(pbStr) : NaN;
         let valueStr = b.valueGbp;
         if (rate !== null && isFinite(pbNum) && pbNum > 0) {
-          const val = (pbNum * rate) / 1000;
-          if (isFinite(val)) valueStr = val.toFixed(2);
+          valueStr = calculateReceiptValueGbp(pbNum, rate, effectiveCustomerLmePercent);
         }
         if (pbStr !== b.pbContentKg || valueStr !== b.valueGbp) {
           const [updated] = await db
@@ -2603,11 +2689,16 @@ router.post(
       }
 
       const result = await db.execute(
-        sql`UPDATE job_batteries
-            SET value_gbp = ROUND((pb_content_kg::numeric * ${gbpPrice} / 1000), 2)
-            WHERE pb_content_kg IS NOT NULL
-              AND pb_content_kg::numeric > 0
-              AND (value_gbp IS NULL OR value_gbp::numeric = 0)`
+        sql`UPDATE job_batteries AS jb
+            SET value_gbp = ROUND(
+              (jb.pb_content_kg::numeric * ${gbpPrice} * COALESCE(j.customer_traction_percent, j.customer_lme_percent, 0) / 100000),
+              2
+            )
+            FROM jobs AS j
+            WHERE jb.job_id = j.id
+              AND jb.pb_content_kg IS NOT NULL
+              AND jb.pb_content_kg::numeric > 0
+              AND (jb.value_gbp IS NULL OR jb.value_gbp::numeric = 0)`
       );
 
       const updatedCount = Number(result.rowCount) || 0;

@@ -5,6 +5,8 @@ import {
   calculateGrossProfit,
   calculateNetProfit,
   calculatePercentageRate,
+  calculateReceiptValueGbp,
+  resolveCustomerLmePercent,
   calculateSectionInvoiceValue,
 } from "./financial-calculations";
 
@@ -28,6 +30,20 @@ describe("existing financial calculations", () => {
 
   it("converts net Pb kilograms to tonnes before applying the LME rate", () => {
     expect(calculateCustomerLmeValue(500, "2000", "75")).toBe("750.00");
+  });
+
+  it("applies Customer %LME to each receipt row without changing its Pb input", () => {
+    const pbContentKg = 253.2;
+    expect(calculateReceiptValueGbp(pbContentKg, 1364.81, "80")?.toFixed(2)).toBe("276.46");
+    expect(calculateReceiptValueGbp(pbContentKg, 1364.81, "100")?.toFixed(2)).toBe("345.57");
+    expect(calculateReceiptValueGbp(pbContentKg, 1364.81, "72.5")?.toFixed(2)).toBe("250.54");
+    expect(calculateReceiptValueGbp(pbContentKg, 1364.81, "")?.toFixed(2)).toBe("0.00");
+    expect(pbContentKg).toBe(253.2);
+  });
+
+  it("uses the visible traction percentage before the legacy customer percentage", () => {
+    expect(resolveCustomerLmePercent("75", "80")).toBe("75");
+    expect(resolveCustomerLmePercent("", "80")).toBe("80");
   });
 });
 

@@ -31,6 +31,24 @@ export function calculateCustomerLmeValue(
   return (weightTonnes * rateValue * (percentValue / 100)).toFixed(2);
 }
 
+export function calculateReceiptValueGbp(
+  pbContentKg: number | null,
+  lmeGbpRate: number | null,
+  customerLmePercent: string | null
+): number | null {
+  if (pbContentKg === null || lmeGbpRate === null) return null;
+  const percent = parseFloat(customerLmePercent || "0");
+  if (![pbContentKg, lmeGbpRate, percent].every(Number.isFinite)) return null;
+  return (pbContentKg * lmeGbpRate * percent) / 100_000;
+}
+
+export function resolveCustomerLmePercent(
+  customerTractionPercent: string,
+  legacyCustomerLmePercent: string
+): string {
+  return customerTractionPercent || legacyCustomerLmePercent;
+}
+
 export function calculatePercentageRate(baseRate: string, percent: string): string {
   return ((parseFloat(baseRate) || 0) * ((parseFloat(percent) || 0) / 100)).toFixed(2);
 }
