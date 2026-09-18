@@ -74,4 +74,13 @@ describe("job-detail save controls", () => {
     const rowSource = source.slice(rowStart, rowEnd);
     expect(rowSource).not.toContain(">Save</Button>");
   });
+
+  it("keeps receipt notes editable through the shared receipt draft", () => {
+    const rowStart = source.indexOf("function BatteryAdminRow");
+    const rowEnd = source.indexOf("function FinancialField", rowStart);
+    const rowSource = source.slice(rowStart, rowEnd);
+    expect(rowSource).toContain("value={draft.adminNotes}");
+    expect(rowSource).toContain("adminNotes: e.target.value");
+    expect(rowSource).toContain('placeholder="Add notes…"');
+  });
 });

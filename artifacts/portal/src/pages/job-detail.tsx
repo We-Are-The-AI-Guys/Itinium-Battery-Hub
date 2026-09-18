@@ -1678,7 +1678,7 @@ export default function JobDetailPage() {
                       <th className="px-3 py-2.5 text-center font-semibold">Receipt Confirmed</th>
                       <th className="px-3 py-2.5 text-left font-semibold">Pb Content (Kg)</th>
                       <th className="px-3 py-2.5 text-left font-semibold">£ Value</th>
-                      <th className="px-3 py-2.5 text-left font-semibold">Admin Notes</th>
+                      <th className="px-3 py-2.5 text-left font-semibold">Notes</th>
                       <th className="px-3 py-2.5 text-right font-semibold">Actions</th>
                     </tr>
                   </thead>
@@ -2559,10 +2559,11 @@ function BatteryAdminRow({
         />
       </td>
       <td className="px-3 py-2.5">
-        <Input
+        <textarea
           disabled={disabled}
-          placeholder="Notes..."
-          className="h-8 w-36 text-sm bg-slate-50"
+          placeholder="Add notes…"
+          rows={2}
+          className="min-h-16 w-56 resize-y rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           value={draft.adminNotes}
           onChange={(e) => onChange(battery.id, { adminNotes: e.target.value })}
         />
