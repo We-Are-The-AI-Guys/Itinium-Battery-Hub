@@ -155,6 +155,22 @@ interface BatteryData {
   resolvedByName: string | null;
 }
 
+interface ReceiptDraft {
+  receiptConfirmed: boolean;
+  pbContentKg: string;
+  valueGbp: string;
+  adminNotes: string;
+}
+
+function receiptDraftFromBattery(battery: BatteryData): ReceiptDraft {
+  return {
+    receiptConfirmed: battery.receiptConfirmed ?? false,
+    pbContentKg: battery.pbContentKg || "",
+    valueGbp: battery.valueGbp || "",
+    adminNotes: battery.adminNotes || "",
+  };
+}
+
 interface ReceiptDeliveryInfo {
   ready: boolean;
   reviewedCount: number;
@@ -229,6 +245,7 @@ export default function JobDetailPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [financialEditing, setFinancialEditing] = useState(false);
   const [autoConfirming, setAutoConfirming] = useState(false);
   const [autofillingReview, setAutofillingReview] = useState(false);
   const [lmePrice, setLmePrice] = useState<LmePrice | null>(null);
@@ -289,6 +306,10 @@ export default function JobDetailPage() {
     customerTransportCost: "",
     netProfit: "",
   });
+  const financialSnapshotRef = useRef(financials);
+  const [receiptDrafts, setReceiptDrafts] = useState<Record<number, ReceiptDraft>>({});
+  const [dirtyReceiptIds, setDirtyReceiptIds] = useState<Set<number>>(new Set());
+  const [savingReceiptRows, setSavingReceiptRows] = useState(false);
 
   const [siteDetails, setSiteDetails] = useState({
     siteContacts: "",
@@ -318,6 +339,9 @@ export default function JobDetailPage() {
   // resolved and never-flagged ones) to fix later-discovered mistakes.
   const canEditResolved = userRole === "accounts" || userRole === "head_office_admin";
   const canManageStatus = userRole === "accounts" || userRole === "head_office_admin";
+  const canEditFinancials =
+    userRole === "team_leader" || userRole === "accounts" || userRole === "head_office_admin";
+  const canEditReceipt = canEditFinancials;
 
   const hasFlaggedCellTypes = batteries.some((b) => b.cellModelFlagReason);
   const hasFlaggedManufacturers = batteries.some((b) => b.manufacturerFlagReason);
@@ -402,6 +426,15 @@ export default function JobDetailPage() {
               ? historicalReceiptRate
               : null;
           setBatteries(data.batteries);
+          setReceiptDrafts(
+            Object.fromEntries(
+              (data.batteries as BatteryData[]).map((battery) => [
+                battery.id,
+                receiptDraftFromBattery(battery),
+              ])
+            )
+          );
+          setDirtyReceiptIds(new Set());
 
           let totalInvoiceValue = data.job.totalInvoiceValue || "";
           if (!totalInvoiceValue) {
@@ -414,7 +447,7 @@ export default function JobDetailPage() {
 
           setPrefilled(prefilledFlags);
 
-          setFinancials({
+          const loadedFinancials = {
             tonnage: data.job.tonnage || "",
             cblLmeValue,
             cblLmePercent: data.job.cblLmePercent || "",
@@ -453,7 +486,10 @@ export default function JobDetailPage() {
             customerAdHocCosts: data.job.customerAdHocCosts || "",
             customerTransportCost: data.job.customerTransportCost || "",
             netProfit: data.job.netProfit || "",
-          });
+          };
+          setFinancials(loadedFinancials);
+          financialSnapshotRef.current = loadedFinancials;
+          setFinancialEditing(false);
 
           setSiteDetails({
             siteContacts: data.job.siteContacts || "",
@@ -899,13 +935,12 @@ export default function JobDetailPage() {
         const data = await res.json();
         setJob(data.job);
         if (Array.isArray(data.batteries)) setBatteries(data.batteries);
-        setFinancials((prev) => ({
-          ...prev,
-          invoiceStatus: data.job.invoiceStatus || prev.invoiceStatus,
-          datePaid: data.job.datePaid || "",
-          invoiceReceivedDate: data.job.invoiceReceivedDate || "",
-          dueDate: data.job.dueDate || "",
-        }));
+        const persistedFinancials = Object.fromEntries(
+          Object.keys(financials).map((key) => [key, data.job[key] ?? ""])
+        ) as typeof financials;
+        setFinancials(persistedFinancials);
+        financialSnapshotRef.current = persistedFinancials;
+        setFinancialEditing(false);
         toast({ title: "Saved", description: "Financial details updated successfully." });
       } else {
         const err = await res.json().catch(() => ({}));
@@ -915,6 +950,90 @@ export default function JobDetailPage() {
       toast({ title: "Error", description: "Network error.", variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  }
+
+  function startEditingFinancials() {
+    financialSnapshotRef.current = { ...financials };
+    setFinancialEditing(true);
+  }
+
+  function cancelEditingFinancials() {
+    setFinancials(financialSnapshotRef.current);
+    setFinancialEditing(false);
+  }
+
+  function updateReceiptDraft(batteryId: number, updates: Partial<ReceiptDraft>) {
+    setReceiptDrafts((current) => ({
+      ...current,
+      [batteryId]: {
+        ...(current[batteryId] || receiptDraftFromBattery(
+          batteries.find((battery) => battery.id === batteryId)!
+        )),
+        ...updates,
+      },
+    }));
+    setDirtyReceiptIds((current) => new Set(current).add(batteryId));
+  }
+
+  async function saveReceiptRows() {
+    const ids = Array.from(dirtyReceiptIds);
+    if (ids.length === 0) return;
+    setSavingReceiptRows(true);
+    const saved: Array<{ batteryId: number; battery: BatteryData; job?: JobData }> = [];
+    const failedIds: number[] = [];
+    for (const batteryId of ids) {
+      try {
+        const draft = receiptDrafts[batteryId];
+        const res = await fetch(`/api/jobs/${params.id}/batteries/${batteryId}/admin`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            receiptConfirmed: draft.receiptConfirmed,
+            pbContentKg: draft.pbContentKg || null,
+            valueGbp: draft.valueGbp || null,
+            adminNotes: draft.adminNotes || null,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || "Failed to save battery");
+        saved.push({
+          batteryId,
+          battery: data.battery as BatteryData,
+          job: data.job as JobData | undefined,
+        });
+      } catch {
+        failedIds.push(batteryId);
+      }
+    }
+    if (saved.length > 0) {
+      const savedById = new Map(saved.map((result) => [result.batteryId, result.battery]));
+      setBatteries((current) =>
+        current.map((battery) => savedById.get(battery.id) || battery)
+      );
+      setReceiptDrafts((current) => {
+        const next = { ...current };
+        for (const result of saved) next[result.batteryId] = receiptDraftFromBattery(result.battery);
+        return next;
+      });
+      const latestJob = saved.at(-1)?.job;
+      if (latestJob) setJob(latestJob);
+      setReceiptDelivery(null);
+    }
+    setDirtyReceiptIds(new Set(failedIds));
+    setSavingReceiptRows(false);
+    if (failedIds.length === 0) {
+      toast({
+        title: "Receipt table saved",
+        description: `${saved.length} ${saved.length === 1 ? "row" : "rows"} updated.`,
+      });
+    } else {
+      toast({
+        title: "Some rows could not be saved",
+        description: `${saved.length} saved; ${failedIds.length} still need saving.`,
+        variant: "destructive",
+      });
     }
   }
 
@@ -944,31 +1063,6 @@ export default function JobDetailPage() {
       }
     } catch {
       toast({ title: "Error", description: "Network error.", variant: "destructive" });
-    }
-  }
-
-  async function updateBatteryAdmin(batteryId: number, updates: Record<string, string | boolean | null>) {
-    try {
-      const res = await fetch(`/api/jobs/${params.id}/batteries/${batteryId}/admin`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(updates),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setBatteries((prev) =>
-          prev.map((b) => (b.id === batteryId ? data.battery : b))
-        );
-        if (data.job) setJob(data.job);
-        setReceiptDelivery(null);
-        toast({ title: "Saved", description: "Battery details updated." });
-      } else {
-        const err = await res.json().catch(() => ({}));
-        toast({ title: "Error", description: err.message || "Failed to update battery.", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Error", description: "Failed to update battery.", variant: "destructive" });
     }
   }
 
@@ -1473,12 +1567,22 @@ export default function JobDetailPage() {
                   Battery Receipt Confirmation & Pb Content
                 </h4>
                 <div className="flex items-center gap-3">
+                    {canEditReceipt && <Button
+                      size="sm"
+                      className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700"
+                      onClick={saveReceiptRows}
+                      disabled={savingReceiptRows || dirtyReceiptIds.size === 0}
+                    >
+                      <Save className="w-3 h-3" />
+                      {savingReceiptRows ? "Saving…" : `Save table${dirtyReceiptIds.size ? ` (${dirtyReceiptIds.size})` : ""}`}
+                    </Button>}
                     {canEditResolved && (
                       <Button
                         variant="outline"
                         size="sm"
                         className="h-7 text-xs gap-1"
                         onClick={addReplacementBattery}
+                        disabled={savingReceiptRows}
                       >
                         <Plus className="w-3 h-3" />
                         Add row
@@ -1489,7 +1593,11 @@ export default function JobDetailPage() {
                       size="sm"
                       className="h-7 text-xs gap-1 border-green-300 text-green-700 hover:bg-green-50"
                       onClick={autoConfirmAll}
-                      disabled={autoConfirming || !batteries.some((battery) => battery.receiptConfirmed !== true)}
+                      disabled={
+                        savingReceiptRows
+                        || autoConfirming
+                        || !batteries.some((battery) => battery.receiptConfirmed !== true)
+                      }
                     >
                       <CheckCircle2 className="w-3 h-3" />
                       {autoConfirming ? "Confirming…" : "Auto-confirm all"}
@@ -1507,7 +1615,7 @@ export default function JobDetailPage() {
                     size="sm"
                     className="h-7 text-xs gap-1"
                     onClick={recalculateAll}
-                    disabled={getEffectiveLmeRate() === null}
+                    disabled={savingReceiptRows || getEffectiveLmeRate() === null}
                   >
                     <RefreshCw className="w-3 h-3" />
                     Recalculate All
@@ -1535,7 +1643,9 @@ export default function JobDetailPage() {
                         key={b.id}
                         battery={b}
                         index={i}
-                        onSave={updateBatteryAdmin}
+                        draft={receiptDrafts[b.id] || receiptDraftFromBattery(b)}
+                        onChange={updateReceiptDraft}
+                        disabled={!canEditReceipt || savingReceiptRows}
                         onRemove={canEditResolved ? removeBattery : undefined}
                         lmeGbpRate={getEffectiveLmeRate()}
                         customerLmePercent={resolveCustomerLmePercent(
@@ -1561,18 +1671,38 @@ export default function JobDetailPage() {
                   </tfoot>
                 </table>
               </div>
+              {canEditReceipt && <div className="mt-3 flex justify-end">
+                <Button
+                  size="sm"
+                  className="gap-1.5 bg-green-600 hover:bg-green-700"
+                  onClick={saveReceiptRows}
+                  disabled={savingReceiptRows || dirtyReceiptIds.size === 0}
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {savingReceiptRows ? "Saving receipt table…" : `Save receipt table${dirtyReceiptIds.size ? ` (${dirtyReceiptIds.size})` : ""}`}
+                </Button>
+              </div>}
             </div>
 
             <div className="border-t border-slate-200 pt-6">
-              <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <h4 className="font-semibold text-[#0f2744] flex items-center gap-2">
                   <Calculator className="w-4 h-4 text-[#0ea5e9]" />
                   Financial Details (Master Job Log)
                 </h4>
-                <p className="text-xs text-slate-500">
-                  Traction and Blocs are calculated separately using the workbook rules.
-                </p>
+                <div className="flex items-center gap-3">
+                  <p className="text-xs text-slate-500">
+                    Traction and Blocs are calculated separately using the workbook rules.
+                  </p>
+                  {!financialEditing && canEditFinancials && (
+                    <Button variant="outline" size="sm" onClick={startEditingFinancials}>
+                      <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                      Edit Financial Master
+                    </Button>
+                  )}
+                </div>
               </div>
+              <fieldset disabled={!financialEditing}>
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.8fr_1.1fr_1.1fr]">
                 <section className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
                   <div className="mb-4 border-b border-slate-200 pb-3">
@@ -1753,8 +1883,9 @@ export default function JobDetailPage() {
                   ].map((opt) => (
                     <button
                       key={opt.value}
+                      disabled={!canManageStatus}
                       onClick={() => setFinancials((p) => ({ ...p, invoiceStatus: opt.value }))}
-                      className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-all ${
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
                         financials.invoiceStatus === opt.value
                           ? "bg-[#0ea5e9] text-white border-[#0ea5e9]"
                           : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
@@ -1766,19 +1897,22 @@ export default function JobDetailPage() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
-                <Button
-                  onClick={saveFinancials}
-                  disabled={
-                    saving
-                    || !collectionLmeUsable
-                  }
-                  className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
-                >
-                  <Save className="w-4 h-4 mr-2" />
-                  {saving ? "Saving..." : "Save Financial Details"}
-                </Button>
-              </div>
+              {financialEditing && (
+                <div className="flex items-center gap-2 mt-6 pt-4 border-t border-slate-100">
+                  <Button
+                    onClick={saveFinancials}
+                    disabled={saving || !collectionLmeUsable}
+                    className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
+                  >
+                    <Save className="w-4 h-4 mr-2" />
+                    {saving ? "Saving..." : "Save Financial Master"}
+                  </Button>
+                  <Button variant="outline" onClick={cancelEditingFinancials} disabled={saving}>
+                    Cancel
+                  </Button>
+                </div>
+              )}
+              </fieldset>
 
               {(userRole === "accounts" || userRole === "head_office_admin") && (
                 <div className="mt-6 rounded-lg border border-sky-200 bg-sky-50/60 p-4">
@@ -2296,49 +2430,44 @@ function InlineFlagEdit({
 function BatteryAdminRow({
   battery,
   index,
-  onSave,
+  draft,
+  onChange,
+  disabled,
   onRemove,
   lmeGbpRate,
   customerLmePercent,
 }: {
   battery: BatteryData;
   index: number;
-  onSave: (id: number, updates: Record<string, string | boolean | null>) => void;
+  draft: ReceiptDraft;
+  onChange: (id: number, updates: Partial<ReceiptDraft>) => void;
+  disabled: boolean;
   onRemove?: (battery: BatteryData) => void;
   lmeGbpRate: number | null;
   customerLmePercent: string;
 }) {
-  const [receipt, setReceipt] = useState(battery.receiptConfirmed ?? false);
-  const [pb, setPb] = useState(battery.pbContentKg || "");
-  const [value, setValue] = useState(battery.valueGbp || "");
-  const [notes, setNotes] = useState(battery.adminNotes || "");
   const [isAutoCalced, setIsAutoCalced] = useState(false);
 
   useEffect(() => {
-    setPb(battery.pbContentKg || "");
-    setValue(battery.valueGbp || "");
-  }, [battery.pbContentKg, battery.valueGbp]);
-
-  useEffect(() => {
-    if (lmeGbpRate === null) return;
+    if (disabled || lmeGbpRate === null) return;
     const pbNum = battery.pbContentKg ? parseFloat(battery.pbContentKg) : null;
     if (pbNum !== null && isFinite(pbNum) && !battery.valueGbp) {
       const valNum = calculateReceiptValueGbp(pbNum, lmeGbpRate, customerLmePercent);
       if (valNum !== null) {
-        setValue(valNum.toFixed(2));
+        onChange(battery.id, { valueGbp: valNum.toFixed(2) });
         setIsAutoCalced(true);
       }
     }
-  }, [battery.pbContentKg, battery.valueGbp, lmeGbpRate, customerLmePercent]);
+  }, [battery.id, battery.pbContentKg, battery.valueGbp, disabled, lmeGbpRate, customerLmePercent]);
 
   function handleRecalculate() {
-    const pbNum = pb ? parseFloat(pb) : null;
+    const pbNum = draft.pbContentKg ? parseFloat(draft.pbContentKg) : null;
     const valNum = calculateReceiptValueGbp(pbNum, lmeGbpRate, customerLmePercent);
-    if (valNum !== null) setValue(valNum.toFixed(2));
+    if (valNum !== null) onChange(battery.id, { valueGbp: valNum.toFixed(2) });
     setIsAutoCalced(true);
   }
 
-  const canRecalculate = pb && lmeGbpRate !== null;
+  const canRecalculate = draft.pbContentKg && lmeGbpRate !== null;
 
   return (
     <tr className={index % 2 === 0 ? "bg-white" : "bg-slate-50/30"}>
@@ -2353,10 +2482,9 @@ function BatteryAdminRow({
       <td className="px-3 py-2.5 text-center">
         <div className="flex flex-col items-center gap-1">
           <Switch
-            checked={receipt}
-            onCheckedChange={(checked) => {
-              setReceipt(checked);
-            }}
+            disabled={disabled}
+            checked={draft.receiptConfirmed}
+            onCheckedChange={(checked) => onChange(battery.id, { receiptConfirmed: checked })}
           />
           {battery.receiptReviewed && (
             <span className="text-[10px] font-medium text-green-700">Reviewed</span>
@@ -2365,30 +2493,33 @@ function BatteryAdminRow({
       </td>
       <td className="px-3 py-2.5">
         <Input
+          disabled={disabled}
           type="number"
           step="0.001"
           placeholder="0.000"
-          className={`h-8 w-24 text-sm ${isAutoCalced && pb ? "bg-sky-50 border-sky-200" : "bg-slate-50"}`}
-          value={pb}
-          onChange={(e) => { setPb(e.target.value); setIsAutoCalced(false); }}
+          className={`h-8 w-24 text-sm ${isAutoCalced && draft.pbContentKg ? "bg-sky-50 border-sky-200" : "bg-slate-50"}`}
+          value={draft.pbContentKg}
+          onChange={(e) => { onChange(battery.id, { pbContentKg: e.target.value }); setIsAutoCalced(false); }}
         />
       </td>
       <td className="px-3 py-2.5">
         <Input
+          disabled={disabled}
           type="number"
           step="0.01"
           placeholder="0.00"
-          className={`h-8 w-24 text-sm ${isAutoCalced && value ? "bg-sky-50 border-sky-200" : "bg-slate-50"}`}
-          value={value}
-          onChange={(e) => { setValue(e.target.value); setIsAutoCalced(false); }}
+          className={`h-8 w-24 text-sm ${isAutoCalced && draft.valueGbp ? "bg-sky-50 border-sky-200" : "bg-slate-50"}`}
+          value={draft.valueGbp}
+          onChange={(e) => { onChange(battery.id, { valueGbp: e.target.value }); setIsAutoCalced(false); }}
         />
       </td>
       <td className="px-3 py-2.5">
         <Input
+          disabled={disabled}
           placeholder="Notes..."
           className="h-8 w-36 text-sm bg-slate-50"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          value={draft.adminNotes}
+          onChange={(e) => onChange(battery.id, { adminNotes: e.target.value })}
         />
       </td>
       <td className="px-3 py-2.5 text-right">
@@ -2399,32 +2530,19 @@ function BatteryAdminRow({
               size="sm"
               className="h-7 w-7 p-0"
               onClick={handleRecalculate}
+              disabled={disabled}
               title="Recalculate Pb & Value"
             >
               <RefreshCw className="w-3 h-3" />
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() =>
-              onSave(battery.id, {
-                receiptConfirmed: receipt,
-                pbContentKg: pb || null,
-                valueGbp: value || null,
-                adminNotes: notes || null,
-              })
-            }
-          >
-            Save
-          </Button>
           {onRemove && (
             <Button
               variant="ghost"
               size="sm"
               className="h-7 w-7 p-0 text-red-600 hover:bg-red-50 hover:text-red-700"
               onClick={() => onRemove(battery)}
+              disabled={disabled}
               title="Remove row"
             >
               <Trash2 className="w-3.5 h-3.5" />

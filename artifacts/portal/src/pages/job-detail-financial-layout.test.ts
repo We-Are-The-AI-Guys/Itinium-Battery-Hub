@@ -37,3 +37,20 @@ describe("financial master-log field grouping", () => {
     expect(customer).not.toContain('label="% Spot Traction"');
   });
 });
+
+describe("job-detail save controls", () => {
+  it("requires explicit edit mode before saving Financial Master", () => {
+    expect(source).toContain("Edit Financial Master");
+    expect(source).toContain("Save Financial Master");
+    expect(source).toContain("cancelEditingFinancials");
+    expect(source).toContain("<fieldset disabled={!financialEditing}>");
+  });
+
+  it("has receipt-table save controls above and below without per-row saves", () => {
+    expect(source.match(/onClick=\{saveReceiptRows\}/g)).toHaveLength(2);
+    const rowStart = source.indexOf("function BatteryAdminRow");
+    const rowEnd = source.indexOf("function FinancialField", rowStart);
+    const rowSource = source.slice(rowStart, rowEnd);
+    expect(rowSource).not.toContain(">Save</Button>");
+  });
+});
