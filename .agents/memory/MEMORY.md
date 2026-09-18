@@ -2,3 +2,4 @@
 - [API server restart staleness](api-server-restart-staleness.md) — first requests after restart may hit the old process; restart again/retry before assuming a code bug.
 - [Server-side weight derivation](server-weight-derivation.md) — API re-derives row weights from catalogue at submit/correction unless weightManual; tonnage re-sync only when previously auto-derived.
 - [Battery weight & Pb conventions](battery-weight-pb.md) — client supplied no real cell weights (catalogue weights = Pb figures); ×1.4 safe-load factor is intended; Pb = per-cell × (voltage/2 or loose qty).
+- [PDFKit table pagination tests](pdfkit-table-pagination-tests.md) — size rows from live branded-page space; test extracted table text by tokens because column order is not preserved.

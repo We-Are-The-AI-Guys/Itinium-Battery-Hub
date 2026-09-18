@@ -31,6 +31,7 @@ import {
   isJobStatus,
   JOB_STATUSES,
 } from "../lib/job-status";
+import { drawConfirmedCollectionTable } from "../lib/confirmed-collection-table";
 
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
@@ -729,61 +730,8 @@ router.get(
       doc.moveTo(40, doc.y).lineTo(pageW - 40, doc.y).strokeColor("#e2e8f0").lineWidth(0.5).stroke();
       doc.moveDown(0.8);
 
-      // Mirror of the Collection Sheet table, plus a printed receipt
-      // confirmation column (tick / cross by hand) and a blank notes column.
-      const batCols = [
-        { label: "Pallet", x: 40, w: 44 },
-        { label: "Asset", x: 88, w: 56 },
-        { label: "Serial", x: 148, w: 62 },
-        { label: "Manufacturer", x: 214, w: 70 },
-        { label: "Cell Type", x: 288, w: 66 },
-        { label: "Voltage", x: 358, w: 30 },
-        { label: "Loose Qty", x: 392, w: 34, align: "right" as const },
-        { label: "Received", x: 432, w: 42, align: "center" as const },
-        { label: "Notes", x: 480, w: 75 },
-      ];
-
-      function drawConfirmedTableHeader() {
-        const hy = doc.y;
-        doc.rect(40, hy - 4, contentW, 22).fill("#f1f5f9");
-        doc.fontSize(8.5).fillColor(NAVY).font("Helvetica-Bold");
-        for (const c of batCols) {
-          doc.text(c.label, c.x, hy + 2, { width: c.w, align: c.align, lineBreak: false });
-        }
-        doc.y = hy + 22;
-        doc.font("Helvetica").fillColor("#1e293b");
-      }
-
       ensureRoom(60);
-      drawConfirmedTableHeader();
-
-      let rowIdx = 0;
-      for (const b of batteries) {
-        if (doc.y + 20 > doc.page.height - 60) {
-          doc.addPage();
-          drawConfirmedTableHeader();
-        }
-        const ry = doc.y;
-        if (rowIdx % 2 === 1) {
-          doc.rect(40, ry - 2, contentW, 18).fill("#f8fafc");
-        }
-        const looseQty = b.isLooseCells ? (b.looseCellsQty ? String(b.looseCellsQty) : "—") : "—";
-
-        doc.fontSize(8.5).fillColor("#1e293b").font("Helvetica");
-        doc.text(b.palletNumber || "—", batCols[0].x, ry, { width: batCols[0].w, lineBreak: false });
-        doc.text(b.assetNumber || "—", batCols[1].x, ry, { width: batCols[1].w, lineBreak: false, ellipsis: true, height: 16 });
-        doc.text(b.batterySerial || "—", batCols[2].x, ry, { width: batCols[2].w, lineBreak: false, ellipsis: true, height: 16 });
-        doc.text(b.manufacture || "—", batCols[3].x, ry, { width: batCols[3].w, lineBreak: false, ellipsis: true, height: 16 });
-        doc.text(b.cellType || "—", batCols[4].x, ry, { width: batCols[4].w, lineBreak: false, ellipsis: true, height: 16 });
-        doc.text(b.voltage || "—", batCols[5].x, ry, { width: batCols[5].w, lineBreak: false });
-        doc.text(looseQty, batCols[6].x, ry, { width: batCols[6].w, align: "right", lineBreak: false });
-        // Empty tick box for hand-marking receipt
-        doc.rect(batCols[7].x + batCols[7].w / 2 - 5, ry, 10, 10).strokeColor("#94a3b8").lineWidth(0.5).stroke();
-        // Blank notes line
-        doc.moveTo(batCols[8].x, ry + 10).lineTo(batCols[8].x + batCols[8].w, ry + 10).strokeColor("#e2e8f0").lineWidth(0.5).stroke();
-        doc.y = ry + 18;
-        rowIdx++;
-      }
+      drawConfirmedCollectionTable(doc, batteries, { contentWidth: contentW, navy: NAVY });
 
       if (batteries.length === 0) {
         doc.fontSize(9).fillColor("#94a3b8").text("No battery items recorded.", 40);
