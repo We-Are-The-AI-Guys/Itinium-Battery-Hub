@@ -5,3 +5,4 @@
 - [PDFKit table pagination tests](pdfkit-table-pagination-tests.md) — size rows from live branded-page space; test extracted table text by tokens because column order is not preserved.
 - [Receipt table shared saves](receipt-table-shared-saves.md) — shared row saves must lock every competing table mutation and retain failed drafts.
 - [Waste Collector blocs pricing](waste-collector-blocs-pricing.md) — Itinium currently excludes Spot Blocs from Waste Collector pricing; keep Customer LME Blocs independent.
+- [Collection-sheet audit wording](collection-sheet-audit-wording.md) — blank special/loading instructions must print as “None,” never as an empty field.

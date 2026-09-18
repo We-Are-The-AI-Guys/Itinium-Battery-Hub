@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canDownloadRawCollectionSheet } from "../jobs";
+import { canDownloadRawCollectionSheet, collectionSheetInstructions } from "../jobs";
 
 const staffRoles = ["team_leader", "accounts", "head_office_admin"];
 
@@ -37,5 +37,18 @@ describe("raw collection sheet access", () => {
       { role: "collection_company", collectionCompanyId: null },
       { collectionCompanyId: 10, scheduleStatus: "confirmed" }
     )).toBe(false);
+  });
+});
+
+describe("collection sheet loading instructions", () => {
+  it.each([null, undefined, "", "   ", "\n\t"])(
+    "prints None when instructions are blank (%s)",
+    (value) => {
+      expect(collectionSheetInstructions(value)).toBe("None");
+    }
+  );
+
+  it("prints entered instructions after trimming outer whitespace", () => {
+    expect(collectionSheetInstructions("  Use rear loading bay  ")).toBe("Use rear loading bay");
   });
 });

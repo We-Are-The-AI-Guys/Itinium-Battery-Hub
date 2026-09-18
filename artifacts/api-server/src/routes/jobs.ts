@@ -775,7 +775,7 @@ router.get(
       infoBlock("Site Contacts", job.siteContacts || "—");
       infoBlock("Site Hours", job.siteHours || "—");
       drawDriverVehicleSection(doc, contentW, job.driverName, job.vehicleReg);
-      infoBlock("Special / Loading Instructions", job.specialInstructions || "None");
+      infoBlock("Special / Loading Instructions", collectionSheetInstructions(job.specialInstructions));
 
       doc.moveTo(40, doc.y).lineTo(pageW - 40, doc.y).strokeColor("#e2e8f0").lineWidth(0.5).stroke();
       doc.moveDown(0.8);
@@ -814,6 +814,10 @@ export function canDownloadRawCollectionSheet(
     && user.collectionCompanyId != null
     && job.collectionCompanyId === user.collectionCompanyId
     && job.scheduleStatus === "confirmed";
+}
+
+export function collectionSheetInstructions(value: unknown): string {
+  return typeof value === "string" && value.trim() ? value.trim() : "None";
 }
 
 router.get(
@@ -931,7 +935,7 @@ router.get(
       doc.y = instrY + 8;
       doc.fontSize(10).fillColor(NAVY).font("Helvetica-Bold").text("SPECIAL / LOADING INSTRUCTIONS", 40);
       doc.fontSize(10).fillColor("#1e293b").font("Helvetica")
-        .text(job.specialInstructions || "None", 40, doc.y + 2, { width: contentW });
+        .text(collectionSheetInstructions(job.specialInstructions), 40, doc.y + 2, { width: contentW });
       doc.moveDown(1);
 
       const cols = [
