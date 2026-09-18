@@ -17,7 +17,7 @@ export function normalize(value: string): string {
 // Reduce a normalized cell model to a "core" key that ignores manufacturer
 // prefix letters before the standard family, so "4epzs460" and "4ipzs460"
 // both reduce to "4pzs460" and match a typed "4 PzS 460".
-function coreKey(normalized: string): string {
+export function coreKey(normalized: string): string {
   const m = normalized.match(/^(\d+)([a-z]+)(\d+.*)$/);
   if (!m) return normalized;
   const [, cells, letters, rest] = m;
@@ -64,6 +64,21 @@ export function manufacturerMatches(
   const mfrTokens = mfr.split("/").map((t) => t.trim()).filter(Boolean);
   const cTokens = c.split("/").map((t) => t.trim()).filter(Boolean);
   return mfrTokens.some((t) => cTokens.includes(t));
+}
+
+export function selectPreferredCatalogueModel<T extends CellModelLite>(
+  models: T[],
+  manufacturer: string | null | undefined,
+  cellModel: string
+): T | undefined {
+  const modelKey = coreKey(normalize(cellModel));
+  const matches = models.filter(
+    (model) => coreKey(normalize(model.modelName)) === modelKey
+  );
+  return (
+    matches.find((model) => manufacturerMatches(manufacturer, model.manufacturer)) ||
+    matches.find((model) => model.manufacturer.toLowerCase() === "tab")
+  );
 }
 
 /**

@@ -60,6 +60,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { selectPreferredCatalogueModel } from "@/lib/cell-type-suggestions";
 
 
 interface CellModelOption {
@@ -535,11 +536,11 @@ export default function DepotFormPage() {
             const rawEffMfr = battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture;
             const effMfr = rawEffMfr.trim().toLowerCase() === "unknown" ? "" : rawEffMfr;
             const modelKey = battery.cellModel || battery.cellType;
-            const modelMatches = cellModels.filter((m) => m.modelName === modelKey);
-            const matchedModel =
-              (effMfr ? modelMatches.find((m) => m.manufacturer === effMfr) : undefined) ||
-              modelMatches.find((m) => m.manufacturer === "TAB") ||
-              modelMatches[0];
+            const matchedModel = selectPreferredCatalogueModel(
+              cellModels,
+              effMfr,
+              modelKey
+            );
             if (matchedModel) {
               perCell = matchedModel.weightPerCellKg;
             } else {
@@ -569,12 +570,11 @@ export default function DepotFormPage() {
       const rawEffMfr = battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture;
       // "Unknown" manufacturers default to TAB weights (client convention).
       const effMfr = rawEffMfr.trim().toLowerCase() === "unknown" ? "" : rawEffMfr;
-      const matchedModel =
-        (effMfr
-          ? cellModels.find((m) => m.modelName === battery.cellModel && m.manufacturer === effMfr)
-          : undefined) ||
-        cellModels.find((m) => m.modelName === battery.cellModel && m.manufacturer === "TAB") ||
-        cellModels.find((m) => m.modelName === battery.cellModel);
+      const matchedModel = selectPreferredCatalogueModel(
+        cellModels,
+        effMfr,
+        battery.cellModel
+      );
       const voltageNum = parseInt(String(battery.voltage).replace(/[^0-9]/g, ""), 10);
       if (matchedModel && !isNaN(voltageNum) && voltageNum > 0 && voltageNum % 2 === 0) {
         const numCells = voltageNum / 2;
@@ -769,18 +769,11 @@ export default function DepotFormPage() {
           let normalizedCellModel = "";
           if (rawCellTrim) {
             const normCell = normalizeForMatch(rawCellTrim);
-            const modelMatches = cellModels.filter(
-              (m) => normalizeForMatch(m.modelName) === normCell
+            const preferred = selectPreferredCatalogueModel(
+              cellModels,
+              mfrAutoUnknown ? null : normalizedMfr,
+              rawCellTrim
             );
-            const preferred =
-              modelMatches.find(
-                (m) =>
-                  normalizedMfr &&
-                  !mfrAutoUnknown &&
-                  m.manufacturer.toLowerCase() === normalizedMfr.toLowerCase()
-              ) ||
-              modelMatches.find((m) => m.manufacturer === "TAB") ||
-              modelMatches[0];
             if (preferred) {
               normalizedCellModel = preferred.modelName;
               normalizedCellType = preferred.cellFamily;
@@ -859,14 +852,11 @@ export default function DepotFormPage() {
           // otherwise the note is probably free text and the row is left
           // untouched for manual review.
           const resolved = segments.map((seg) => {
-            const normSeg = normalizeForMatch(seg.model);
-            const segMatches = cellModels.filter((m) => normalizeForMatch(m.modelName) === normSeg);
-            const preferredSeg =
-              segMatches.find(
-                (m) => row.manufacture && m.manufacturer.toLowerCase() === row.manufacture.toLowerCase()
-              ) ||
-              segMatches.find((m) => m.manufacturer === "TAB") ||
-              segMatches[0];
+            const preferredSeg = selectPreferredCatalogueModel(
+              cellModels,
+              row.manufacture,
+              seg.model
+            );
             return { seg, model: preferredSeg };
           });
           if (resolved.some((r) => !r.model)) {

@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { batteryWeightReferenceTable, cellModelsTable } from "@workspace/db/schema";
-import { eq, and, isNull, sql } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
+import { selectCatalogueModel } from "./jobs";
 
 const router: IRouter = Router();
 
@@ -43,25 +44,12 @@ router.get(
         // picked by exact manufacturer first, falling back to TAB, then any
         // manufacturer. Keeping this endpoint aligned with the form prevents
         // CSV validators or other callers from silently disagreeing with it.
-        const normalizedModel = (cellModel as string).toLowerCase().replace(/[^a-z0-9]/g, "");
         const candidates = await db
           .select()
-          .from(cellModelsTable)
-          .where(
-            eq(
-              sql`lower(regexp_replace(${cellModelsTable.modelName}, '[^a-zA-Z0-9]', '', 'g'))`,
-              normalizedModel
-            )
-          );
+          .from(cellModelsTable);
 
         const mfr = typeof manufacturer === "string" ? manufacturer.trim() : "";
-        const isUnknownMfr = !mfr || mfr.toLowerCase() === "unknown";
-        const model =
-          (!isUnknownMfr
-            ? candidates.find((m) => m.manufacturer.toLowerCase() === mfr.toLowerCase())
-            : undefined) ||
-          candidates.find((m) => m.manufacturer === "TAB") ||
-          candidates[0];
+        const model = selectCatalogueModel(candidates, mfr, cellModel as string);
 
         if (model) {
           const numCells = voltageNum / 2;

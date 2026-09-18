@@ -50,6 +50,57 @@ function normalizeCellKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function comparableCellModelKey(value: string): string {
+  const normalized = normalizeCellKey(value);
+  const match = normalized.match(/^(\d+)([a-z]+)(\d+.*)$/);
+  if (!match) return normalized;
+  const [, cells, letters, rest] = match;
+  const pzIndex = letters.indexOf("pz");
+  const family = pzIndex > 0 ? letters.slice(pzIndex) : letters;
+  return `${cells}${family}${rest}`;
+}
+
+function manufacturerMatches(
+  requestedManufacturer: string | null,
+  catalogueManufacturer: string
+): boolean {
+  const requested = (requestedManufacturer || "").trim().toLowerCase();
+  if (!requested || requested === "unknown") return false;
+  const catalogue = catalogueManufacturer.trim().toLowerCase();
+  if (
+    requested === catalogue
+    || requested.includes(catalogue)
+    || catalogue.includes(requested)
+  ) {
+    return true;
+  }
+  const requestedTokens = requested.split("/").map((value) => value.trim()).filter(Boolean);
+  const catalogueTokens = catalogue.split("/").map((value) => value.trim()).filter(Boolean);
+  return requestedTokens.some((token) => catalogueTokens.includes(token));
+}
+
+export function selectCatalogueModel<T extends { manufacturer: string; modelName: string }>(
+  catalogue: T[],
+  manufacturer: string | null,
+  cellModel: string
+): T | undefined {
+  const modelKey = comparableCellModelKey(cellModel);
+  const matches = catalogue.filter(
+    (entry) => comparableCellModelKey(entry.modelName) === modelKey
+  );
+  const requestedManufacturer = (manufacturer || "").trim();
+  const isUnknownManufacturer =
+    !requestedManufacturer || requestedManufacturer.toLowerCase() === "unknown";
+  return (
+    (!isUnknownManufacturer
+      ? matches.find((entry) =>
+          manufacturerMatches(requestedManufacturer, entry.manufacturer)
+        )
+      : undefined) ||
+    matches.find((entry) => entry.manufacturer.toLowerCase() === "tab")
+  );
+}
+
 interface PbCatalogueEntry {
   manufacturer: string;
   modelName: string;
@@ -83,9 +134,9 @@ export function deriveActualCellCount(opts: {
 }
 
 // Derive a battery's total Pb content (kg) from the cell model catalogue
-// using the same matching rules as job submission: exact manufacturer match
-// first, then TAB, then any manufacturer (Pb per model is manufacturer-
-// agnostic in practice). Total Pb = Pb-per-cell x actual cell count, where
+// using the same matching rules as job submission: equivalent model variants
+// are grouped, then the requested manufacturer is preferred before TAB and
+// finally any remaining manufacturer. Total Pb = Pb-per-cell x actual cell count, where
 // the actual cell count comes from the battery's voltage (voltage/2 cells,
 // each cell being 2V) or, for loose cells, the recorded quantity. Returns
 // null when the catalogue has no Pb data or the cell count is unknown.
@@ -98,27 +149,21 @@ export function derivePbContentKg(
   const cellStr = (cellType || "").trim();
   if (!cellStr || cellStr === "Blocs" || cellStr === "Other") return null;
   if (cellCount === null || !isFinite(cellCount) || cellCount <= 0) return null;
-  const normCell = normalizeCellKey(cellStr);
+  const normCell = comparableCellModelKey(cellStr);
   const matches = catalogue.filter(
-    (m) => m.pbContentKgPerCell != null && normalizeCellKey(m.modelName) === normCell
+    (m) => m.pbContentKgPerCell != null && comparableCellModelKey(m.modelName) === normCell
   );
   if (matches.length === 0) return null;
-  const mfr = (manufacture || "").trim();
-  const isUnknownMfr = !mfr || mfr.toLowerCase() === "unknown";
-  const chosen =
-    (!isUnknownMfr
-      ? matches.find((m) => m.manufacturer.toLowerCase() === mfr.toLowerCase())
-      : undefined) ||
-    matches.find((m) => m.manufacturer === "TAB") ||
-    matches[0];
+  const chosen = selectCatalogueModel(matches, manufacture, cellStr);
+  if (!chosen) return null;
   const totalPb = parseFloat(chosen.pbContentKgPerCell!) * cellCount;
   return isFinite(totalPb) ? totalPb.toFixed(3) : null;
 }
 
 // Derive a battery's raw (pre-safe-load-factor) estimated weight in kg from
 // the cell model catalogue, using the same matching rules as Pb derivation:
-// exact manufacturer first, then TAB, then any. Returns null when the model
-// isn't in the catalogue or the cell count is unknown. Keeping this on the
+// equivalent manufacturer-specific model first, then TAB, then any. Returns
+// null when the model isn't in the catalogue or the cell count is unknown. Keeping this on the
 // server guarantees manual entry and CSV import produce identical weights
 // for the same battery, and that corrections re-derive consistently.
 export function deriveEstimatedWeightKg(
@@ -130,19 +175,13 @@ export function deriveEstimatedWeightKg(
   const cellStr = (cellType || "").trim();
   if (!cellStr || cellStr === "Blocs" || cellStr === "Other") return null;
   if (cellCount === null || !isFinite(cellCount) || cellCount <= 0) return null;
-  const normCell = normalizeCellKey(cellStr);
+  const normCell = comparableCellModelKey(cellStr);
   const matches = catalogue.filter(
-    (m) => m.weightPerCellKg != null && normalizeCellKey(m.modelName) === normCell
+    (m) => m.weightPerCellKg != null && comparableCellModelKey(m.modelName) === normCell
   );
   if (matches.length === 0) return null;
-  const mfr = (manufacture || "").trim();
-  const isUnknownMfr = !mfr || mfr.toLowerCase() === "unknown";
-  const chosen =
-    (!isUnknownMfr
-      ? matches.find((m) => m.manufacturer.toLowerCase() === mfr.toLowerCase())
-      : undefined) ||
-    matches.find((m) => m.manufacturer === "TAB") ||
-    matches[0];
+  const chosen = selectCatalogueModel(matches, manufacture, cellStr);
+  if (!chosen) return null;
   const total = parseFloat(chosen.weightPerCellKg!) * cellCount;
   return isFinite(total) && total > 0 ? total.toFixed(3) : null;
 }
@@ -1171,19 +1210,13 @@ router.post(
         }
 
         if (cellModelApplies && cellTypeStr && allCellModels.length > 0) {
-          // Match ignoring spacing/case/punctuation and canonicalise to the
-          // catalogue's exact model name so downstream Pb/weight lookups hit.
-          const normCell = normalizeCellKey(cellTypeStr);
-          const modelMatches = allCellModels.filter(
-            (m) => normalizeCellKey(m.modelName) === normCell
+          // Canonicalise to the requested manufacturer's model variant first.
+          // TAB is the only automatic fallback.
+          const preferred = selectCatalogueModel(
+            allCellModels,
+            isUnknownMfr ? null : mfrStr,
+            cellTypeStr
           );
-          const preferred =
-            modelMatches.find(
-              (m) =>
-                mfrStr && !isUnknownMfr && m.manufacturer.toLowerCase() === mfrStr.toLowerCase()
-            ) ||
-            modelMatches.find((m) => m.manufacturer === "TAB") ||
-            modelMatches[0];
           if (preferred) {
             b.cellType = preferred.modelName;
           }
@@ -1194,14 +1227,12 @@ router.post(
           if (!finalCellType) {
             b.cellModelFlagReason = CSV_FLAG_REASON;
           } else if (allCellModels.length > 0) {
-            // Cell type is valid if it exists anywhere in the catalogue,
-            // regardless of manufacturer — Pb/weight lookups fall back to
-            // TAB figures when the manufacturer doesn't carry the model.
-            const normCell = normalizeCellKey(finalCellType);
-            const matches = allCellModels.some(
-              (m) => normalizeCellKey(m.modelName) === normCell
+            const usableModel = selectCatalogueModel(
+              allCellModels,
+              isUnknownMfr ? null : mfrStr,
+              finalCellType
             );
-            if (!matches) b.cellModelFlagReason = CSV_UNKNOWN_FLAG_REASON;
+            if (!usableModel) b.cellModelFlagReason = CSV_UNKNOWN_FLAG_REASON;
           }
         }
 
@@ -2328,17 +2359,8 @@ router.patch(
               modelName: cellModelsTable.modelName,
             })
             .from(cellModelsTable);
-          const normV = normalizeCellKey(v);
-          const modelMatches = catalogue.filter(
-            (m) => normalizeCellKey(m.modelName) === normV
-          );
           const effMfr = (typeof manufacture === "string" ? manufacture.trim() : "") || (existing.manufacture || "").trim();
-          const preferred =
-            modelMatches.find(
-              (m) => effMfr && m.manufacturer.toLowerCase() === effMfr.toLowerCase()
-            ) ||
-            modelMatches.find((m) => m.manufacturer === "TAB") ||
-            modelMatches[0];
+          const preferred = selectCatalogueModel(catalogue, effMfr, v);
           if (preferred) v = preferred.modelName;
         }
         updates.cellType = v;
