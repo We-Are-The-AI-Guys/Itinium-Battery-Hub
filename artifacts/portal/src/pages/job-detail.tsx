@@ -159,7 +159,7 @@ interface ReceiptDraft {
   receiptConfirmed: boolean;
   pbContentKg: string;
   valueGbp: string;
-  adminNotes: string;
+  notes: string;
 }
 
 function receiptDraftFromBattery(battery: BatteryData): ReceiptDraft {
@@ -167,7 +167,7 @@ function receiptDraftFromBattery(battery: BatteryData): ReceiptDraft {
     receiptConfirmed: battery.receiptConfirmed ?? false,
     pbContentKg: battery.pbContentKg || "",
     valueGbp: battery.valueGbp || "",
-    adminNotes: battery.adminNotes || "",
+    notes: battery.notes || "",
   };
 }
 
@@ -995,7 +995,7 @@ export default function JobDetailPage() {
             receiptConfirmed: draft.receiptConfirmed,
             pbContentKg: draft.pbContentKg || null,
             valueGbp: draft.valueGbp || null,
-            adminNotes: draft.adminNotes || null,
+            notes: draft.notes || null,
           }),
         });
         const data = await res.json().catch(() => ({}));
@@ -2564,8 +2564,8 @@ function BatteryAdminRow({
           placeholder="Add notes…"
           rows={2}
           className="min-h-16 w-56 resize-y rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-          value={draft.adminNotes}
-          onChange={(e) => onChange(battery.id, { adminNotes: e.target.value })}
+          value={draft.notes}
+          onChange={(e) => onChange(battery.id, { notes: e.target.value })}
         />
       </td>
       <td className="px-3 py-2.5 text-right">
