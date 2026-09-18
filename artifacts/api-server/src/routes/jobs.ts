@@ -578,6 +578,11 @@ router.get(
               FROM job_batteries jb
               WHERE jb.job_id = ${jobsTable.id}
             )`,
+            pbContentKgSum: sql<string | null>`(
+              SELECT CAST(SUM(jb.pb_content_kg) AS TEXT)
+              FROM job_batteries jb
+              WHERE jb.job_id = ${jobsTable.id}
+            )`,
           })
           .from(jobsTable)
           .where(whereClause)

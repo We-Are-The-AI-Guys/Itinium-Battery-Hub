@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { useToast } from "@/hooks/use-toast";
+import { formatPbKg } from "@/lib/job-list-format";
 
 interface Job {
   id: number;
@@ -32,7 +33,7 @@ interface Job {
   collectionPoint: string | null;
   collectionDate: string | null;
   submittedAt: string;
-  tonnage: string;
+  pbContentKgSum: string | null;
   status: string;
   invoiceStatus: string;
   totalInvoiceValue: string | null;
@@ -314,7 +315,7 @@ export default function JobListPage() {
                 <th className="px-6 py-3.5 font-semibold">Collection Date</th>
                 <th className="px-6 py-3.5 font-semibold">Customer</th>
                 <th className="px-6 py-3.5 font-semibold">Collection Point</th>
-                <th className="px-6 py-3.5 font-semibold">Tonnage</th>
+                <th className="px-6 py-3.5 font-semibold">Pb (kg)</th>
                 <th className="px-6 py-3.5 font-semibold">Status</th>
                 <th className="px-6 py-3.5 font-semibold">Total Value</th>
                 <th className="px-6 py-3.5 font-semibold text-right">Actions</th>
@@ -348,7 +349,7 @@ export default function JobListPage() {
                     {job.collectionPoint || "—"}
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">
-                    {parseFloat(job.tonnage).toFixed(3)}t
+                    {formatPbKg(job.pbContentKgSum)}
                   </td>
                   <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                     {canEditStatus ? (
