@@ -821,12 +821,12 @@ export default function JobDetailPage() {
       0
     );
     const wasteTractionRate = calculatePercentageRate(financials.wasteSpotRate, financials.wasteTractionPercent);
-    const wasteBlocsRate = calculatePercentageRate(financials.wasteSpotRate, financials.wasteBlocsPercent);
+    const wasteBlocsRate = "0.00";
     const customerTractionRate = calculatePercentageRate(customerLmeAverage, financials.customerTractionPercent);
     const customerBlocsRate = calculatePercentageRate(customerLmeAverage, financials.customerBlocsPercent);
     const wasteInvoiceValue = calculateSectionInvoiceValue(
       financials.wasteTractionTonnage, wasteTractionRate,
-      financials.wasteBlocsTonnage, wasteBlocsRate,
+      "", "",
       financials.wasteTransportCost, financials.wasteAdHocCosts
     );
     const customerFinanceMaster = calculateCustomerFinanceMasterValues(
@@ -850,8 +850,8 @@ export default function JobDetailPage() {
     }));
   }, [
     batteries, collectionLmePrice?.gbpPrice, collectionLmeStatus,
-    financials.wasteSpotRate, financials.wasteTractionPercent, financials.wasteBlocsPercent,
-    financials.wasteTractionTonnage, financials.wasteBlocsTonnage,
+    financials.wasteSpotRate, financials.wasteTractionPercent,
+    financials.wasteTractionTonnage,
     financials.wasteTransportCost, financials.wasteAdHocCosts,
     financials.customerTractionPercent, financials.customerBlocsPercent,
     financials.customerBlocsTonnage, financials.customerTransportCost, financials.customerAdHocCosts,
@@ -920,13 +920,14 @@ export default function JobDetailPage() {
     }
     setSaving(true);
     try {
+      const { wasteBlocsPercent: _unusedWasteBlocsPercent, ...financialsWithoutWasteBlocsPercent } = financials;
       const payload = userRole === "team_leader"
         ? Object.fromEntries(
-            Object.entries(financials).filter(([key]) =>
+            Object.entries(financialsWithoutWasteBlocsPercent).filter(([key]) =>
               !["invoiceStatus", "invoiceReceivedDate", "datePaid"].includes(key)
             )
           )
-        : financials;
+        : financialsWithoutWasteBlocsPercent;
       const res = await fetch(`/api/jobs/${params.id}/admin`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -1806,7 +1807,6 @@ export default function JobDetailPage() {
                     />
                     <div className="grid grid-cols-2 gap-3">
                       <FinancialField label="% Spot Traction" value={financials.wasteTractionPercent} onChange={(v) => setFinancials((p) => ({ ...p, wasteTractionPercent: v }))} suffix="%" />
-                      <FinancialField label="% Spot Blocs" value={financials.wasteBlocsPercent} onChange={(v) => setFinancials((p) => ({ ...p, wasteBlocsPercent: v }))} suffix="%" />
                       <FinancialField label="£/t Traction" value={financials.wasteTractionRate} onChange={() => {}} prefix="£" computed />
                       <FinancialField label="£/t Blocs" value={financials.wasteBlocsRate} onChange={() => {}} prefix="£" computed />
                       <FinancialField label="Pb tonnage Traction" value={financials.wasteTractionTonnage} onChange={(v) => setFinancials((p) => ({ ...p, wasteTractionTonnage: v }))} suffix="t" />

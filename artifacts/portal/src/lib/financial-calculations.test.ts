@@ -88,6 +88,10 @@ describe("financial master log calculations", () => {
     expect(calculateSectionInvoiceValue("2", "780", "1", "500", "100", "60")).toBe("1900.00");
   });
 
+  it("calculates the current Waste Collector invoice without a blocs contribution", () => {
+    expect(calculateSectionInvoiceValue("2", "780", "", "", "100", "60")).toBe("1400.00");
+  });
+
   it("calculates net profit as waste invoice less customer invoice", () => {
     expect(calculateNetProfit("5000", "4200")).toBe("800.00");
   });

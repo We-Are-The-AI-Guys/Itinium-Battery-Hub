@@ -13,14 +13,16 @@ function sectionBetween(startHeading: string, endHeading: string): string {
 }
 
 describe("financial master-log field grouping", () => {
-  it("keeps the separate Spot traction and blocs calculation under Waste Collector", () => {
+  it("removes Spot Blocs from the Waste Collector calculation", () => {
     const wasteCollector = sectionBetween("Waste Collector", "Customer");
     expect(wasteCollector).toContain('label="% Spot Traction"');
-    expect(wasteCollector).toContain('label="% Spot Blocs"');
+    expect(wasteCollector).not.toContain('label="% Spot Blocs"');
     expect(wasteCollector).toContain('label="Invoice Value"');
     expect(wasteCollector).toContain('label="Invoice No."');
     expect(wasteCollector).not.toContain('label="Customer Invoice Value £"');
     expect(wasteCollector).not.toContain('label="Customer Invoice No."');
+    expect(source).toContain('const wasteBlocsRate = "0.00"');
+    expect(source).toContain('const { wasteBlocsPercent: _unusedWasteBlocsPercent, ...financialsWithoutWasteBlocsPercent }');
   });
 
   it("keeps the customer invoice pair under Customer", () => {
