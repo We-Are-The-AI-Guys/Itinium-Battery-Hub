@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { lmePricesTable } from "@workspace/db/schema";
-import { desc, sql } from "drizzle-orm";
+import { and, desc, gte, lte, sql } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { z } from "zod";
 
@@ -37,12 +37,29 @@ export function averageGbpPrice(
   return (values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2);
 }
 
+export function isValidIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+export function collectionMonthStart(value: string): string {
+  return `${value.slice(0, 7)}-01`;
+}
+
 router.get(
   "/lme/current",
   requireAuth,
   requireRole("team_leader", "accounts", "head_office_admin"),
-  async (_req, res) => {
+  async (req, res) => {
     try {
+      const effectiveDate =
+        typeof req.query.effectiveDate === "string" ? req.query.effectiveDate : null;
+      if (effectiveDate && !isValidIsoDate(effectiveDate)) {
+        res.status(400).json({ message: "effectiveDate must be YYYY-MM-DD" });
+        return;
+      }
+
       const [latest] = await db
         .select()
         .from(lmePricesTable)
@@ -57,9 +74,23 @@ router.get(
           sql`${lmePricesTable.priceDate} >= ${month.startDate}
             AND ${lmePricesTable.priceDate} < ${month.endDate}`
         );
+      const [effectivePrice] = effectiveDate
+        ? await db
+            .select()
+            .from(lmePricesTable)
+            .where(
+              and(
+                gte(lmePricesTable.priceDate, collectionMonthStart(effectiveDate)),
+                lte(lmePricesTable.priceDate, effectiveDate)
+              )
+            )
+            .orderBy(desc(lmePricesTable.priceDate), desc(lmePricesTable.createdAt))
+            .limit(1)
+        : [];
 
       res.json({
         price: latest || null,
+        effectivePrice: effectivePrice || null,
         previousMonthAverage: {
           month: month.label,
           averageGbpPrice: averageGbpPrice(previousMonthRows),

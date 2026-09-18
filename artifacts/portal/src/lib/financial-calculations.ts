@@ -89,6 +89,21 @@ export function calculateCustomerFinanceMasterValues(
   };
 }
 
+export function isCollectionLmeUsable(
+  status: "idle" | "loading" | "ready" | "unavailable",
+  hasPrice: boolean,
+  priceEffectiveDate: string | null,
+  savedCollectionDate: string,
+  editedCollectionDate: string
+): boolean {
+  return (
+    status === "ready"
+    && hasPrice
+    && priceEffectiveDate === savedCollectionDate
+    && editedCollectionDate === savedCollectionDate
+  );
+}
+
 export function calculateNetProfit(wasteInvoiceValue: string, customerInvoiceValue: string): string {
   return ((parseFloat(wasteInvoiceValue) || 0) - (parseFloat(customerInvoiceValue) || 0)).toFixed(2);
 }

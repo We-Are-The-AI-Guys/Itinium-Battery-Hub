@@ -3,6 +3,7 @@ import {
   calculateCblLmeValue,
   calculateCustomerLmeValue,
   calculateCustomerFinanceMasterValues,
+  isCollectionLmeUsable,
   calculateGrossProfit,
   calculateNetProfit,
   calculatePercentageRate,
@@ -54,6 +55,27 @@ describe("existing financial calculations", () => {
       tractionTonnage: "14.086",
       invoiceValue: "6986.74",
     });
+  });
+
+  it("does not reuse the previous month's price immediately after the collection date changes", () => {
+    expect(
+      isCollectionLmeUsable(
+        "ready",
+        true,
+        "2026-08-15",
+        "2026-09-10",
+        "2026-09-10"
+      )
+    ).toBe(false);
+    expect(
+      isCollectionLmeUsable(
+        "ready",
+        true,
+        "2026-09-10",
+        "2026-09-10",
+        "2026-09-10"
+      )
+    ).toBe(true);
   });
 });
 

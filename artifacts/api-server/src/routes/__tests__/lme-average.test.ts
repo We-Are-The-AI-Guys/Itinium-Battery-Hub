@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { averageGbpPrice, previousCalendarMonth } from "../lme";
+import {
+  averageGbpPrice,
+  collectionMonthStart,
+  isValidIsoDate,
+  previousCalendarMonth,
+} from "../lme";
 
 describe("previous-month LME average", () => {
   it("uses the previous calendar month across a year boundary", () => {
@@ -21,5 +26,22 @@ describe("previous-month LME average", () => {
   it("returns unavailable when the prior month has no valid history", () => {
     expect(averageGbpPrice([])).toBeNull();
     expect(averageGbpPrice([{ gbpPrice: Number.NaN }])).toBeNull();
+  });
+});
+
+describe("effective LME date", () => {
+  it("accepts real ISO collection dates", () => {
+    expect(isValidIsoDate("2026-09-01")).toBe(true);
+    expect(isValidIsoDate("2024-02-29")).toBe(true);
+  });
+
+  it("limits the lookup to the collection month", () => {
+    expect(collectionMonthStart("2026-09-18")).toBe("2026-09-01");
+    expect(collectionMonthStart("2027-01-04")).toBe("2027-01-01");
+  });
+
+  it("rejects malformed or impossible dates", () => {
+    expect(isValidIsoDate("01-09-2026")).toBe(false);
+    expect(isValidIsoDate("2026-02-30")).toBe(false);
   });
 });

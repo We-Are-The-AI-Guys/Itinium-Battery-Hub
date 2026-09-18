@@ -7,8 +7,8 @@ import {
 import { rankManufacturerSuggestions } from "@/lib/manufacturer-suggestions";
 import {
   calculateCblLmeValue,
-  calculateCustomerLmeValue,
   calculateCustomerFinanceMasterValues,
+  isCollectionLmeUsable,
   calculateGrossProfit,
   calculateNetProfit,
   calculatePercentageRate,
@@ -63,12 +63,6 @@ interface LmePrice {
   exchangeRate: string;
   gbpPrice: string;
   source: string;
-}
-
-interface PreviousMonthAverage {
-  month: string;
-  averageGbpPrice: string | null;
-  sampleCount: number;
 }
 
 interface JobData {
@@ -238,7 +232,11 @@ export default function JobDetailPage() {
   const [autoConfirming, setAutoConfirming] = useState(false);
   const [autofillingReview, setAutofillingReview] = useState(false);
   const [lmePrice, setLmePrice] = useState<LmePrice | null>(null);
-  const [previousMonthAverage, setPreviousMonthAverage] = useState<PreviousMonthAverage | null>(null);
+  const [collectionLmePrice, setCollectionLmePrice] = useState<LmePrice | null>(null);
+  const [collectionLmeStatus, setCollectionLmeStatus] = useState<
+    "idle" | "loading" | "ready" | "unavailable"
+  >("idle");
+  const [collectionLmeEffectiveDate, setCollectionLmeEffectiveDate] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [downloadingInvoice, setDownloadingInvoice] = useState(false);
   const [confirmDate, setConfirmDate] = useState("");
@@ -251,7 +249,6 @@ export default function JobDetailPage() {
   const [prefilled, setPrefilled] = useState<Record<string, boolean>>({});
 
   const lmeGbpRate = lmePrice ? (isFinite(parseFloat(lmePrice.gbpPrice)) ? parseFloat(lmePrice.gbpPrice) : null) : null;
-
   const [financials, setFinancials] = useState({
     tonnage: "",
     cblLmeValue: "",
@@ -299,6 +296,13 @@ export default function JobDetailPage() {
     specialInstructions: "",
     collectionDate: "",
   });
+  const collectionLmeUsable = isCollectionLmeUsable(
+    collectionLmeStatus,
+    collectionLmePrice !== null,
+    collectionLmeEffectiveDate,
+    job?.collectionDate || "",
+    siteDetails.collectionDate
+  );
   const [savingSiteDetails, setSavingSiteDetails] = useState(false);
   const [downloadingCollectionSheet, setDownloadingCollectionSheet] = useState(false);
   const [receiptDelivery, setReceiptDelivery] = useState<ReceiptDeliveryInfo | null>(null);
@@ -479,9 +483,6 @@ export default function JobDetailPage() {
           lmePriceRef.current = data.price;
           setLmePrice(data.price);
         }
-        if (data?.previousMonthAverage) {
-          setPreviousMonthAverage(data.previousMonthAverage);
-        }
       })
       .catch(() => {});
     fetch("/api/auth/me", { credentials: "include" })
@@ -491,6 +492,39 @@ export default function JobDetailPage() {
       })
       .catch(() => {});
   }, [loadJob]);
+
+  useEffect(() => {
+    const collectionDate = job?.collectionDate || "";
+    if (!collectionDate) {
+      setCollectionLmePrice(null);
+      setCollectionLmeEffectiveDate(null);
+      setCollectionLmeStatus("idle");
+      return;
+    }
+    const controller = new AbortController();
+    setCollectionLmePrice(null);
+    setCollectionLmeEffectiveDate(null);
+    setCollectionLmeStatus("loading");
+    fetch(`/api/lme/current?effectiveDate=${encodeURIComponent(collectionDate)}`, {
+      credentials: "include",
+      signal: controller.signal,
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        const effectivePrice = data?.effectivePrice || null;
+        setCollectionLmePrice(effectivePrice);
+        setCollectionLmeEffectiveDate(effectivePrice ? collectionDate : null);
+        setCollectionLmeStatus(effectivePrice ? "ready" : "unavailable");
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setCollectionLmePrice(null);
+        setCollectionLmeEffectiveDate(null);
+        setCollectionLmeStatus("unavailable");
+      });
+    return () => controller.abort();
+  }, [job?.collectionDate]);
 
   async function handleDownloadInvoice() {
     if (!job) return;
@@ -733,19 +767,6 @@ export default function JobDetailPage() {
   }, [financials.tonnage, financials.cblLmeValue, financials.cblLmePercent]);
 
   useEffect(() => {
-    const netPbWeightKg = batteries.reduce(
-      (sum, battery) => sum + (parseFloat(battery.pbContentKg || "0") || 0),
-      0
-    );
-    const customerInvoiceValue = calculateCustomerLmeValue(
-      netPbWeightKg,
-      financials.cblLmeValue,
-      financials.customerLmePercent
-    );
-    setFinancials((prev) => ({ ...prev, customerInvoiceValue }));
-  }, [batteries, financials.cblLmeValue, financials.customerLmePercent]);
-
-  useEffect(() => {
     const grossProfit = calculateGrossProfit(
       financials.totalInvoiceValue,
       financials.transportCost,
@@ -755,7 +776,8 @@ export default function JobDetailPage() {
   }, [financials.totalInvoiceValue, financials.transportCost, financials.cblLmePrice]);
 
   useEffect(() => {
-    const customerLmeAverage = previousMonthAverage?.averageGbpPrice || "";
+    if (collectionLmeStatus !== "ready" || !collectionLmePrice) return;
+    const customerLmeAverage = collectionLmePrice?.gbpPrice || "";
     const confirmedPbKg = batteries.reduce(
       (sum, battery) => sum + (parseFloat(battery.pbContentKg || "0") || 0),
       0
@@ -789,7 +811,7 @@ export default function JobDetailPage() {
       netProfit,
     }));
   }, [
-    batteries, previousMonthAverage?.averageGbpPrice,
+    batteries, collectionLmePrice?.gbpPrice, collectionLmeStatus,
     financials.wasteSpotRate, financials.wasteTractionPercent, financials.wasteBlocsPercent,
     financials.wasteTractionTonnage, financials.wasteBlocsTonnage,
     financials.wasteTransportCost, financials.wasteAdHocCosts,
@@ -845,6 +867,19 @@ export default function JobDetailPage() {
   ]);
 
   async function saveFinancials() {
+    if (
+      !collectionLmeUsable
+    ) {
+      toast({
+        title: "Collection LME price unavailable",
+        description:
+          siteDetails.collectionDate !== (job?.collectionDate || "")
+            ? "Save the collection date before saving financial details."
+            : "A monthly LME price is required for the saved collection date.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSaving(true);
     try {
       const payload = userRole === "team_leader"
@@ -1547,26 +1582,34 @@ export default function JobDetailPage() {
                   <div className="space-y-4">
                     <div>
                       <label className="mb-1 block text-xs font-medium uppercase text-slate-500">
-                        LME month average (prior month)
+                        Collection month LME price
                       </label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">£</span>
                         <Input
-                          value={previousMonthAverage?.averageGbpPrice ?? ""}
+                          value={collectionLmeUsable ? collectionLmePrice.gbpPrice : ""}
                           placeholder="Unavailable"
                           readOnly
                           className="bg-white pl-7 font-semibold text-[#0f2744]"
                         />
                       </div>
                       <p className="mt-1.5 text-[11px] leading-4 text-slate-500">
-                        {previousMonthAverage?.averageGbpPrice
-                          ? `${previousMonthAverage.month} · ${previousMonthAverage.sampleCount} stored daily ${previousMonthAverage.sampleCount === 1 ? "rate" : "rates"}`
-                          : previousMonthAverage
-                          ? `No stored daily rates for ${previousMonthAverage.month}`
-                          : "Previous-month history unavailable"}
+                        {siteDetails.collectionDate !== (job?.collectionDate || "")
+                          ? "Save the changed collection date to apply its monthly LME price"
+                          : collectionLmeStatus === "loading"
+                          ? "Loading the LME price for the collection month…"
+                          : collectionLmePrice
+                          ? `Effective ${new Date(`${collectionLmePrice.priceDate}T00:00:00`).toLocaleDateString("en-GB", {
+                              day: "numeric",
+                              month: "long",
+                              year: "numeric",
+                            })} · based on collection date`
+                          : job?.collectionDate
+                          ? "No LME price is available for the collection month"
+                          : "Set a collection date to select the applicable LME price"}
                       </p>
                     </div>
-                    <FinancialField label="Net Profit" value={financials.netProfit} onChange={() => {}} prefix="£" computed />
+                    <FinancialField label="Net Profit" value={collectionLmeUsable ? financials.netProfit : ""} onChange={() => {}} prefix="£" computed />
                     <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-[11px] leading-4 text-sky-800">
                       Waste Collector invoice value less Customer invoice value.
                     </p>
@@ -1633,8 +1676,8 @@ export default function JobDetailPage() {
                     <div className="grid grid-cols-2 gap-3">
                       <FinancialField label="% LME Traction" value={financials.customerTractionPercent} onChange={(v) => setFinancials((p) => ({ ...p, customerTractionPercent: v }))} suffix="%" />
                       <FinancialField label="% LME Blocs" value={financials.customerBlocsPercent} onChange={(v) => setFinancials((p) => ({ ...p, customerBlocsPercent: v }))} suffix="%" />
-                      <FinancialField label="£/t Traction" value={financials.customerTractionRate} onChange={() => {}} prefix="£" computed />
-                      <FinancialField label="£/t Blocs" value={financials.customerBlocsRate} onChange={() => {}} prefix="£" computed />
+                       <FinancialField label="£/t Traction" value={collectionLmeUsable ? financials.customerTractionRate : ""} onChange={() => {}} prefix="£" computed />
+                       <FinancialField label="£/t Blocs" value={collectionLmeUsable ? financials.customerBlocsRate : ""} onChange={() => {}} prefix="£" computed />
                       <FinancialField label="Pb tonnage Traction" value={financials.customerTractionTonnage} onChange={() => {}} suffix="t" computed />
                       <FinancialField label="Pb tonnage Blocs" value={financials.customerBlocsTonnage} onChange={(v) => setFinancials((p) => ({ ...p, customerBlocsTonnage: v }))} suffix="t" />
                     </div>
@@ -1642,7 +1685,7 @@ export default function JobDetailPage() {
                     <FinancialField label="Transport" value={financials.customerTransportCost} onChange={(v) => setFinancials((p) => ({ ...p, customerTransportCost: v }))} prefix="£" />
                     <FinancialField
                       label="Customer Invoice Value £"
-                      value={financials.customerInvoiceValue}
+                      value={collectionLmeUsable ? financials.customerInvoiceValue : ""}
                       onChange={() => {}}
                       prefix="£"
                       computed
@@ -1726,7 +1769,10 @@ export default function JobDetailPage() {
               <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
                 <Button
                   onClick={saveFinancials}
-                  disabled={saving}
+                  disabled={
+                    saving
+                    || !collectionLmeUsable
+                  }
                   className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
                 >
                   <Save className="w-4 h-4 mr-2" />
