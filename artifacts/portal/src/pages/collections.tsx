@@ -292,7 +292,7 @@ export default function CollectionsPage() {
             <div className="space-y-4">
               {jobs.map((job) => {
                 const badge = scheduleBadge[job.scheduleStatus] || scheduleBadge.unassigned;
-                const requesterNotes = job.notes?.trim();
+                const internalNotes = job.notes?.trim();
                 return (
                   <div key={job.id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-6" data-testid={`card-collection-${job.id}`}>
                     <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
@@ -355,15 +355,15 @@ export default function CollectionsPage() {
                           </div>
                         </div>
                       )}
-                      {requesterNotes && (
+                      {internalNotes && (
                         <div
                           className="flex items-start gap-2 sm:col-span-2 lg:col-span-3"
-                          data-testid={`requester-notes-${job.id}`}
+                          data-testid={`internal-notes-${job.id}`}
                         >
                           <AlertCircle className="w-4 h-4 text-[#0ea5e9] mt-0.5 shrink-0" />
                           <div>
-                            <p className="text-xs font-medium text-slate-500 uppercase">Requester notes</p>
-                            <p className="text-slate-700 whitespace-pre-wrap break-words">{requesterNotes}</p>
+                            <p className="text-xs font-medium text-slate-500 uppercase">Internal notes</p>
+                            <p className="text-slate-700 whitespace-pre-wrap break-words">{internalNotes}</p>
                           </div>
                         </div>
                       )}

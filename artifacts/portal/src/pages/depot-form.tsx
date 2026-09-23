@@ -2606,7 +2606,7 @@ export default function DepotFormPage() {
           <div className="border-l-4 border-slate-300 bg-slate-50/50 px-5 py-4 border-b border-slate-100 flex items-center gap-2">
             <FileText className="w-5 h-5 text-slate-400" />
             <h3 className="font-bold text-[#0f2744] text-lg">
-              Notes{" "}
+              Internal notes{" "}
               <span className="text-slate-400 font-normal text-sm ml-1">
                 (Optional)
               </span>
@@ -2614,7 +2614,7 @@ export default function DepotFormPage() {
           </div>
           <div className="p-5">
             <Textarea
-              placeholder="Add any additional notes about this collection..."
+              placeholder="Add internal notes for Itinium and CBL..."
               className="min-h-[120px] bg-slate-50 border-slate-200 focus-visible:ring-[#0ea5e9] focus-visible:border-[#0ea5e9] resize-y"
               data-testid="textarea-notes"
               value={jobNotes}

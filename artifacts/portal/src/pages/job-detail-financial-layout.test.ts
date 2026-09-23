@@ -46,7 +46,7 @@ describe("financial master-log field grouping", () => {
 });
 
 describe("job-detail save controls", () => {
-  it("incorporates collection sheet fields and notes into the first line-items table", () => {
+  it("incorporates collection sheet fields and internal notes into the first line-items table", () => {
     const collectionTableStart = source.indexOf('<table className="w-full text-sm">');
     const collectionTableEnd = source.indexOf("</table>", collectionTableStart);
     const collectionTable = source.slice(collectionTableStart, collectionTableEnd);
@@ -57,7 +57,7 @@ describe("job-detail save controls", () => {
     expect(collectionTable).toContain("Site Contacts");
     expect(collectionTable).toContain("Site Hours");
     expect(collectionTable).toContain("Special / Loading Instructions");
-    expect(collectionTable).toContain("Collection Notes");
+    expect(collectionTable).toContain("Internal Notes");
     expect(collectionTable).toContain("siteDetails.notes");
     expect(source.match(/>Collection Sheet Details</g)).toHaveLength(1);
   });

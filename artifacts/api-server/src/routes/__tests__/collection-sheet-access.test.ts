@@ -65,4 +65,22 @@ describe("confirmed collection PDF layout", () => {
     expect(confirmedPdfRoute).not.toContain("drawAgreementAndSignatures(");
     expect(confirmedPdfRoute).not.toContain("Please retain a copy for your records");
   });
+
+  it("prints operational collection details but never internal job notes", () => {
+    const confirmedStart = jobsRouteSource.indexOf('"/jobs/:id/invoice.pdf"');
+    const confirmedEnd = jobsRouteSource.indexOf("export function canDownloadRawCollectionSheet", confirmedStart);
+    const confirmedPdfRoute = jobsRouteSource.slice(confirmedStart, confirmedEnd);
+    const rawStart = jobsRouteSource.indexOf('"/jobs/:id/collection-sheet.pdf"');
+    const rawEnd = jobsRouteSource.indexOf('"/jobs/:id"', rawStart);
+    const rawPdfRoute = jobsRouteSource.slice(rawStart, rawEnd);
+
+    for (const route of [confirmedPdfRoute, rawPdfRoute]) {
+      expect(route).toContain("job.driverName");
+      expect(route).toContain("job.vehicleReg");
+      expect(route).toContain("job.siteContacts");
+      expect(route).toContain("job.siteHours");
+      expect(route).toContain("job.specialInstructions");
+      expect(route).not.toContain("job.notes");
+    }
+  });
 });

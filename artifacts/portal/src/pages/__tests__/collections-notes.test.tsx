@@ -37,7 +37,7 @@ function collectionJob(id: number, notes: string | null) {
   };
 }
 
-describe("collection partner requester notes", () => {
+describe("collection partner internal notes", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
@@ -62,16 +62,16 @@ describe("collection partner requester notes", () => {
     );
   });
 
-  it("shows saved collection notes with existing instructions", async () => {
+  it("shows saved internal notes with existing instructions", async () => {
     render(<CollectionsPage />);
     expect(await screen.findByText("Use rear gate")).toBeInTheDocument();
-    expect(screen.getByText("Requester notes")).toBeInTheDocument();
+    expect(screen.getByText("Internal notes")).toBeInTheDocument();
     expect(
       screen.getByText("Call the requester before entering the loading area.")
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Requester notes")).toHaveLength(1);
-    expect(screen.queryByTestId("requester-notes-42")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("requester-notes-43")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("requester-notes-44")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Internal notes")).toHaveLength(1);
+    expect(screen.queryByTestId("internal-notes-42")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("internal-notes-43")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("internal-notes-44")).not.toBeInTheDocument();
   });
 });

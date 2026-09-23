@@ -1650,11 +1650,11 @@ export default function JobDetailPage() {
                             />
                           </div>
                           <div className="md:col-span-2 xl:col-span-4">
-                            <label className="mb-1 block text-xs font-medium uppercase text-slate-500">Collection Notes</label>
+                            <label className="mb-1 block text-xs font-medium uppercase text-slate-500">Internal Notes</label>
                             <textarea
                               value={siteDetails.notes}
                               onChange={(e) => setSiteDetails((prev) => ({ ...prev, notes: e.target.value }))}
-                              placeholder="Add any additional notes for this collection"
+                              placeholder="Add internal notes for Itinium and CBL"
                               rows={3}
                               className="flex w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-2"
                             />
