@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { selectPreferredCatalogueModel } from "./cell-type-suggestions";
+import {
+  canonicalizeVoltageInput,
+  isPositiveIntegerInput,
+  isProvisionalLooseCellInput,
+  parsePositiveWeightInput,
+  selectPreferredCatalogueModel,
+} from "./cell-type-suggestions";
 
 const models = [
   { manufacturer: "TAB", modelName: "4 PzS 460" },
   { manufacturer: "Exide / GNB", modelName: "4 EPzS 460" },
   { manufacturer: "Hoppecke", modelName: "4 HPzS 460" },
   { manufacturer: "Hoppecke", modelName: "6 HPzS 750" },
+  { manufacturer: "Exide / GNB", modelName: "6 EPzS 930" },
 ];
 
 describe("manufacturer-specific catalogue selection", () => {
@@ -25,5 +32,58 @@ describe("manufacturer-specific catalogue selection", () => {
     expect(
       selectPreferredCatalogueModel(models, "Nobody", "6 PzS 750")
     ).toBeUndefined();
+  });
+
+  it("canonicalizes a no-space shorthand to the requested manufacturer's model", () => {
+    expect(
+      selectPreferredCatalogueModel(models, "Exide / GNB", "6PzS930")?.modelName
+    ).toBe("6 EPzS 930");
+  });
+});
+
+describe("manual battery input normalization", () => {
+  it("adds V to numeric voltage shorthand", () => {
+    expect(canonicalizeVoltageInput("24")).toBe("24V");
+    expect(canonicalizeVoltageInput(" 48v ")).toBe("48V");
+  });
+
+  it("recognizes a reviewable loose-cell row with a manual token weight", () => {
+    expect(
+      isProvisionalLooseCellInput({
+        isLooseCells: true,
+        looseCellsQty: "15",
+        estimatedWeightKg: "500",
+        weightManual: true,
+        hasUnknownCellType: true,
+      })
+    ).toBe(true);
+  });
+
+  it("does not treat an automatic or missing weight as provisional", () => {
+    expect(
+      isProvisionalLooseCellInput({
+        isLooseCells: true,
+        looseCellsQty: "15",
+        estimatedWeightKg: "",
+        weightManual: false,
+        hasUnknownCellType: true,
+      })
+    ).toBe(false);
+  });
+
+  it("requires loose-cell quantities to be positive whole numbers", () => {
+    expect(isPositiveIntegerInput("15")).toBe(true);
+    expect(isPositiveIntegerInput("1.5")).toBe(false);
+    expect(isPositiveIntegerInput("0")).toBe(false);
+    expect(isPositiveIntegerInput("cells: 15")).toBe(false);
+  });
+
+  it("accepts only complete positive decimal weight values", () => {
+    expect(parsePositiveWeightInput("500")).toBe(500);
+    expect(parsePositiveWeightInput("500.25")).toBe(500.25);
+    expect(parsePositiveWeightInput("500kg")).toBeNull();
+    expect(parsePositiveWeightInput("1e3")).toBeNull();
+    expect(parsePositiveWeightInput("0")).toBeNull();
+    expect(parsePositiveWeightInput("-1")).toBeNull();
   });
 });

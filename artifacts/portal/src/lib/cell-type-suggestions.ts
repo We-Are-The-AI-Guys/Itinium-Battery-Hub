@@ -14,6 +14,46 @@ export function normalize(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+export function canonicalizeVoltageInput(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const numericOnly = trimmed.match(/^(\d+)$/);
+  if (!numericOnly) return trimmed.toUpperCase();
+  return `${parseInt(numericOnly[1], 10)}V`;
+}
+
+export function isPositiveIntegerInput(value: string | number | null | undefined): boolean {
+  const text = String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) return false;
+  const parsed = Number(text);
+  return Number.isSafeInteger(parsed) && parsed > 0;
+}
+
+export function parsePositiveWeightInput(
+  value: string | number | null | undefined
+): number | null {
+  const text = String(value ?? "").trim();
+  if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) return null;
+  const parsed = Number(text);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function isProvisionalLooseCellInput(input: {
+  isLooseCells: boolean;
+  looseCellsQty: string | number | null | undefined;
+  estimatedWeightKg: string | number | null | undefined;
+  weightManual: boolean;
+  hasUnknownCellType: boolean;
+}): boolean {
+  return (
+    input.isLooseCells &&
+    input.weightManual &&
+    input.hasUnknownCellType &&
+    isPositiveIntegerInput(input.looseCellsQty) &&
+    parsePositiveWeightInput(input.estimatedWeightKg) !== null
+  );
+}
+
 // Reduce a normalized cell model to a "core" key that ignores manufacturer
 // prefix letters before the standard family, so "4epzs460" and "4ipzs460"
 // both reduce to "4pzs460" and match a typed "4 PzS 460".

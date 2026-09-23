@@ -184,4 +184,46 @@ describe("weight parity: submit payload weightManual flag", () => {
     expect(parseFloat(body.batteries[0].estimatedWeightKg || "")).toBeCloseTo(555, 1);
     expect(body.batteries[0].weightManual).toBe(true);
   });
+
+  it("submits unknown loose cells with a manual token weight for review", async () => {
+    renderPage();
+    await screen.findByTestId("button-upload-csv");
+
+    const csv = [
+      "Pallet Number,Asset No,Battery Serial,Manufacturer,Loose Cells Qty,Cell Type,Weight",
+      "P3,ASSET-3,N/A,Exide / GNB,15,Unknown loose cells,500",
+    ].join("\n");
+    await uploadCsvViaButton(csv);
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /Import anyway and flag for review/i,
+      })
+    );
+    await screen.findByText("CSV imported");
+
+    fireEvent.click(screen.getByTestId("button-submit-collection"));
+    await waitFor(() => {
+      expect(jobPostBodies.length).toBe(1);
+    });
+
+    const body = jobPostBodies[0] as {
+      batteries: Array<{
+        cellType: string | null;
+        looseCellsQty: string | null;
+        estimatedWeightKg: string | null;
+        weightManual: boolean;
+        isLooseCells: boolean;
+        cellModelFlagReason: string | null;
+      }>;
+    };
+    expect(body.batteries[0]).toMatchObject({
+      cellType: "Unknown loose cells",
+      looseCellsQty: "15",
+      estimatedWeightKg: "500",
+      weightManual: true,
+      isLooseCells: true,
+    });
+    expect(body.batteries[0].cellModelFlagReason).toBeTruthy();
+  });
 });

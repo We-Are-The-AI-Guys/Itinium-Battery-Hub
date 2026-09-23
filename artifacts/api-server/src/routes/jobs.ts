@@ -50,6 +50,32 @@ function normalizeCellKey(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+export function canonicalizeSubmittedVoltage(value: string | null | undefined): string | null {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return null;
+  const numericOnly = trimmed.match(/^(\d+)$/);
+  if (!numericOnly) return trimmed.toUpperCase();
+  return `${parseInt(numericOnly[1], 10)}V`;
+}
+
+export function parsePositiveLooseCellQuantity(
+  value: string | number | null | undefined
+): number | null {
+  const text = String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) return null;
+  const parsed = Number(text);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function parsePositiveWeightKg(
+  value: string | number | null | undefined
+): number | null {
+  const text = String(value ?? "").trim();
+  if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) return null;
+  const parsed = Number(text);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 function comparableCellModelKey(value: string): string {
   const normalized = normalizeCellKey(value);
   const match = normalized.match(/^(\d+)([a-z]+)(\d+.*)$/);
@@ -118,8 +144,7 @@ export function deriveActualCellCount(opts: {
   voltage?: string | null;
 }): number | null {
   if (opts.isLooseCells) {
-    const qty = parseInt(String(opts.looseCellsQty ?? ""), 10);
-    return isFinite(qty) && qty > 0 ? qty : null;
+    return parsePositiveLooseCellQuantity(opts.looseCellsQty);
   }
   // Accept only a single clean numeric token ("24", "24V", "24.0V"). Reject
   // multi-number strings like "12/24V" — digit concatenation would wildly
@@ -1184,6 +1209,8 @@ router.post(
           // The positive-weight requirement for loose cells is enforced
           // below, after catalogue weight derivation has had a chance to
           // fill it in from the model + quantity.
+        } else {
+          b.voltage = canonicalizeSubmittedVoltage(b.voltage);
         }
         if (b.rowPhoto && !b.rowPhoto.startsWith("data:image/")) {
           b.rowPhoto = null;
@@ -1196,8 +1223,8 @@ router.post(
 
       function sanitizeWeight(val: string | number | null | undefined): string | null {
         if (val === null || val === undefined || val === "") return null;
-        const parsed = parseFloat(String(val));
-        if (!isFinite(parsed) || parsed < 0) return null;
+        const parsed = parsePositiveWeightKg(val);
+        if (parsed === null) return null;
         return (parsed * SAFE_LOAD_FACTOR).toFixed(3);
       }
 
@@ -1214,11 +1241,27 @@ router.post(
         })
         .from(cellModelsTable);
 
-      for (const b of batteryInputs) {
+      for (let inputIndex = 0; inputIndex < batteryInputs.length; inputIndex++) {
+        const b = batteryInputs[inputIndex];
         const mfrStr = (b.manufacture || "").trim();
         const isUnknownMfr = mfrStr.toLowerCase() === "unknown";
         const cellTypeStr = (b.cellType || "").trim();
         const cellModelApplies = cellTypeStr !== "Blocs" && cellTypeStr !== "Other";
+
+        if (b.isLooseCells) {
+          if (!cellTypeStr) {
+            res.status(400).json({
+              message: `Battery row ${inputIndex + 1}: Cell type is required for loose cells.`,
+            });
+            return;
+          }
+          if (parsePositiveLooseCellQuantity(b.looseCellsQty) === null) {
+            res.status(400).json({
+              message: `Battery row ${inputIndex + 1}: Loose-cell quantity must be a positive whole number.`,
+            });
+            return;
+          }
+        }
 
         if (!b.manufacturerFlagReason) {
           if (!mfrStr || isUnknownMfr) {
@@ -1255,6 +1298,31 @@ router.post(
           }
         }
 
+        const unresolvedLooseCellType =
+          b.isLooseCells &&
+          cellModelApplies &&
+          !!cellTypeStr &&
+          !selectCatalogueModel(
+            allCellModels,
+            isUnknownMfr ? null : mfrStr,
+            b.cellType || cellTypeStr
+          );
+        if (unresolvedLooseCellType && b.weightManual !== true) {
+          res.status(400).json({
+            message: `Battery row ${inputIndex + 1}: Loose cells with an unknown cell type require an explicit manual/token weight.`,
+          });
+          return;
+        }
+        if (
+          unresolvedLooseCellType &&
+          parsePositiveWeightKg(b.estimatedWeightKg) === null
+        ) {
+          res.status(400).json({
+            message: `Battery row ${inputIndex + 1}: Manual/token weight must be a positive decimal number.`,
+          });
+          return;
+        }
+
         // Authoritative weight derivation: unless the user typed the weight
         // themselves (weightManual), re-derive it from the catalogue using
         // the canonicalised cell type. This guarantees manual entry and CSV
@@ -1281,9 +1349,7 @@ router.post(
       for (let i = 0; i < batteryInputs.length; i++) {
         const b = batteryInputs[i];
         if (b.isLooseCells) {
-          const w = b.estimatedWeightKg;
-          const parsed = w !== null && w !== undefined && w !== "" ? parseFloat(String(w)) : NaN;
-          if (!isFinite(parsed) || parsed <= 0) {
+          if (parsePositiveWeightKg(b.estimatedWeightKg) === null) {
             res.status(400).json({ message: `Battery row ${i + 1}: Estimated weight is required for loose cells and must be a positive number.` });
             return;
           }
@@ -1295,8 +1361,8 @@ router.post(
       for (const b of batteryInputs) {
         const w = sanitizeWeight(b.estimatedWeightKg);
         if (w !== null) autoTonnage += parseFloat(w);
-        const raw = parseFloat(String(b.estimatedWeightKg ?? ""));
-        if (isFinite(raw) && raw > 0) rawWeightKg += raw;
+        const raw = parsePositiveWeightKg(b.estimatedWeightKg);
+        if (raw !== null) rawWeightKg += raw;
       }
       const autoTonnageStr = (autoTonnage / 1000).toFixed(3);
       const parsedTonnage = tonnage ? parseFloat(String(tonnage)) : NaN;
@@ -1393,7 +1459,9 @@ router.post(
             manufacture: b.manufacture || null,
             cellType: b.cellType || null,
             voltage: b.isLooseCells ? null : (b.voltage || null),
-            looseCellsQty: b.looseCellsQty ? parseInt(String(b.looseCellsQty), 10) : null,
+            looseCellsQty: b.isLooseCells
+              ? parsePositiveLooseCellQuantity(b.looseCellsQty)
+              : (b.looseCellsQty ? parseInt(String(b.looseCellsQty), 10) : null),
             estimatedWeightKg: sanitizeWeight(b.estimatedWeightKg),
             weightManual: b.weightManual === true,
             isLooseCells: b.isLooseCells || false,

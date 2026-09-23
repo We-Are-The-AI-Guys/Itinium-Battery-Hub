@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { deriveEstimatedWeightKg, derivePbContentKg, deriveTabGrossWeightKg } from "../jobs";
+import {
+  canonicalizeSubmittedVoltage,
+  deriveEstimatedWeightKg,
+  derivePbContentKg,
+  deriveTabGrossWeightKg,
+  parsePositiveLooseCellQuantity,
+  parsePositiveWeightKg,
+} from "../jobs";
 
 // Catalogue fixtures mirror the real cell-model data shape. Weights are the
 // client's Pb-per-cell figures (the catalogue deliberately stores Pb, not
@@ -82,5 +89,44 @@ describe("deriveTabGrossWeightKg", () => {
   it("fails explicitly when TAB has no matching default", () => {
     expect(deriveTabGrossWeightKg(catalogue, "6 PzS 750", 24)).toBeNull();
     expect(deriveTabGrossWeightKg(catalogue, "Other", 24)).toBeNull();
+  });
+});
+
+describe("canonicalizeSubmittedVoltage", () => {
+  it("stores numeric shorthand in the same format as catalogue voltages", () => {
+    expect(canonicalizeSubmittedVoltage("24")).toBe("24V");
+    expect(canonicalizeSubmittedVoltage(" 48v ")).toBe("48V");
+  });
+
+  it("keeps blank voltage absent", () => {
+    expect(canonicalizeSubmittedVoltage("")).toBeNull();
+    expect(canonicalizeSubmittedVoltage(null)).toBeNull();
+  });
+});
+
+describe("parsePositiveLooseCellQuantity", () => {
+  it("accepts only positive whole-cell quantities", () => {
+    expect(parsePositiveLooseCellQuantity("15")).toBe(15);
+    expect(parsePositiveLooseCellQuantity(15)).toBe(15);
+    expect(parsePositiveLooseCellQuantity("1.5")).toBeNull();
+    expect(parsePositiveLooseCellQuantity("15 cells")).toBeNull();
+    expect(parsePositiveLooseCellQuantity("0")).toBeNull();
+    expect(parsePositiveLooseCellQuantity("")).toBeNull();
+  });
+});
+
+describe("parsePositiveWeightKg", () => {
+  it("accepts valid decimal weights without permissive truncation", () => {
+    expect(parsePositiveWeightKg("500")).toBe(500);
+    expect(parsePositiveWeightKg("500.25")).toBe(500.25);
+    expect(parsePositiveWeightKg(".5")).toBe(0.5);
+  });
+
+  it("rejects malformed, scientific, zero, and negative weights", () => {
+    expect(parsePositiveWeightKg("500kg")).toBeNull();
+    expect(parsePositiveWeightKg("1e3")).toBeNull();
+    expect(parsePositiveWeightKg("0")).toBeNull();
+    expect(parsePositiveWeightKg("-1")).toBeNull();
+    expect(parsePositiveWeightKg("")).toBeNull();
   });
 });

@@ -60,7 +60,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { selectPreferredCatalogueModel } from "@/lib/cell-type-suggestions";
+import {
+  canonicalizeVoltageInput,
+  isPositiveIntegerInput,
+  isProvisionalLooseCellInput,
+  parsePositiveWeightInput,
+  selectPreferredCatalogueModel,
+} from "@/lib/cell-type-suggestions";
 
 
 interface CellModelOption {
@@ -162,6 +168,18 @@ const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
 const MANUAL_UNKNOWN_FLAG_REASON = "Unrecognised value — not found in master list";
 const VOLTAGE_VALUES = ["12V", "24V", "36V", "40V", "48V", "80V", "96V"];
+
+function isReviewableProvisionalRow(battery: BatteryRow): boolean {
+  return isProvisionalLooseCellInput({
+    isLooseCells: battery.isLooseCells,
+    looseCellsQty: battery.looseCellsQty,
+    estimatedWeightKg: battery.estimatedWeightKg,
+    weightManual: battery.weightManual,
+    hasUnknownCellType:
+      battery.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON ||
+      battery.cellModelFlagReason === CSV_UNKNOWN_FLAG_REASON,
+  });
+}
 
 function levenshtein(a: string, b: string): number {
   const m = a.length;
@@ -1224,12 +1242,12 @@ export default function DepotFormPage() {
     const looseCellsMissingInputs = batteriesWithMfrFallback.some(
       (b) =>
         b.isLooseCells &&
-        (!b.cellType.trim() || !b.looseCellsQty.trim() || parseInt(b.looseCellsQty, 10) <= 0)
+        (!b.cellType.trim() || !isPositiveIntegerInput(b.looseCellsQty))
     );
     if (looseCellsMissingInputs) {
       toast({
         title: "Missing details for loose cells",
-        description: "Please complete the Cell Type and Cell Qty fields for all loose cell rows.",
+        description: "Please enter a Cell Type and a positive whole-number Cell Qty for all loose cell rows.",
         variant: "destructive",
       });
       return;
@@ -1238,8 +1256,7 @@ export default function DepotFormPage() {
     const rowsMissingWeight = batteriesWithMfrFallback
       .map((b, i) => ({ b, i }))
       .filter(({ b }) => {
-        const w = parseFloat(b.estimatedWeightKg);
-        return !(isFinite(w) && w > 0);
+        return parsePositiveWeightInput(b.estimatedWeightKg) === null;
       });
     if (rowsMissingWeight.length > 0) {
       const looseRows = rowsMissingWeight.filter(({ b }) => b.isLooseCells);
@@ -1325,7 +1342,11 @@ export default function DepotFormPage() {
       if (b.manufacturerFlagReason === MANUAL_UNKNOWN_FLAG_REASON && !b.manufacturerManuallyConfirmed) {
         unresolvedCritical.push(`${rowLabel}: Manufacturer`);
       }
-      if (b.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON && !b.cellTypeManuallyConfirmed) {
+      if (
+        b.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON &&
+        !b.cellTypeManuallyConfirmed &&
+        !isReviewableProvisionalRow(b)
+      ) {
         unresolvedCritical.push(`${rowLabel}: Cell Type`);
       }
       if (!b.isLooseCells && b.voltageFlagReason === MANUAL_UNKNOWN_FLAG_REASON && !b.voltageManuallyConfirmed) {
@@ -2061,6 +2082,41 @@ export default function DepotFormPage() {
                         }
                       }}
                       onBlurValidate={(committed) => {
+                        const effectiveManufacturer =
+                          battery.manufacture === "Other"
+                            ? battery.manufactureCustom
+                            : battery.manufacture;
+                        const preferred = selectPreferredCatalogueModel(
+                          cellModels,
+                          effectiveManufacturer,
+                          committed
+                        );
+                        if (preferred) {
+                          const originalValue = committed.trim();
+                          const canonicalValue = preferred.modelName;
+                          const updatedBattery: BatteryRow = {
+                            ...battery,
+                            cellType: preferred.cellFamily,
+                            cellModel: canonicalValue,
+                            cellModelFlagReason: "",
+                            cellTypeSuggestion: undefined,
+                            cellTypeSuggestionConfidence: "high",
+                            cellTypeOriginalValue:
+                              normalizeForMatch(originalValue) !== normalizeForMatch(canonicalValue)
+                                ? originalValue
+                                : undefined,
+                            cellTypeSuggestedValue: canonicalValue,
+                            cellTypeWasAccepted: true,
+                            cellTypeManuallyConfirmed: undefined,
+                          };
+                          setBatteries((prev) =>
+                            prev.map((b) => (b.id === battery.id ? updatedBattery : b))
+                          );
+                          if (!updatedBattery.weightManual) {
+                            computeAndSetAutoWeight(updatedBattery);
+                          }
+                          return;
+                        }
                         const reason = validateBatteryField(
                           "cellType", committed, manufacturers, cellModels, manufacturerAliases
                         );
@@ -2138,7 +2194,8 @@ export default function DepotFormPage() {
                         {battery.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON
                           && !battery.cellTypeSuggestion
                           && !fetchingSuggestions.has(`${battery.id}_cellType`)
-                          && !battery.cellTypeManuallyConfirmed && (
+                          && !battery.cellTypeManuallyConfirmed
+                          && !isReviewableProvisionalRow(battery) && (
                           <label className="flex items-center gap-1.5 cursor-pointer group mt-0.5">
                             <input
                               type="checkbox"
@@ -2149,6 +2206,12 @@ export default function DepotFormPage() {
                               I confirm this value is correct — submit for Itinium review
                             </span>
                           </label>
+                        )}
+                        {isReviewableProvisionalRow(battery) && (
+                          <p className="text-[10px] text-amber-700 flex items-center gap-1 mt-0.5">
+                            <AlertTriangle className="w-3 h-3" />
+                            Provisional cell type and manual weight — Itinium will confirm after collection.
+                          </p>
                         )}
                         {battery.cellModelFlagReason === CSV_UNKNOWN_FLAG_REASON &&
                           (() => {
@@ -2231,7 +2294,7 @@ export default function DepotFormPage() {
                             );
                           }}
                           onBlurValidate={(v) => {
-                            const trimmed = v.trim();
+                            const trimmed = canonicalizeVoltageInput(v);
                             const canonical = VOLTAGE_VALUES.find(
                               (o) => o.toLowerCase() === trimmed.toLowerCase()
                             );
@@ -2356,6 +2419,40 @@ export default function DepotFormPage() {
                       />
                     </div>
                   )}
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600">
+                      Estimated Weight (kg)
+                    </label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      placeholder="Calculated or enter manually"
+                      className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
+                      value={battery.estimatedWeightKg}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setBatteries((prev) =>
+                          prev.map((b) =>
+                            b.id === battery.id
+                              ? {
+                                  ...b,
+                                  estimatedWeightKg: value,
+                                  weightManual: value.trim() !== "",
+                                }
+                              : b
+                          )
+                        );
+                      }}
+                      data-testid={`input-estimated-weight-${index}`}
+                    />
+                    <p className="text-[10px] text-slate-400">
+                      {battery.weightManual
+                        ? "Manual/token weight; Itinium can confirm it after collection."
+                        : "Calculated automatically when catalogue details are available."}
+                    </p>
+                  </div>
 
                   <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
                     <label className="text-xs font-medium text-slate-600">
