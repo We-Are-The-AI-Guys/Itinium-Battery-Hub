@@ -178,6 +178,9 @@ interface BatteryData {
 }
 
 interface ReceiptDraft {
+  batterySerial: string;
+  palletNumber: string;
+  cellType: string;
   receiptConfirmed: boolean;
   pbContentKg: string;
   valueGbp: string;
@@ -189,6 +192,9 @@ type ReceiptDraftField = keyof ReceiptDraft;
 
 function receiptDraftFromBattery(battery: BatteryData): ReceiptDraft {
   return {
+    batterySerial: battery.batterySerial || "",
+    palletNumber: battery.palletNumber || "",
+    cellType: battery.cellType || "",
     receiptConfirmed: battery.receiptConfirmed ?? false,
     pbContentKg: battery.pbContentKg || "",
     valueGbp: battery.valueGbp || "",
@@ -2673,28 +2679,45 @@ function BatteryAdminRow({
   return (
     <tr className={index % 2 === 0 ? "bg-white" : "bg-slate-50/30"}>
       <td className="px-3 py-2.5 text-slate-500">{index + 1}</td>
-      <td className="px-3 py-2.5 text-slate-700 font-medium">
-        {battery.batterySerial || "—"}
-      </td>
-      <td className="px-3 py-2.5 text-slate-700 font-medium">
-        {battery.palletNumber || "—"}
+      <td className="px-3 py-2.5">
+        <Input
+          disabled={disabled}
+          value={draft.batterySerial}
+          onChange={(e) => onChange(battery.id, { batterySerial: e.target.value })}
+          placeholder="Serial"
+          className="h-8 w-32 bg-slate-50 text-sm"
+          aria-label={`Serial for receipt row ${index + 1}`}
+        />
       </td>
       <td className="px-3 py-2.5">
-        <Badge variant="outline" className="text-xs">{battery.cellType || "—"}</Badge>
+        <Input
+          disabled={disabled}
+          value={draft.palletNumber}
+          onChange={(e) => onChange(battery.id, { palletNumber: e.target.value })}
+          placeholder="Pallet"
+          className="h-8 w-24 bg-slate-50 text-sm"
+          aria-label={`Pallet for receipt row ${index + 1}`}
+        />
+      </td>
+      <td className="px-3 py-2.5">
+        <Input
+          disabled={disabled}
+          value={draft.cellType}
+          onChange={(e) => onChange(battery.id, { cellType: e.target.value })}
+          placeholder="Type"
+          className="h-8 w-32 bg-slate-50 text-sm"
+          aria-label={`Type for receipt row ${index + 1}`}
+        />
       </td>
       <td className="px-3 py-2.5 text-slate-700">
-        {battery.isLooseCells ? (
-          <Input
-            disabled={disabled}
-            value={draft.voltage}
-            onChange={(e) => onChange(battery.id, { voltage: e.target.value })}
-            placeholder="Enter voltage"
-            className="h-8 w-28 bg-slate-50 text-sm"
-            aria-label={`Voltage for loose cells row ${index + 1}`}
-          />
-        ) : (
-          battery.voltage || "—"
-        )}
+        <Input
+          disabled={disabled}
+          value={draft.voltage}
+          onChange={(e) => onChange(battery.id, { voltage: e.target.value })}
+          placeholder="Voltage"
+          className="h-8 w-28 bg-slate-50 text-sm"
+          aria-label={`Voltage for receipt row ${index + 1}`}
+        />
       </td>
       <td className="px-3 py-2.5 text-center">
         <div className="flex flex-col items-center gap-1">

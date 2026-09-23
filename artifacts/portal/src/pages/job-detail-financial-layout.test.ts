@@ -116,7 +116,7 @@ describe("job-detail save controls", () => {
     expect(receiptSection).not.toContain("LME GBP:");
   });
 
-  it("shows serial and pallet numbers in separate receipt-table columns", () => {
+  it("edits every displayed receipt-table data field through the shared draft", () => {
     const receiptSectionStart = source.indexOf("Battery Receipt Confirmation & Pb Content");
     const receiptSectionEnd = source.indexOf("Financial Master", receiptSectionStart);
     const receiptSection = source.slice(receiptSectionStart, receiptSectionEnd);
@@ -126,8 +126,23 @@ describe("job-detail save controls", () => {
     expect(receiptSection).toContain(">Serial</th>");
     expect(receiptSection).toContain(">Pallet</th>");
     expect(receiptSection).not.toContain("Serial / Pallet");
-    expect(rowSource).toContain('battery.batterySerial || "—"');
-    expect(rowSource).toContain('battery.palletNumber || "—"');
+    expect(source).toContain('batterySerial: battery.batterySerial || ""');
+    expect(source).toContain('palletNumber: battery.palletNumber || ""');
+    expect(source).toContain('cellType: battery.cellType || ""');
+    expect(rowSource).toContain("value={draft.batterySerial}");
+    expect(rowSource).toContain("batterySerial: e.target.value");
+    expect(rowSource).toContain("value={draft.palletNumber}");
+    expect(rowSource).toContain("palletNumber: e.target.value");
+    expect(rowSource).toContain("value={draft.cellType}");
+    expect(rowSource).toContain("cellType: e.target.value");
+    expect(rowSource).toContain("value={draft.voltage}");
+    expect(rowSource).toContain("voltage: e.target.value");
+    expect(rowSource).toContain("value={draft.pbContentKg}");
+    expect(rowSource).toContain("pbContentKg: e.target.value");
+    expect(rowSource).toContain("value={draft.valueGbp}");
+    expect(rowSource).toContain("valueGbp: e.target.value");
+    expect(rowSource).toContain("value={draft.notes}");
+    expect(rowSource).toContain("notes: e.target.value");
   });
 
   it("pulls collection notes into an editable shared receipt draft", () => {
@@ -140,15 +155,14 @@ describe("job-detail save controls", () => {
     expect(rowSource).toContain('placeholder="Add notes…"');
   });
 
-  it("pulls loose-cell voltage into an editable receipt draft", () => {
+  it("pulls voltage into an editable receipt draft for every row", () => {
     const rowStart = source.indexOf("function BatteryAdminRow");
     const rowEnd = source.indexOf("function FinancialField", rowStart);
     const rowSource = source.slice(rowStart, rowEnd);
     expect(source).toContain('voltage: battery.voltage || ""');
-    expect(rowSource).toContain("battery.isLooseCells");
     expect(rowSource).toContain("value={draft.voltage}");
     expect(rowSource).toContain("voltage: e.target.value");
-    expect(rowSource).toContain('placeholder="Enter voltage"');
+    expect(rowSource).toContain('placeholder="Voltage"');
   });
 
   it("only sends receipt fields the user actually changed", () => {
