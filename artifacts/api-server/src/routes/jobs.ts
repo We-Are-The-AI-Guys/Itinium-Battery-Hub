@@ -1800,7 +1800,7 @@ router.patch(
       } = req.body;
       if (
         !canUpdateInvoiceMilestones(req.user!.role)
-        && (invoiceStatus !== undefined || invoiceReceivedDate !== undefined || datePaid !== undefined)
+        && (invoiceStatus !== undefined || invoiceReceivedDate !== undefined || dueDate !== undefined || datePaid !== undefined)
       ) {
         res.status(403).json({ message: "Only accounts and head office admins can update invoice milestones" });
         return;

@@ -133,6 +133,21 @@ function collectionDetailsDate(
   return job?.collectionDate || job?.proposedCollectionDate || "";
 }
 
+function getInvoiceDueStatus(dueDate: string, datePaid: string): {
+  label: string;
+  tone: "neutral" | "good" | "warning" | "overdue";
+} {
+  if (!dueDate) return { label: "—", tone: "neutral" };
+  if (datePaid) return { label: "Paid", tone: "good" };
+  const due = new Date(`${dueDate}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((due.getTime() - today.getTime()) / 86_400_000);
+  if (days < 0) return { label: `${Math.abs(days)} day${days === -1 ? "" : "s"} overdue`, tone: "overdue" };
+  if (days === 0) return { label: "Due today", tone: "warning" };
+  return { label: `${days} day${days === 1 ? "" : "s"} left`, tone: days <= 7 ? "warning" : "good" };
+}
+
 interface BatteryData {
   id: number;
   jobId: number;
@@ -932,9 +947,21 @@ export default function JobDetailPage() {
   ]);
 
   async function saveFinancials() {
-    if (
-      !collectionLmeUsable
-    ) {
+    const { wasteBlocsPercent: _unusedWasteBlocsPercent, ...financialsWithoutWasteBlocsPercent } = financials;
+    const changedEntries = Object.entries(financialsWithoutWasteBlocsPercent).filter(
+      ([key, value]) =>
+        value !== financialSnapshotRef.current[key as keyof typeof financials]
+    );
+    const lmeIndependentFields = new Set([
+      "wasteInvoiceNo",
+      "customerInvoiceNo",
+      "invoiceStatus",
+      "invoiceReceivedDate",
+      "dueDate",
+      "datePaid",
+    ]);
+    const requiresCollectionLme = changedEntries.some(([key]) => !lmeIndependentFields.has(key));
+    if (requiresCollectionLme && !collectionLmeUsable) {
       toast({
         title: "Collection LME price unavailable",
         description:
@@ -945,16 +972,19 @@ export default function JobDetailPage() {
       });
       return;
     }
+    if (changedEntries.length === 0) {
+      setFinancialEditing(false);
+      return;
+    }
     setSaving(true);
     try {
-      const { wasteBlocsPercent: _unusedWasteBlocsPercent, ...financialsWithoutWasteBlocsPercent } = financials;
       const payload = userRole === "team_leader"
         ? Object.fromEntries(
-            Object.entries(financialsWithoutWasteBlocsPercent).filter(([key]) =>
-              !["invoiceStatus", "invoiceReceivedDate", "datePaid"].includes(key)
+            changedEntries.filter(([key]) =>
+              !["invoiceStatus", "invoiceReceivedDate", "dueDate", "datePaid"].includes(key)
             )
           )
-        : financialsWithoutWasteBlocsPercent;
+        : Object.fromEntries(changedEntries);
       const res = await fetch(`/api/jobs/${params.id}/admin`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -1918,7 +1948,7 @@ export default function JobDetailPage() {
                   <Receipt className="w-3.5 h-3.5 text-[#0ea5e9]" />
                   Invoice Payment Tracking
                 </h5>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <fieldset disabled={!canManageStatus} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <FinancialField
                     label="Invoice Received Date"
                     value={financials.invoiceReceivedDate}
@@ -1940,19 +1970,22 @@ export default function JobDetailPage() {
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-slate-600 flex items-center gap-1">
                       <span className="text-[#0ea5e9] text-[10px]">(auto)</span>
-                      Days to Pay
+                       Days left to pay
                     </label>
                     <div className="h-9 flex items-center px-3 text-sm font-medium rounded-md border border-slate-200 bg-sky-50/50">
-                      {job.daysToPay !== null && job.daysToPay !== undefined ? (
-                        <span className={job.daysToPay > 30 ? "text-red-600" : job.daysToPay > 14 ? "text-amber-600" : "text-green-600"}>
-                          {job.daysToPay} days
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
+                      {(() => {
+                        const status = getInvoiceDueStatus(financials.dueDate, financials.datePaid);
+                        const toneClass = {
+                          neutral: "text-slate-400",
+                          good: "text-green-600",
+                          warning: "text-amber-600",
+                          overdue: "text-red-600",
+                        }[status.tone];
+                        return <span className={toneClass}>{status.label}</span>;
+                      })()}
                     </div>
                   </div>
-                </div>
+                </fieldset>
               </div>
 
               <div className="mt-4">
@@ -1983,7 +2016,7 @@ export default function JobDetailPage() {
                 <div className="flex items-center gap-2 mt-6 pt-4 border-t border-slate-100">
                   <Button
                     onClick={saveFinancials}
-                    disabled={saving || !collectionLmeUsable}
+                    disabled={saving}
                     className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
                   >
                     <Save className="w-4 h-4 mr-2" />

@@ -84,6 +84,26 @@ describe("job-detail save controls", () => {
     expect(source).toContain("<fieldset disabled={!financialEditing}>");
   });
 
+  it("allows manual invoice and payment tracking without requiring an LME price", () => {
+    expect(source).toContain('"wasteInvoiceNo"');
+    expect(source).toContain('"customerInvoiceNo"');
+    expect(source).toContain('"invoiceReceivedDate"');
+    expect(source).toContain('"dueDate"');
+    expect(source).toContain('"datePaid"');
+    expect(source).toContain("Object.fromEntries(changedEntries)");
+    expect(source).toContain("requiresCollectionLme && !collectionLmeUsable");
+    expect(source).toContain("disabled={saving}");
+    expect(source).not.toContain("disabled={saving || !collectionLmeUsable}");
+  });
+
+  it("calculates the days left to pay from the manually entered due date", () => {
+    expect(source).toContain("function getInvoiceDueStatus");
+    expect(source).toContain("Days left to pay");
+    expect(source).toContain("financials.dueDate, financials.datePaid");
+    expect(source).toContain("Due today");
+    expect(source).toContain("overdue");
+  });
+
   it("has receipt-table save controls above and below without per-row saves", () => {
     expect(source.match(/onClick=\{saveReceiptRows\}/g)).toHaveLength(2);
     const rowStart = source.indexOf("function BatteryAdminRow");
