@@ -134,6 +134,27 @@ interface User {
 interface LocationOption {
   id: number;
   name: string;
+  address: string | null;
+  siteContacts: string | null;
+  siteContactName: string | null;
+  siteContactPhone: string | null;
+  siteContact2Name: string | null;
+  siteContact2Phone: string | null;
+  siteContact3Name: string | null;
+  siteContact3Phone: string | null;
+  siteHours: string | null;
+  specialInstructions: string | null;
+}
+
+function locationContacts(location: LocationOption): string {
+  const structured = [
+    [location.siteContactName, location.siteContactPhone],
+    [location.siteContact2Name, location.siteContact2Phone],
+    [location.siteContact3Name, location.siteContact3Phone],
+  ]
+    .map((parts) => parts.filter(Boolean).join(" — "))
+    .filter(Boolean);
+  return structured.length > 0 ? structured.join("\n") : (location.siteContacts || "");
 }
 
 function createEmptyBattery(): BatteryRow {
@@ -411,6 +432,9 @@ export default function DepotFormPage() {
   const { toast } = useToast();
   const [clientLocations, setClientLocations] = useState<LocationOption[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
+  const [siteContacts, setSiteContacts] = useState("");
+  const [siteHours, setSiteHours] = useState("");
+  const [specialInstructions, setSpecialInstructions] = useState("");
   const [fetchingSuggestions, setFetchingSuggestions] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -423,15 +447,23 @@ export default function DepotFormPage() {
       .then((data) => {
         if (data?.user) {
           setUser(data.user);
-          if (data.user.locationId) {
-            setSelectedLocationId(String(data.user.locationId));
-          }
-          if (data.user.clientId && data.user.role === "team_leader") {
+          if (data.user.clientId && ["team_leader", "depot_user"].includes(data.user.role)) {
             fetch(`/api/clients/${data.user.clientId}/locations`, { credentials: "include" })
               .then((r) => (r.ok ? r.json() : null))
               .then((d) => {
                 if (d?.locations) {
-                  setClientLocations(d.locations.map((l: { id: number; name: string }) => ({ id: l.id, name: l.name })));
+                  const locations = d.locations as LocationOption[];
+                  setClientLocations(locations);
+                  if (!draftIdFromUrl && data.user.locationId) {
+                    const selected = locations.find((location) => location.id === data.user.locationId);
+                    if (selected) {
+                      setSelectedLocationId(String(selected.id));
+                      setCollectionPoint(selected.address || "");
+                      setSiteContacts(locationContacts(selected));
+                      setSiteHours(selected.siteHours || "");
+                      setSpecialInstructions(selected.specialInstructions || "");
+                    }
+                  }
                 }
               })
               .catch(() => {});
@@ -462,6 +494,9 @@ export default function DepotFormPage() {
             if (fd.tonnageOverride !== undefined) setTonnageOverride(fd.tonnageOverride || "");
             if (fd.tonnageManual !== undefined) setTonnageManual(!!fd.tonnageManual);
             if (fd.selectedLocationId !== undefined) setSelectedLocationId(fd.selectedLocationId || "");
+            if (fd.siteContacts !== undefined) setSiteContacts(fd.siteContacts || "");
+            if (fd.siteHours !== undefined) setSiteHours(fd.siteHours || "");
+            if (fd.specialInstructions !== undefined) setSpecialInstructions(fd.specialInstructions || "");
             if (fd.batteries && Array.isArray(fd.batteries) && fd.batteries.length > 0) {
               setBatteries(fd.batteries);
             }
@@ -1349,7 +1384,11 @@ export default function DepotFormPage() {
         credentials: "include",
         body: JSON.stringify({
           depot: getSelectedLocationName() || user?.depot || "Head Office",
+          locationId: selectedLocationId ? Number(selectedLocationId) : null,
           collectionPoint: collectionPoint || null,
+          siteContacts: siteContacts || null,
+          siteHours: siteHours || null,
+          specialInstructions: specialInstructions || null,
           collectionDate: null,
           tonnage: submissionLoad > 0 ? submissionLoad.toFixed(3) : "0.000",
           tonnageManualOverride: tonnageManual,
@@ -1396,6 +1435,9 @@ export default function DepotFormPage() {
         });
         setBatteries([createEmptyBattery()]);
         setCollectionPoint("");
+        setSiteContacts("");
+        setSiteHours("");
+        setSpecialInstructions("");
         setJobNotes("");
         setTonnageManual(false);
         setTonnageOverride("");
@@ -1429,6 +1471,9 @@ export default function DepotFormPage() {
         tonnageOverride,
         tonnageManual,
         selectedLocationId,
+        siteContacts,
+        siteHours,
+        specialInstructions,
         batteries,
       };
       const body: Record<string, unknown> = {
@@ -1644,7 +1689,17 @@ export default function DepotFormPage() {
                 <select
                   className="w-full appearance-none h-11 rounded-md border border-slate-200 bg-slate-50 px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
                   value={selectedLocationId}
-                  onChange={(e) => setSelectedLocationId(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSelectedLocationId(value);
+                    const location = clientLocations.find((item) => String(item.id) === value);
+                    if (location) {
+                      setCollectionPoint(location.address || "");
+                      setSiteContacts(locationContacts(location));
+                      setSiteHours(location.siteHours || "");
+                      setSpecialInstructions(location.specialInstructions || "");
+                    }
+                  }}
                 >
                   <option value="">Select a location...</option>
                   {clientLocations.map((l) => (
@@ -1697,6 +1752,42 @@ export default function DepotFormPage() {
                 ))}
               </div>
             )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-[#1e293b]">Site Contact Names &amp; Telephone Numbers</label>
+              <Textarea
+                value={siteContacts}
+                onChange={(e) => setSiteContacts(e.target.value)}
+                placeholder={"e.g. John Smith — 07700 900123\nJane Smith — 07700 900456"}
+                className="min-h-24 bg-slate-50 border-slate-200 focus-visible:ring-[#0ea5e9]"
+                data-testid="input-site-contacts"
+              />
+              <p className="text-xs text-slate-500">One contact per line. You can amend the saved location contacts for this job.</p>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-[#1e293b]">Site Hours</label>
+                <Input
+                  value={siteHours}
+                  onChange={(e) => setSiteHours(e.target.value)}
+                  placeholder="e.g. Mon–Fri 07:00–16:00"
+                  className="h-11 bg-slate-50 border-slate-200 focus-visible:ring-[#0ea5e9]"
+                  data-testid="input-site-hours"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-[#1e293b]">Special Instructions</label>
+                <Textarea
+                  value={specialInstructions}
+                  onChange={(e) => setSpecialInstructions(e.target.value)}
+                  placeholder="e.g. Report to the gatehouse on arrival"
+                  className="min-h-20 bg-slate-50 border-slate-200 focus-visible:ring-[#0ea5e9]"
+                  data-testid="input-special-instructions"
+                />
+              </div>
+            </div>
           </div>
         </section>
 

@@ -812,7 +812,7 @@ router.get(
       doc.moveTo(40, doc.y).lineTo(pageW - 40, doc.y).strokeColor("#e2e8f0").lineWidth(0.5).stroke();
       doc.moveDown(0.8);
 
-      const siteAddress = [locationAddress, job.collectionPoint].filter(Boolean).join(" — ") || job.depot;
+      const siteAddress = job.collectionPoint || locationAddress || job.depot;
 
       function infoBlock(label: string, value: string) {
         ensureRoom(40);
@@ -960,7 +960,7 @@ router.get(
         .text(`Allocated Driver: ${job.driverName || "—"}    |    Vehicle: ${job.vehicleReg || "—"}`, 40);
       doc.moveDown(0.8);
 
-      const siteAddress = [locationAddress, job.collectionPoint].filter(Boolean).join(" — ") || job.depot;
+      const siteAddress = job.collectionPoint || locationAddress || job.depot;
 
       function infoBlock(label: string, value: string) {
         ensureRoom(40);
@@ -1101,12 +1101,35 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res) => {
     try {
-      const { collectionPoint, collectionDate, tonnage, tonnageManualOverride, notes, batteries, draftId } = req.body;
+      const {
+        collectionPoint,
+        collectionDate,
+        tonnage,
+        tonnageManualOverride,
+        notes,
+        batteries,
+        draftId,
+        siteContacts,
+        siteHours,
+        specialInstructions,
+      } = req.body;
       let { depot } = req.body;
 
       let resolvedClientId = req.user!.clientId || null;
       let resolvedLocationId = req.user!.locationId || null;
       let clientName = "Unknown";
+      if (req.body.locationId !== undefined && req.body.locationId !== null && req.body.locationId !== "") {
+        const requestedLocationId = Number(req.body.locationId);
+        if (!Number.isSafeInteger(requestedLocationId) || requestedLocationId <= 0) {
+          res.status(400).json({ message: "Invalid location" });
+          return;
+        }
+        if (req.user!.role === "depot_user" && req.user!.locationId !== requestedLocationId) {
+          res.status(403).json({ message: "You can only submit jobs for your assigned location" });
+          return;
+        }
+        resolvedLocationId = requestedLocationId;
+      }
 
       if (resolvedClientId) {
         const [client] = await db
@@ -1129,19 +1152,44 @@ router.post(
             siteContacts: locationsTable.siteContacts,
             siteContactName: locationsTable.siteContactName,
             siteContactPhone: locationsTable.siteContactPhone,
+            siteContact2Name: locationsTable.siteContact2Name,
+            siteContact2Phone: locationsTable.siteContact2Phone,
+            siteContact3Name: locationsTable.siteContact3Name,
+            siteContact3Phone: locationsTable.siteContact3Phone,
             siteHours: locationsTable.siteHours,
             specialInstructions: locationsTable.specialInstructions,
           })
           .from(locationsTable)
           .where(eq(locationsTable.id, resolvedLocationId));
         if (location) {
+          if (resolvedClientId && location.clientId !== resolvedClientId) {
+            res.status(403).json({ message: "Location does not belong to your client" });
+            return;
+          }
           depot = location.name;
           if (!resolvedClientId) resolvedClientId = location.clientId;
-          const contactParts = [location.siteContactName, location.siteContactPhone].filter(Boolean);
-          locationSiteContacts = contactParts.length > 0 ? contactParts.join(" — ") : location.siteContacts;
+          const structuredContacts = [
+            [location.siteContactName, location.siteContactPhone],
+            [location.siteContact2Name, location.siteContact2Phone],
+            [location.siteContact3Name, location.siteContact3Phone],
+          ]
+            .map((parts) => parts.filter(Boolean).join(" — "))
+            .filter(Boolean);
+          locationSiteContacts = structuredContacts.length > 0
+            ? structuredContacts.join("\n")
+            : location.siteContacts;
           locationSiteHours = location.siteHours;
           locationSpecialInstructions = location.specialInstructions;
         }
+      }
+      if (siteContacts !== undefined) {
+        locationSiteContacts = String(siteContacts || "").trim() || null;
+      }
+      if (siteHours !== undefined) {
+        locationSiteHours = String(siteHours || "").trim() || null;
+      }
+      if (specialInstructions !== undefined) {
+        locationSpecialInstructions = String(specialInstructions || "").trim() || null;
       }
 
       // Head office users have no assigned depot/location — label their

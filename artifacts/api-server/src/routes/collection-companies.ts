@@ -286,7 +286,7 @@ router.get(
       res.json({
         jobs: jobs.map((j) => ({
           ...j,
-          siteAddress: [j.locationId ? addresses.get(j.locationId) : null, j.collectionPoint].filter(Boolean).join(" — ") || j.depot,
+          siteAddress: j.collectionPoint || (j.locationId ? addresses.get(j.locationId) : null) || j.depot,
         })),
       });
     } catch (error) {
@@ -446,7 +446,7 @@ router.post(
           .where(eq(locationsTable.id, job.locationId));
         if (loc) locationAddress = loc.address;
       }
-      const siteAddress = [locationAddress, job.collectionPoint].filter(Boolean).join(" — ") || job.depot;
+      const siteAddress = job.collectionPoint || locationAddress || job.depot;
 
       const jobRef: JobRef = {
         id: job.id,

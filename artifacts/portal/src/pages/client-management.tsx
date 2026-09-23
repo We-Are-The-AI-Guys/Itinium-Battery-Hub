@@ -31,6 +31,14 @@ interface LocationData {
   clientId: number;
   name: string;
   address: string | null;
+  siteContactName?: string | null;
+  siteContactPhone?: string | null;
+  siteContact2Name?: string | null;
+  siteContact2Phone?: string | null;
+  siteContact3Name?: string | null;
+  siteContact3Phone?: string | null;
+  siteHours?: string | null;
+  specialInstructions?: string | null;
   isActive: boolean;
   createdAt: string;
 }
@@ -59,7 +67,8 @@ export default function ClientManagementPage() {
   const [saving, setSaving] = useState(false);
 
   const [showAddLocation, setShowAddLocation] = useState<number | null>(null);
-  const [newLocationForm, setNewLocationForm] = useState({ name: "", address: "" });
+  const [newLocationForm, setNewLocationForm] = useState({ name: "", address: "", siteContactName: "", siteContactPhone: "", siteContact2Name: "", siteContact2Phone: "", siteContact3Name: "", siteContact3Phone: "", siteHours: "", specialInstructions: "" });
+  const [selectedLocationId, setSelectedLocationId] = useState("");
   const [addingLocation, setAddingLocation] = useState(false);
   const [locationError, setLocationError] = useState("");
 
@@ -189,6 +198,11 @@ export default function ClientManagementPage() {
 
   async function handleAddLocation(clientId: number) {
     setLocationError("");
+    if (selectedLocationId) {
+      setShowAddLocation(null);
+      setSelectedLocationId("");
+      return;
+    }
     if (!newLocationForm.name.trim()) {
       setLocationError("Location name is required");
       return;
@@ -202,11 +216,20 @@ export default function ClientManagementPage() {
         body: JSON.stringify({
           name: newLocationForm.name.trim(),
           address: newLocationForm.address.trim() || null,
+          siteContactName: newLocationForm.siteContactName.trim() || null,
+          siteContactPhone: newLocationForm.siteContactPhone.trim() || null,
+          siteContact2Name: newLocationForm.siteContact2Name.trim() || null,
+          siteContact2Phone: newLocationForm.siteContact2Phone.trim() || null,
+          siteContact3Name: newLocationForm.siteContact3Name.trim() || null,
+          siteContact3Phone: newLocationForm.siteContact3Phone.trim() || null,
+          siteHours: newLocationForm.siteHours.trim() || null,
+          specialInstructions: newLocationForm.specialInstructions.trim() || null,
         }),
       });
       if (res.ok) {
         setShowAddLocation(null);
-        setNewLocationForm({ name: "", address: "" });
+        setNewLocationForm({ name: "", address: "", siteContactName: "", siteContactPhone: "", siteContact2Name: "", siteContact2Phone: "", siteContact3Name: "", siteContact3Phone: "", siteHours: "", specialInstructions: "" });
+        setSelectedLocationId("");
         fetchClientDetails(clientId);
         fetchClients();
       } else {
@@ -387,7 +410,8 @@ export default function ClientManagementPage() {
                             className="h-7 text-xs border-slate-200"
                             onClick={() => {
                               setShowAddLocation(showAddLocation === client.id ? null : client.id);
-                              setNewLocationForm({ name: "", address: "" });
+                              setNewLocationForm({ name: "", address: "", siteContactName: "", siteContactPhone: "", siteContact2Name: "", siteContact2Phone: "", siteContact3Name: "", siteContact3Phone: "", siteHours: "", specialInstructions: "" });
+                              setSelectedLocationId("");
                               setLocationError("");
                             }}
                           >
@@ -403,20 +427,34 @@ export default function ClientManagementPage() {
                                 {locationError}
                               </div>
                             )}
-                            <div className="grid grid-cols-2 gap-3">
-                              <Input
-                                placeholder="Location name"
-                                className="border-slate-200 focus-visible:ring-[#0ea5e9] h-8 text-sm"
-                                value={newLocationForm.name}
-                                onChange={(e) => setNewLocationForm({ ...newLocationForm, name: e.target.value })}
-                              />
-                              <Input
-                                placeholder="Address (optional)"
-                                className="border-slate-200 focus-visible:ring-[#0ea5e9] h-8 text-sm"
-                                value={newLocationForm.address}
-                                onChange={(e) => setNewLocationForm({ ...newLocationForm, address: e.target.value })}
-                              />
-                            </div>
+                            <select
+                              className="w-full h-8 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-700"
+                              value={selectedLocationId}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setSelectedLocationId(value);
+                                if (value) {
+                                  const existing = clientLocations[client.id]?.find((loc) => String(loc.id) === value);
+                                  if (existing) setNewLocationForm({ ...newLocationForm, name: existing.name, address: existing.address || "" });
+                                } else {
+                                  setNewLocationForm({ name: "", address: "", siteContactName: "", siteContactPhone: "", siteContact2Name: "", siteContact2Phone: "", siteContact3Name: "", siteContact3Phone: "", siteHours: "", specialInstructions: "" });
+                                }
+                              }}
+                            >
+                              <option value="">Add new location</option>
+                              {clientLocations[client.id]?.map((loc) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+                            </select>
+                            {!selectedLocationId && <>
+                              <div className="grid grid-cols-2 gap-3">
+                                <Input placeholder="Location name" className="border-slate-200 focus-visible:ring-[#0ea5e9] h-8 text-sm" value={newLocationForm.name} onChange={(e) => setNewLocationForm({ ...newLocationForm, name: e.target.value })} />
+                                <Input placeholder="Address (optional)" className="border-slate-200 focus-visible:ring-[#0ea5e9] h-8 text-sm" value={newLocationForm.address} onChange={(e) => setNewLocationForm({ ...newLocationForm, address: e.target.value })} />
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                {([["siteContactName", "Contact 1 name"], ["siteContactPhone", "Contact 1 telephone"], ["siteContact2Name", "Contact 2 name"], ["siteContact2Phone", "Contact 2 telephone"], ["siteContact3Name", "Contact 3 name"], ["siteContact3Phone", "Contact 3 telephone"], ["siteHours", "Site hours"], ["specialInstructions", "Special / loading instructions"] ] as const).map(([key, placeholder]) => (
+                                  <Input key={key} placeholder={placeholder} className="border-slate-200 focus-visible:ring-[#0ea5e9] h-8 text-sm" value={newLocationForm[key]} onChange={(e) => setNewLocationForm({ ...newLocationForm, [key]: e.target.value })} />
+                                ))}
+                              </div>
+                            </>}
                             <div className="flex justify-end gap-2">
                               <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowAddLocation(null)}>Cancel</Button>
                               <Button
@@ -425,7 +463,7 @@ export default function ClientManagementPage() {
                                 onClick={() => handleAddLocation(client.id)}
                                 disabled={addingLocation}
                               >
-                                {addingLocation ? "Adding..." : "Add"}
+                                {addingLocation ? "Adding..." : selectedLocationId ? "Use selected location" : "Add"}
                               </Button>
                             </div>
                           </div>

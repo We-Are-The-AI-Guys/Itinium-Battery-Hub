@@ -16,7 +16,7 @@ function canAccessClient(req: AuthenticatedRequest, clientId: number): boolean {
 router.get(
   "/clients/:clientId/locations",
   requireAuth,
-  requireRole("head_office_admin", "team_leader"),
+  requireRole("head_office_admin", "team_leader", "depot_user"),
   async (req: AuthenticatedRequest, res) => {
     try {
       const clientId = parseInt(String(req.params.clientId), 10);
@@ -27,6 +27,10 @@ router.get(
 
       if (req.user!.role !== "head_office_admin" && req.user!.clientId !== clientId) {
         res.status(403).json({ message: "Access denied" });
+        return;
+      }
+      if (req.user!.role === "depot_user" && !req.user!.locationId) {
+        res.status(403).json({ message: "Your account is not linked to a location" });
         return;
       }
 
@@ -43,7 +47,14 @@ router.get(
       const locations = await db
         .select()
         .from(locationsTable)
-        .where(eq(locationsTable.clientId, clientId))
+        .where(
+          req.user!.role === "depot_user"
+            ? and(
+                eq(locationsTable.clientId, clientId),
+                eq(locationsTable.id, req.user!.locationId!)
+              )
+            : eq(locationsTable.clientId, clientId)
+        )
         .orderBy(locationsTable.name);
 
       res.json({ locations });
@@ -60,6 +71,10 @@ const createLocationSchema = z.object({
   siteContacts: z.string().nullable().optional(),
   siteContactName: z.string().max(255).nullable().optional(),
   siteContactPhone: z.string().max(100).nullable().optional(),
+  siteContact2Name: z.string().max(255).nullable().optional(),
+  siteContact2Phone: z.string().max(100).nullable().optional(),
+  siteContact3Name: z.string().max(255).nullable().optional(),
+  siteContact3Phone: z.string().max(100).nullable().optional(),
   siteHours: z.string().max(255).nullable().optional(),
   specialInstructions: z.string().nullable().optional(),
 });
@@ -97,7 +112,7 @@ router.post(
         return;
       }
 
-      const { name, address, siteContacts, siteContactName, siteContactPhone, siteHours, specialInstructions } = parsed.data;
+      const { name, address, siteContacts, siteContactName, siteContactPhone, siteContact2Name, siteContact2Phone, siteContact3Name, siteContact3Phone, siteHours, specialInstructions } = parsed.data;
 
       const [location] = await db
         .insert(locationsTable)
@@ -108,6 +123,10 @@ router.post(
           siteContacts: siteContacts || null,
           siteContactName: siteContactName || null,
           siteContactPhone: siteContactPhone || null,
+          siteContact2Name: siteContact2Name || null,
+          siteContact2Phone: siteContact2Phone || null,
+          siteContact3Name: siteContact3Name || null,
+          siteContact3Phone: siteContact3Phone || null,
           siteHours: siteHours || null,
           specialInstructions: specialInstructions || null,
         })
@@ -127,6 +146,10 @@ const updateLocationSchema = z.object({
   siteContacts: z.string().nullable().optional(),
   siteContactName: z.string().max(255).nullable().optional(),
   siteContactPhone: z.string().max(100).nullable().optional(),
+  siteContact2Name: z.string().max(255).nullable().optional(),
+  siteContact2Phone: z.string().max(100).nullable().optional(),
+  siteContact3Name: z.string().max(255).nullable().optional(),
+  siteContact3Phone: z.string().max(100).nullable().optional(),
   siteHours: z.string().max(255).nullable().optional(),
   specialInstructions: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
@@ -162,6 +185,10 @@ router.patch(
       if (parsed.data.siteContacts !== undefined) updates.siteContacts = parsed.data.siteContacts;
       if (parsed.data.siteContactName !== undefined) updates.siteContactName = parsed.data.siteContactName;
       if (parsed.data.siteContactPhone !== undefined) updates.siteContactPhone = parsed.data.siteContactPhone;
+      if (parsed.data.siteContact2Name !== undefined) updates.siteContact2Name = parsed.data.siteContact2Name;
+      if (parsed.data.siteContact2Phone !== undefined) updates.siteContact2Phone = parsed.data.siteContact2Phone;
+      if (parsed.data.siteContact3Name !== undefined) updates.siteContact3Name = parsed.data.siteContact3Name;
+      if (parsed.data.siteContact3Phone !== undefined) updates.siteContact3Phone = parsed.data.siteContact3Phone;
       if (parsed.data.siteHours !== undefined) updates.siteHours = parsed.data.siteHours;
       if (parsed.data.specialInstructions !== undefined) updates.specialInstructions = parsed.data.specialInstructions;
       if (parsed.data.isActive !== undefined) updates.isActive = parsed.data.isActive;

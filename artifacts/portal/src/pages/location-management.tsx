@@ -18,6 +18,10 @@ interface LocationData {
   siteContacts: string | null;
   siteContactName: string | null;
   siteContactPhone: string | null;
+  siteContact2Name: string | null;
+  siteContact2Phone: string | null;
+  siteContact3Name: string | null;
+  siteContact3Phone: string | null;
   siteHours: string | null;
   specialInstructions: string | null;
   isActive: boolean;
@@ -34,12 +38,13 @@ export default function LocationManagementPage() {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: "", address: "", siteContactName: "", siteContactPhone: "", siteHours: "", specialInstructions: "" });
+  const emptyForm = { name: "", address: "", siteContactName: "", siteContactPhone: "", siteContact2Name: "", siteContact2Phone: "", siteContact3Name: "", siteContact3Phone: "", siteHours: "", specialInstructions: "" };
+  const [createForm, setCreateForm] = useState(emptyForm);
   const [createError, setCreateError] = useState("");
   const [creating, setCreating] = useState(false);
 
   const [editingLocation, setEditingLocation] = useState<LocationData | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", address: "", siteContactName: "", siteContactPhone: "", siteHours: "", specialInstructions: "" });
+  const [editForm, setEditForm] = useState(emptyForm);
   const [editError, setEditError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -85,13 +90,17 @@ export default function LocationManagementPage() {
           address: createForm.address.trim() || null,
           siteContactName: createForm.siteContactName.trim() || null,
           siteContactPhone: createForm.siteContactPhone.trim() || null,
+          siteContact2Name: createForm.siteContact2Name.trim() || null,
+          siteContact2Phone: createForm.siteContact2Phone.trim() || null,
+          siteContact3Name: createForm.siteContact3Name.trim() || null,
+          siteContact3Phone: createForm.siteContact3Phone.trim() || null,
           siteHours: createForm.siteHours.trim() || null,
           specialInstructions: createForm.specialInstructions.trim() || null,
         }),
       });
       if (res.ok) {
         setShowCreateModal(false);
-        setCreateForm({ name: "", address: "", siteContactName: "", siteContactPhone: "", siteHours: "", specialInstructions: "" });
+        setCreateForm(emptyForm);
         fetchLocations();
       } else {
         const data = await res.json();
@@ -111,6 +120,10 @@ export default function LocationManagementPage() {
       address: loc.address || "",
       siteContactName: loc.siteContactName || (loc.siteContacts && !loc.siteContactPhone ? loc.siteContacts : ""),
       siteContactPhone: loc.siteContactPhone || "",
+      siteContact2Name: loc.siteContact2Name || "",
+      siteContact2Phone: loc.siteContact2Phone || "",
+      siteContact3Name: loc.siteContact3Name || "",
+      siteContact3Phone: loc.siteContact3Phone || "",
       siteHours: loc.siteHours || "",
       specialInstructions: loc.specialInstructions || "",
     });
@@ -135,6 +148,10 @@ export default function LocationManagementPage() {
           address: editForm.address.trim() || null,
           siteContactName: editForm.siteContactName.trim() || null,
           siteContactPhone: editForm.siteContactPhone.trim() || null,
+          siteContact2Name: editForm.siteContact2Name.trim() || null,
+          siteContact2Phone: editForm.siteContact2Phone.trim() || null,
+          siteContact3Name: editForm.siteContact3Name.trim() || null,
+          siteContact3Phone: editForm.siteContact3Phone.trim() || null,
           siteHours: editForm.siteHours.trim() || null,
           specialInstructions: editForm.specialInstructions.trim() || null,
         }),
@@ -318,6 +335,22 @@ export default function LocationManagementPage() {
                   />
                 </div>
               </div>
+              {[2, 3].map((contactNumber) => {
+                const nameKey = `siteContact${contactNumber}Name` as "siteContact2Name" | "siteContact3Name";
+                const phoneKey = `siteContact${contactNumber}Phone` as "siteContact2Phone" | "siteContact3Phone";
+                return (
+                  <div key={contactNumber} className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium text-slate-700">Site Contact {contactNumber} Name</label>
+                      <Input className="border-slate-200 focus-visible:ring-[#0ea5e9]" value={createForm[nameKey]} onChange={(e) => setCreateForm({ ...createForm, [nameKey]: e.target.value })} />
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium text-slate-700">Contact {contactNumber} Telephone</label>
+                      <Input className="border-slate-200 focus-visible:ring-[#0ea5e9]" value={createForm[phoneKey]} onChange={(e) => setCreateForm({ ...createForm, [phoneKey]: e.target.value })} />
+                    </div>
+                  </div>
+                );
+              })}
               <div className="grid gap-2">
                 <label className="text-sm font-medium text-slate-700">Site Hours</label>
                 <Input
@@ -399,6 +432,22 @@ export default function LocationManagementPage() {
                   />
                 </div>
               </div>
+              {[2, 3].map((contactNumber) => {
+                const nameKey = `siteContact${contactNumber}Name` as "siteContact2Name" | "siteContact3Name";
+                const phoneKey = `siteContact${contactNumber}Phone` as "siteContact2Phone" | "siteContact3Phone";
+                return (
+                  <div key={contactNumber} className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium text-slate-700">Site Contact {contactNumber} Name</label>
+                      <Input className="border-slate-200 focus-visible:ring-[#0ea5e9]" value={editForm[nameKey]} onChange={(e) => setEditForm({ ...editForm, [nameKey]: e.target.value })} />
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-sm font-medium text-slate-700">Contact {contactNumber} Telephone</label>
+                      <Input className="border-slate-200 focus-visible:ring-[#0ea5e9]" value={editForm[phoneKey]} onChange={(e) => setEditForm({ ...editForm, [phoneKey]: e.target.value })} />
+                    </div>
+                  </div>
+                );
+              })}
               <div className="grid gap-2">
                 <label className="text-sm font-medium text-slate-700">Site Hours</label>
                 <Input
