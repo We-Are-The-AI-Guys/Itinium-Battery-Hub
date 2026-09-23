@@ -381,13 +381,33 @@ router.get(
           reference: jobsTable.reference,
           clientName: jobsTable.clientName,
           depot: jobsTable.depot,
+          tonnage: jobsTable.tonnage,
+          palletCount: sql<number>`COUNT(DISTINCT COALESCE(
+            LOWER(NULLIF(TRIM(${jobBatteriesTable.palletNumber}), '')),
+            CASE WHEN ${jobBatteriesTable.id} IS NOT NULL THEN CONCAT('__battery_', ${jobBatteriesTable.id}) END
+          ))`,
           collectionDate: jobsTable.collectionDate,
           status: jobsTable.status,
         })
         .from(jobsTable)
+        .leftJoin(jobBatteriesTable, eq(jobBatteriesTable.jobId, jobsTable.id))
         .where(sql`${jobsTable.collectionDate} IS NOT NULL`)
+        .groupBy(
+          jobsTable.id,
+          jobsTable.reference,
+          jobsTable.clientName,
+          jobsTable.depot,
+          jobsTable.tonnage,
+          jobsTable.collectionDate,
+          jobsTable.status
+        )
         .orderBy(asc(jobsTable.collectionDate));
-      res.json({ jobs });
+      res.json({
+        jobs: jobs.map((job) => ({
+          ...job,
+          palletCount: Number(job.palletCount || 0),
+        })),
+      });
     } catch (err) {
       console.error("Schedule jobs fetch error:", err);
       res.status(500).json({ message: "Internal server error" });

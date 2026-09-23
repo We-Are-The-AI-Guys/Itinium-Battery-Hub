@@ -14,6 +14,8 @@ interface ScheduleJob {
   reference: string;
   clientName: string;
   depot: string;
+  tonnage: string;
+  palletCount: number;
   collectionDate: string;
   status: string;
 }
@@ -544,16 +546,20 @@ function JobBlock({
   onDragStart?: (e: React.DragEvent) => void;
 }) {
   const colour = getColour(job.status);
+  const tonnage = Number.parseFloat(job.tonnage);
+  const tonnageLabel = Number.isFinite(tonnage) ? `${tonnage.toFixed(3)} t` : "—";
+  const palletLabel = `${job.palletCount} pallet${job.palletCount === 1 ? "" : "s"}`;
   return (
     <button
       draggable={!!onDragStart}
       onDragStart={onDragStart}
       onClick={onClick}
-      className={`w-full text-left rounded px-1.5 py-1 border text-xs leading-tight truncate cursor-grab active:cursor-grabbing hover:brightness-95 transition-all ${colour.bg} ${colour.text} ${colour.border}`}
-      title={`${job.reference} — ${job.clientName} / ${job.depot}${onDragStart ? "\nDrag to reschedule" : ""}`}
+      className={`w-full text-left rounded px-1.5 py-1 border text-xs leading-tight cursor-grab active:cursor-grabbing hover:brightness-95 transition-all ${colour.bg} ${colour.text} ${colour.border}`}
+      title={`${job.reference}\n${job.depot}\n${tonnageLabel} · ${palletLabel}${onDragStart ? "\nDrag to reschedule" : ""}`}
     >
-      <span className="font-semibold block truncate">{job.clientName}</span>
-      <span className="opacity-75 block truncate">{job.depot}</span>
+      <span className="font-semibold block truncate">{job.reference}</span>
+      <span className="opacity-85 block truncate">{job.depot}</span>
+      <span className="opacity-70 block truncate text-[10px]">{tonnageLabel} · {palletLabel}</span>
     </button>
   );
 }
@@ -830,9 +836,9 @@ function GanttView({ jobs, onJobClick }: { jobs: ScheduleJob[]; onJobClick: (id:
                     return (
                       <button key={job.id} onClick={() => onJobClick(job.id)} className="absolute rounded overflow-hidden text-left cursor-pointer hover:brightness-90 transition-all"
                         style={{ left, top, width, height, backgroundColor: hexToRgba(siteHex, 0.18), border: `1px solid ${hexToRgba(siteHex, 0.5)}`, borderLeft: `4px solid ${statusBorder}` }}
-                        title={`${job.reference} — ${job.clientName}\n${STATUS_LABEL[job.status] ?? job.status} · ${job.collectionDate}`}>
-                        <span className="block px-1 text-[10px] font-semibold leading-tight truncate" style={{ color: siteHex, filter: "brightness(0.7)" }}>{job.clientName}</span>
-                        <span className="block px-1 text-[10px] text-slate-500 leading-tight truncate">{job.reference}</span>
+                        title={`${job.reference}\n${job.depot}\n${Number.parseFloat(job.tonnage).toFixed(3)} t · ${job.palletCount} pallet${job.palletCount === 1 ? "" : "s"}\n${STATUS_LABEL[job.status] ?? job.status} · ${job.collectionDate}`}>
+                        <span className="block px-1 text-[10px] font-semibold leading-tight truncate" style={{ color: siteHex, filter: "brightness(0.7)" }}>{job.reference}</span>
+                        <span className="block px-1 text-[10px] text-slate-500 leading-tight truncate">{job.depot}</span>
                       </button>
                     );
                   })}
