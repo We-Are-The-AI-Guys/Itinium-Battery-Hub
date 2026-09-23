@@ -116,6 +116,20 @@ describe("job-detail save controls", () => {
     expect(receiptSection).not.toContain("LME GBP:");
   });
 
+  it("shows serial and pallet numbers in separate receipt-table columns", () => {
+    const receiptSectionStart = source.indexOf("Battery Receipt Confirmation & Pb Content");
+    const receiptSectionEnd = source.indexOf("Financial Master", receiptSectionStart);
+    const receiptSection = source.slice(receiptSectionStart, receiptSectionEnd);
+    const rowStart = source.indexOf("function BatteryAdminRow");
+    const rowEnd = source.indexOf("function FinancialField", rowStart);
+    const rowSource = source.slice(rowStart, rowEnd);
+    expect(receiptSection).toContain(">Serial</th>");
+    expect(receiptSection).toContain(">Pallet</th>");
+    expect(receiptSection).not.toContain("Serial / Pallet");
+    expect(rowSource).toContain('battery.batterySerial || "—"');
+    expect(rowSource).toContain('battery.palletNumber || "—"');
+  });
+
   it("pulls collection notes into an editable shared receipt draft", () => {
     const rowStart = source.indexOf("function BatteryAdminRow");
     const rowEnd = source.indexOf("function FinancialField", rowStart);

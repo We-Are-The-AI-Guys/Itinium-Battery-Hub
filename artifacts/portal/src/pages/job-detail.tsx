@@ -1762,7 +1762,8 @@ export default function JobDetailPage() {
                   <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-y border-slate-100">
                     <tr>
                       <th className="px-3 py-2.5 text-left font-semibold">#</th>
-                      <th className="px-3 py-2.5 text-left font-semibold">Serial / Pallet</th>
+                      <th className="px-3 py-2.5 text-left font-semibold">Serial</th>
+                      <th className="px-3 py-2.5 text-left font-semibold">Pallet</th>
                       <th className="px-3 py-2.5 text-left font-semibold">Type</th>
                       <th className="px-3 py-2.5 text-left font-semibold">Voltage</th>
                       <th className="px-3 py-2.5 text-center font-semibold">Receipt Confirmed</th>
@@ -1792,7 +1793,7 @@ export default function JobDetailPage() {
                   </tbody>
                   <tfoot className="bg-slate-100 border-t-2 border-slate-200">
                     <tr>
-                      <td colSpan={5} className="px-3 py-2.5 text-right font-bold text-[#0f2744] text-xs uppercase">
+                      <td colSpan={6} className="px-3 py-2.5 text-right font-bold text-[#0f2744] text-xs uppercase">
                         Totals
                       </td>
                       <td className="px-3 py-2.5 font-bold text-[#0f2744]">
@@ -2612,7 +2613,10 @@ function BatteryAdminRow({
     <tr className={index % 2 === 0 ? "bg-white" : "bg-slate-50/30"}>
       <td className="px-3 py-2.5 text-slate-500">{index + 1}</td>
       <td className="px-3 py-2.5 text-slate-700 font-medium">
-        {battery.batterySerial || battery.palletNumber || "—"}
+        {battery.batterySerial || "—"}
+      </td>
+      <td className="px-3 py-2.5 text-slate-700 font-medium">
+        {battery.palletNumber || "—"}
       </td>
       <td className="px-3 py-2.5">
         <Badge variant="outline" className="text-xs">{battery.cellType || "—"}</Badge>
