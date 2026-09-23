@@ -160,6 +160,7 @@ interface ReceiptDraft {
   pbContentKg: string;
   valueGbp: string;
   notes: string;
+  voltage: string;
 }
 
 function receiptDraftFromBattery(battery: BatteryData): ReceiptDraft {
@@ -168,6 +169,7 @@ function receiptDraftFromBattery(battery: BatteryData): ReceiptDraft {
     pbContentKg: battery.pbContentKg || "",
     valueGbp: battery.valueGbp || "",
     notes: battery.notes || "",
+    voltage: battery.voltage || "",
   };
 }
 
@@ -997,6 +999,7 @@ export default function JobDetailPage() {
             pbContentKg: draft.pbContentKg || null,
             valueGbp: draft.valueGbp || null,
             notes: draft.notes || null,
+            voltage: draft.voltage || null,
           }),
         });
         const data = await res.json().catch(() => ({}));
@@ -2525,7 +2528,20 @@ function BatteryAdminRow({
       <td className="px-3 py-2.5">
         <Badge variant="outline" className="text-xs">{battery.cellType || "—"}</Badge>
       </td>
-      <td className="px-3 py-2.5 text-slate-700">{battery.voltage || "—"}</td>
+      <td className="px-3 py-2.5 text-slate-700">
+        {battery.isLooseCells ? (
+          <Input
+            disabled={disabled}
+            value={draft.voltage}
+            onChange={(e) => onChange(battery.id, { voltage: e.target.value })}
+            placeholder="Enter voltage"
+            className="h-8 w-28 bg-slate-50 text-sm"
+            aria-label={`Voltage for loose cells row ${index + 1}`}
+          />
+        ) : (
+          battery.voltage || "—"
+        )}
+      </td>
       <td className="px-3 py-2.5 text-center">
         <div className="flex flex-col items-center gap-1">
           <Switch

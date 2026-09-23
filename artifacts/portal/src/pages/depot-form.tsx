@@ -1361,7 +1361,7 @@ export default function DepotFormPage() {
             batterySerial: b.batterySerial || null,
             manufacture: b.manufacture === "Other" ? (b.manufactureCustom || "Other") : (b.manufacture || null),
             cellType: b.cellModel || b.cellType || null,
-            voltage: b.isLooseCells ? null : ((b.voltage === "Other" ? b.customVoltage : b.voltage) || null),
+            voltage: (b.voltage === "Other" ? b.customVoltage : b.voltage) || null,
             looseCellsQty: b.looseCellsQty || null,
             estimatedWeightKg: b.estimatedWeightKg || null,
             weightManual: b.weightManual === true,
@@ -2191,8 +2191,8 @@ export default function DepotFormPage() {
                           const updatedBattery: BatteryRow = {
                             ...battery,
                             isLooseCells: checked,
-                            voltage: checked ? "" : battery.voltage,
-                            customVoltage: checked ? "" : battery.customVoltage,
+                            voltage: battery.voltage,
+                            customVoltage: battery.customVoltage,
                             looseCellsQty: checked ? battery.looseCellsQty : (battery.cellType === "Blocs" ? battery.looseCellsQty : ""),
                             weightManual: checked ? false : battery.weightManual,
                             estimatedWeightKg: checked ? "" : battery.estimatedWeightKg,
@@ -2209,11 +2209,11 @@ export default function DepotFormPage() {
                     </label>
                   </div>
 
-                  {!battery.isLooseCells && battery.cellType !== "Blocs" && battery.cellType !== "Other" && (
+                  {(battery.isLooseCells || (battery.cellType !== "Blocs" && battery.cellType !== "Other")) && (
                     <>
                       <div className="space-y-1.5">
                         <label className="text-xs font-medium text-slate-600">
-                          If Complete Battery &mdash; Voltage
+                          {battery.isLooseCells ? "Loose Cell Voltage (optional)" : "If Complete Battery — Voltage"}
                         </label>
                         <TypeaheadInput
                           value={battery.voltage === "Other" && battery.customVoltage ? battery.customVoltage : battery.voltage}

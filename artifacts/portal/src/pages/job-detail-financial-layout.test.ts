@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 const sourcePath = join(process.cwd(), "src/pages/job-detail.tsx");
 const source = readFileSync(sourcePath, "utf8");
+const depotFormSource = readFileSync(join(process.cwd(), "src/pages/depot-form.tsx"), "utf8");
 
 function sectionBetween(startHeading: string, endHeading: string): string {
   const start = source.indexOf(`>${startHeading}</h5>`);
@@ -90,6 +91,26 @@ describe("job-detail save controls", () => {
     expect(rowSource).toContain("value={draft.notes}");
     expect(rowSource).toContain("notes: e.target.value");
     expect(rowSource).toContain('placeholder="Add notes…"');
+  });
+
+  it("pulls loose-cell voltage into an editable receipt draft", () => {
+    const rowStart = source.indexOf("function BatteryAdminRow");
+    const rowEnd = source.indexOf("function FinancialField", rowStart);
+    const rowSource = source.slice(rowStart, rowEnd);
+    expect(source).toContain('voltage: battery.voltage || ""');
+    expect(source).toContain("voltage: draft.voltage || null");
+    expect(rowSource).toContain("battery.isLooseCells");
+    expect(rowSource).toContain("value={draft.voltage}");
+    expect(rowSource).toContain("voltage: e.target.value");
+    expect(rowSource).toContain('placeholder="Enter voltage"');
+  });
+
+  it("keeps optional loose-cell voltage from depot entry through submission", () => {
+    expect(depotFormSource).toContain('"Loose Cell Voltage (optional)"');
+    expect(depotFormSource).toContain(
+      "voltage: (b.voltage === \"Other\" ? b.customVoltage : b.voltage) || null"
+    );
+    expect(depotFormSource).not.toContain("voltage: b.isLooseCells ? null");
   });
 
   it("distinguishes unconfirmed manufacturers in the TAB-weight message", () => {
