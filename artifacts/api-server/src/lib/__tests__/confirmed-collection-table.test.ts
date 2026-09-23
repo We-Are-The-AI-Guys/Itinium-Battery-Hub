@@ -11,7 +11,8 @@ function collectPdf(items: ConfirmedCollectionItem[]): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const { doc, finalize } = createBrandedDoc(
       "Confirmed Collection Sheet — TEST",
-      "Example Client | North Depot"
+      "Example Client | North Depot",
+      { layout: "landscape" }
     );
     const chunks: Buffer[] = [];
     doc.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
@@ -71,6 +72,16 @@ const baseItem: ConfirmedCollectionItem = {
 };
 
 describe("confirmed collection table", () => {
+  it("uses landscape A4 dimensions", () => {
+    const { doc, finalize } = createBrandedDoc(
+      "Confirmed Collection Sheet — TEST",
+      "Example Client | North Depot",
+      { layout: "landscape" }
+    );
+    expect(doc.page.width).toBeGreaterThan(doc.page.height);
+    finalize();
+  });
+
   it("maps the saved review truth table to an unambiguous label", () => {
     expect(getConfirmedReceiptLabel({ receiptReviewed: true, receiptConfirmed: true })).toBe("Yes");
     expect(getConfirmedReceiptLabel({ receiptReviewed: true, receiptConfirmed: false })).toBe("No");

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { canDownloadRawCollectionSheet, collectionSheetInstructions } from "../jobs";
 
 const staffRoles = ["team_leader", "accounts", "head_office_admin"];
+const jobsRouteSource = readFileSync(join(process.cwd(), "src/routes/jobs.ts"), "utf8");
 
 describe("raw collection sheet access", () => {
   it.each(staffRoles)("keeps access available for %s", (role) => {
@@ -50,5 +53,16 @@ describe("collection sheet loading instructions", () => {
 
   it("prints entered instructions after trimming outer whitespace", () => {
     expect(collectionSheetInstructions("  Use rear loading bay  ")).toBe("Use rear loading bay");
+  });
+});
+
+describe("confirmed collection PDF layout", () => {
+  it("uses landscape format without agreement or signature panels", () => {
+    const start = jobsRouteSource.indexOf('"/jobs/:id/invoice.pdf"');
+    const end = jobsRouteSource.indexOf("export function canDownloadRawCollectionSheet", start);
+    const confirmedPdfRoute = jobsRouteSource.slice(start, end);
+    expect(confirmedPdfRoute).toContain('{ layout: "landscape" }');
+    expect(confirmedPdfRoute).not.toContain("drawAgreementAndSignatures(");
+    expect(confirmedPdfRoute).not.toContain("Please retain a copy for your records");
   });
 });

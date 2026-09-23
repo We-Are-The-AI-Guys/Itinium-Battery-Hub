@@ -701,7 +701,8 @@ router.get(
 
       const { doc, finalize } = createBrandedDoc(
         `Confirmed Collection Sheet — ${job.reference}`,
-        `${job.clientName} | ${job.depot}`
+        `${job.clientName} | ${job.depot}`,
+        { layout: "landscape" }
       );
       doc.pipe(res);
 
@@ -786,12 +787,6 @@ router.get(
       if (batteries.length === 0) {
         doc.fontSize(9).fillColor("#94a3b8").text("No battery items recorded.", 40);
       }
-
-      drawAgreementAndSignatures(
-        doc,
-        contentW,
-        "This confirmed collection sheet is issued by Itinium Partnership Ltd and confirms receipt of the batteries collected above. Please retain a copy for your records."
-      );
 
       finalize();
     } catch (error) {
