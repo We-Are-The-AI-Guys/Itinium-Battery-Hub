@@ -19,6 +19,27 @@ import { advanceJobStatusSql } from "../lib/job-status";
 
 const router: IRouter = Router();
 
+export const collectorJobSelection = {
+  id: jobsTable.id,
+  reference: jobsTable.reference,
+  clientName: jobsTable.clientName,
+  depot: jobsTable.depot,
+  locationId: jobsTable.locationId,
+  collectionPoint: jobsTable.collectionPoint,
+  collectionDate: jobsTable.collectionDate,
+  proposedCollectionDate: jobsTable.proposedCollectionDate,
+  scheduleStatus: jobsTable.scheduleStatus,
+  driverName: jobsTable.driverName,
+  vehicleReg: jobsTable.vehicleReg,
+  siteContacts: jobsTable.siteContacts,
+  siteHours: jobsTable.siteHours,
+  specialInstructions: jobsTable.specialInstructions,
+  notes: jobsTable.notes,
+  tonnage: jobsTable.tonnage,
+  status: jobsTable.status,
+  submittedAt: jobsTable.submittedAt,
+};
+
 // Resolves which company the caller may act for. Collection-company users
 // are locked to their own company; admins may pass any company id.
 function resolveCompanyId(req: AuthenticatedRequest, requested?: number): number | null {
@@ -238,25 +259,7 @@ router.get(
         return;
       }
       const jobs = await db
-        .select({
-          id: jobsTable.id,
-          reference: jobsTable.reference,
-          clientName: jobsTable.clientName,
-          depot: jobsTable.depot,
-          locationId: jobsTable.locationId,
-          collectionPoint: jobsTable.collectionPoint,
-          collectionDate: jobsTable.collectionDate,
-          proposedCollectionDate: jobsTable.proposedCollectionDate,
-          scheduleStatus: jobsTable.scheduleStatus,
-          driverName: jobsTable.driverName,
-          vehicleReg: jobsTable.vehicleReg,
-          siteContacts: jobsTable.siteContacts,
-          siteHours: jobsTable.siteHours,
-          specialInstructions: jobsTable.specialInstructions,
-          tonnage: jobsTable.tonnage,
-          status: jobsTable.status,
-          submittedAt: jobsTable.submittedAt,
-        })
+        .select(collectorJobSelection)
         .from(jobsTable)
         .where(
           and(

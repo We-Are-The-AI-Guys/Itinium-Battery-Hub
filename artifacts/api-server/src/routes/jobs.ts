@@ -32,6 +32,7 @@ import {
   JOB_STATUSES,
 } from "../lib/job-status";
 import { drawConfirmedCollectionTable } from "../lib/confirmed-collection-table";
+import { drawRawCollectionTable } from "../lib/raw-collection-table";
 import {
   calculateReceiptValueGbp,
   isAutomaticReceiptValue,
@@ -978,63 +979,8 @@ router.get(
         .text(collectionSheetInstructions(job.specialInstructions), 40, doc.y + 2, { width: contentW });
       doc.moveDown(1);
 
-      const cols = [
-        { label: "Pallet", x: 40, w: 50 },
-        { label: "Asset", x: 94, w: 75 },
-        { label: "Serial", x: 173, w: 90 },
-        { label: "Manufacturer", x: 267, w: 90 },
-        { label: "Cell Type", x: 361, w: 90 },
-        { label: "Voltage", x: 455, w: 45 },
-        { label: "Loose Qty", x: 504, w: 50, align: "right" as const },
-        { label: "Notes", x: 566, w: contentW - 526 },
-      ];
-
-      function drawTableHeader() {
-        const hy = doc.y;
-        doc.rect(40, hy - 4, contentW, 22).fill("#f1f5f9");
-        doc.fontSize(8.5).fillColor(NAVY).font("Helvetica-Bold");
-        for (const c of cols) {
-          doc.text(c.label, c.x, hy + 2, { width: c.w, align: c.align, lineBreak: false });
-        }
-        doc.y = hy + 22;
-        doc.font("Helvetica").fillColor("#1e293b");
-      }
-
       ensureRoom(60);
-      drawTableHeader();
-
-      let rowIdx = 0;
-      for (const b of batteries) {
-        const rowHeight = 34;
-        if (doc.y + rowHeight > doc.page.height - 60) {
-          doc.addPage();
-          drawTableHeader();
-        }
-        const ry = doc.y;
-        if (rowIdx % 2 === 1) {
-          doc.rect(40, ry - 2, contentW, rowHeight).fill("#f8fafc");
-        }
-        const looseQty = b.isLooseCells ? (b.looseCellsQty ? String(b.looseCellsQty) : "—") : "—";
-        doc.fontSize(8.5).fillColor("#1e293b").font("Helvetica");
-        doc.text(b.palletNumber || "—", cols[0].x, ry, { width: cols[0].w, lineBreak: false });
-        doc.text(b.assetNumber || "—", cols[1].x, ry, { width: cols[1].w, lineBreak: false });
-        doc.text(b.batterySerial || "—", cols[2].x, ry, { width: cols[2].w, lineBreak: false });
-        doc.text(b.manufacture || "—", cols[3].x, ry, { width: cols[3].w, lineBreak: false });
-        doc.text(b.cellType || "—", cols[4].x, ry, { width: cols[4].w, lineBreak: false });
-        doc.text(b.voltage || "—", cols[5].x, ry, { width: cols[5].w, lineBreak: false });
-        doc.text(looseQty, cols[6].x, ry, { width: cols[6].w, align: "right", lineBreak: false });
-        // Two full-width writing lines give the driver space to record
-        // discrepancies or site notes against every individual item.
-        const notes = cols[7];
-        doc.moveTo(notes.x, ry + 12).lineTo(notes.x + notes.w, ry + 12)
-          .strokeColor("#cbd5e1").lineWidth(0.5).stroke();
-        doc.moveTo(notes.x, ry + 27).lineTo(notes.x + notes.w, ry + 27)
-          .strokeColor("#cbd5e1").lineWidth(0.5).stroke();
-        doc.moveTo(40, ry + rowHeight - 2).lineTo(40 + contentW, ry + rowHeight - 2)
-          .strokeColor("#e2e8f0").lineWidth(0.5).stroke();
-        doc.y = ry + rowHeight;
-        rowIdx++;
-      }
+      drawRawCollectionTable(doc, batteries, { contentWidth: contentW, navy: NAVY });
 
       if (batteries.length === 0) {
         doc.fontSize(9).fillColor("#94a3b8").text("No battery items recorded.", 40);
