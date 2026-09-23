@@ -8,6 +8,7 @@ import {
   calculateNetProfit,
   calculatePercentageRate,
   calculateReceiptValueGbp,
+  calculateReceivedReceiptTotals,
   resolveCustomerLmePercent,
   calculateSectionInvoiceValue,
 } from "./financial-calculations";
@@ -54,6 +55,36 @@ describe("existing financial calculations", () => {
     ).toEqual({
       tractionTonnage: "14.086",
       invoiceValue: "6986.74",
+    });
+  });
+
+  it("excludes rejected and unreviewed rows from received totals", () => {
+    expect(calculateReceivedReceiptTotals([
+      {
+        receiptConfirmed: true,
+        receiptReviewed: true,
+        estimatedWeightKg: "16239.900",
+        pbContentKg: "16239.900",
+        valueGbp: "7976.41",
+      },
+      {
+        receiptConfirmed: false,
+        receiptReviewed: true,
+        estimatedWeightKg: "1878.560",
+        pbContentKg: "1878.560",
+        valueGbp: "922.69",
+      },
+      {
+        receiptConfirmed: true,
+        receiptReviewed: false,
+        estimatedWeightKg: "500.000",
+        pbContentKg: "500.000",
+        valueGbp: "245.58",
+      },
+    ])).toEqual({
+      weightKg: 16239.9,
+      pbKg: 16239.9,
+      valueGbp: 7976.41,
     });
   });
 

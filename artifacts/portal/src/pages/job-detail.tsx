@@ -13,6 +13,7 @@ import {
   calculateNetProfit,
   calculatePercentageRate,
   calculateReceiptValueGbp,
+  calculateReceivedReceiptTotals,
   resolveCustomerLmePercent,
   calculateSectionInvoiceValue,
 } from "@/lib/financial-calculations";
@@ -381,6 +382,20 @@ export default function JobDetailPage() {
     userRole === "team_leader" || userRole === "accounts" || userRole === "head_office_admin";
   const canEditReceipt = canEditFinancials;
 
+  const receivedTotals = useMemo(() => calculateReceivedReceiptTotals(
+    batteries.map((battery) => {
+      const draft = receiptDrafts[battery.id];
+      const receiptDecisionChanged = dirtyReceiptFields[battery.id]?.has("receiptConfirmed") === true;
+      return {
+        receiptConfirmed: draft?.receiptConfirmed ?? battery.receiptConfirmed,
+        receiptReviewed: receiptDecisionChanged ? true : battery.receiptReviewed,
+        estimatedWeightKg: battery.estimatedWeightKg,
+        pbContentKg: draft?.pbContentKg ?? battery.pbContentKg,
+        valueGbp: draft?.valueGbp ?? battery.valueGbp,
+      };
+    })
+  ), [batteries, receiptDrafts, dirtyReceiptFields]);
+
   const hasFlaggedCellTypes = batteries.some((b) => b.cellModelFlagReason);
   const hasFlaggedManufacturers = batteries.some((b) => b.manufacturerFlagReason);
 
@@ -477,10 +492,9 @@ export default function JobDetailPage() {
 
           let totalInvoiceValue = data.job.totalInvoiceValue || "";
           if (!totalInvoiceValue) {
-            const batteryValueSum = (data.batteries as BatteryData[]).reduce(
-              (sum: number, b: BatteryData) => sum + (parseFloat(b.valueGbp || "0") || 0), 0
-            );
-            totalInvoiceValue = batteryValueSum.toFixed(2);
+            totalInvoiceValue = calculateReceivedReceiptTotals(
+              data.batteries as BatteryData[]
+            ).valueGbp.toFixed(2);
             prefilledFlags.totalInvoiceValue = true;
           }
 
@@ -769,7 +783,13 @@ export default function JobDetailPage() {
         });
         return;
       }
-      setBatteries(data.batteries || []);
+      const confirmedBatteries = (data.batteries || []) as BatteryData[];
+      setBatteries(confirmedBatteries);
+      setReceiptDrafts(Object.fromEntries(
+        confirmedBatteries.map((battery) => [battery.id, receiptDraftFromBattery(battery)])
+      ));
+      setDirtyReceiptIds(new Set());
+      setDirtyReceiptFields({});
       if (data.job) setJob(data.job);
       setReceiptDelivery(null);
       toast({
@@ -838,6 +858,13 @@ export default function JobDetailPage() {
   }
 
   useEffect(() => {
+    setFinancials((prev) => ({
+      ...prev,
+      totalInvoiceValue: receivedTotals.valueGbp.toFixed(2),
+    }));
+  }, [receivedTotals.valueGbp]);
+
+  useEffect(() => {
     const computed = calculateCblLmeValue(
       financials.tonnage,
       financials.cblLmeValue,
@@ -858,10 +885,7 @@ export default function JobDetailPage() {
   useEffect(() => {
     if (collectionLmeStatus !== "ready" || !collectionLmePrice) return;
     const customerLmeAverage = collectionLmePrice?.gbpPrice || "";
-    const confirmedPbKg = batteries.reduce(
-      (sum, battery) => sum + (parseFloat(battery.pbContentKg || "0") || 0),
-      0
-    );
+    const confirmedPbKg = receivedTotals.pbKg;
     const wasteTractionRate = calculatePercentageRate(financials.wasteSpotRate, financials.wasteTractionPercent);
     const wasteBlocsRate = "0.00";
     const customerTractionRate = calculatePercentageRate(customerLmeAverage, financials.customerTractionPercent);
@@ -891,7 +915,7 @@ export default function JobDetailPage() {
       netProfit,
     }));
   }, [
-    batteries, collectionLmePrice?.gbpPrice, collectionLmeStatus,
+    receivedTotals.pbKg, collectionLmePrice?.gbpPrice, collectionLmeStatus,
     financials.wasteSpotRate, financials.wasteTractionPercent,
     financials.wasteTractionTonnage,
     financials.wasteTransportCost, financials.wasteAdHocCosts,
@@ -1772,10 +1796,10 @@ export default function JobDetailPage() {
                         Totals
                       </td>
                       <td className="px-3 py-2.5 font-bold text-[#0f2744]">
-                        {batteries.reduce((sum, b) => sum + (parseFloat(b.pbContentKg || "0") || 0), 0).toFixed(3)} kg
+                        {receivedTotals.pbKg.toFixed(3)} kg
                       </td>
                       <td className="px-3 py-2.5 font-bold text-[#0f2744]">
-                        £{batteries.reduce((sum, b) => sum + (parseFloat(b.valueGbp || "0") || 0), 0).toFixed(2)}
+                        £{receivedTotals.valueGbp.toFixed(2)}
                       </td>
                       <td colSpan={2}></td>
                     </tr>

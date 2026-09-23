@@ -12,6 +12,8 @@ export type ReceiptItemSnapshot = {
   adminNotes: string | null;
   valueGbp: string | null;
   receiptReviewed: boolean;
+  estimatedWeightKg?: string | null;
+  pbContentKg?: string | null;
 };
 
 export type ReceiptJobSnapshot = {
@@ -35,9 +37,22 @@ export function isReceiptReviewComplete(items: readonly ReceiptItemSnapshot[]): 
 }
 
 export function calculateReceiptValue(items: readonly ReceiptItemSnapshot[]): string {
-  return items
-    .reduce((sum, item) => sum + (Number.parseFloat(item.valueGbp || "0") || 0), 0)
-    .toFixed(2);
+  return calculateReceivedReceiptTotals(items).valueGbp.toFixed(2);
+}
+
+export function calculateReceivedReceiptTotals(
+  items: readonly ReceiptItemSnapshot[]
+): { weightKg: number; pbKg: number; valueGbp: number } {
+  return items.reduce(
+    (totals, item) => {
+      if (item.receiptReviewed !== true || item.receiptConfirmed !== true) return totals;
+      totals.weightKg += Number.parseFloat(item.estimatedWeightKg || "0") || 0;
+      totals.pbKg += Number.parseFloat(item.pbContentKg || "0") || 0;
+      totals.valueGbp += Number.parseFloat(item.valueGbp || "0") || 0;
+      return totals;
+    },
+    { weightKg: 0, pbKg: 0, valueGbp: 0 }
+  );
 }
 
 export function selectClientReceiptRecipients(

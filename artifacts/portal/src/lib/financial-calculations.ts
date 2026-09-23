@@ -42,6 +42,29 @@ export function calculateReceiptValueGbp(
   return (pbContentKg * lmeGbpRate * percent) / 100_000;
 }
 
+export type ReceiptTotalRow = {
+  receiptConfirmed: boolean | null;
+  receiptReviewed: boolean;
+  estimatedWeightKg?: string | null;
+  pbContentKg: string | null;
+  valueGbp: string | null;
+};
+
+export function calculateReceivedReceiptTotals(
+  rows: readonly ReceiptTotalRow[]
+): { weightKg: number; pbKg: number; valueGbp: number } {
+  return rows.reduce(
+    (totals, row) => {
+      if (row.receiptReviewed !== true || row.receiptConfirmed !== true) return totals;
+      totals.weightKg += parseFloat(row.estimatedWeightKg || "0") || 0;
+      totals.pbKg += parseFloat(row.pbContentKg || "0") || 0;
+      totals.valueGbp += parseFloat(row.valueGbp || "0") || 0;
+      return totals;
+    },
+    { weightKg: 0, pbKg: 0, valueGbp: 0 }
+  );
+}
+
 export function resolveCustomerLmePercent(
   customerTractionPercent: string,
   legacyCustomerLmePercent: string

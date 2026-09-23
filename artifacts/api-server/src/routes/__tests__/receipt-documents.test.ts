@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   calculateReceiptValue,
+  calculateReceivedReceiptTotals,
   generateAccountsCompletionPdf,
   generateClientReceiptPdf,
   getDeliveryTargets,
@@ -73,8 +74,36 @@ describe("completed receipt documents", () => {
     expect(isReceiptReviewComplete([])).toBe(false);
   });
 
-  it("snapshots the total from saved item values", () => {
-    expect(calculateReceiptValue(items)).toBe("200.00");
+  it("snapshots only explicitly received item values", () => {
+    expect(calculateReceiptValue(items)).toBe("123.45");
+  });
+
+  it("matches the reported received weight and invoice value", () => {
+    expect(calculateReceivedReceiptTotals([
+      {
+        ...items[0],
+        estimatedWeightKg: "16239.900",
+        pbContentKg: "16239.900",
+        valueGbp: "7976.41",
+      },
+      {
+        ...items[1],
+        estimatedWeightKg: "1878.560",
+        pbContentKg: "1878.560",
+        valueGbp: "922.69",
+      },
+      {
+        ...items[0],
+        receiptReviewed: false,
+        estimatedWeightKg: "500.000",
+        pbContentKg: "500.000",
+        valueGbp: "245.58",
+      },
+    ])).toEqual({
+      weightKg: 16239.9,
+      pbKg: 16239.9,
+      valueGbp: 7976.41,
+    });
   });
 
   it("prefers a job location, then depot, then client-wide team leaders", () => {

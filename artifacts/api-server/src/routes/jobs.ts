@@ -17,6 +17,7 @@ import {
   sendJobValueToAccounts,
 } from "../lib/notifications";
 import {
+  calculateReceivedReceiptTotals,
   calculateReceiptValue,
   generateAccountsCompletionPdf,
   generateClientReceiptPdf,
@@ -1599,15 +1600,9 @@ router.post(
           resolvedById: req.user!.id,
           resolvedAt: new Date(),
         }).returning();
-        if (job.tonnageManualOverride !== true) {
-          const rows = await tx.select({ weight: jobBatteriesTable.estimatedWeightKg })
-            .from(jobBatteriesTable).where(eq(jobBatteriesTable.jobId, jobId));
-          const totalKg = rows.reduce((sum, row) => sum + (Number(row.weight) || 0), 0);
-          await tx.update(jobsTable).set({ tonnage: (totalKg / 1000).toFixed(3) }).where(eq(jobsTable.id, jobId));
-        }
         return created;
       });
-      const [updatedJob] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+      const updatedJob = await syncReceivedJobTotals(jobId);
       res.status(201).json({ battery, job: updatedJob });
     } catch (error) {
       console.error("Add job battery error:", error);
@@ -1633,14 +1628,8 @@ router.delete(
         const [deleted] = await tx.delete(jobBatteriesTable)
           .where(and(eq(jobBatteriesTable.id, batteryId), eq(jobBatteriesTable.jobId, jobId))).returning();
         if (!deleted) throw new Error("BATTERY_NOT_FOUND");
-        if (job.tonnageManualOverride !== true) {
-          const rows = await tx.select({ weight: jobBatteriesTable.estimatedWeightKg })
-            .from(jobBatteriesTable).where(eq(jobBatteriesTable.jobId, jobId));
-          const totalKg = rows.reduce((sum, row) => sum + (Number(row.weight) || 0), 0);
-          await tx.update(jobsTable).set({ tonnage: (totalKg / 1000).toFixed(3) }).where(eq(jobsTable.id, jobId));
-        }
       });
-      const [updatedJob] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+      const updatedJob = await syncReceivedJobTotals(jobId);
       res.json({ job: updatedJob });
     } catch (error) {
       if (error instanceof Error && error.message === "BATTERY_NOT_FOUND") return void res.status(404).json({ message: "Battery not found" });
@@ -1677,11 +1666,12 @@ router.post(
         ));
 
       if (pending.length === 0) {
-        const [updatedJob] = await db
+        await db
           .update(jobsTable)
           .set({ status: advanceJobStatusSql("received") })
           .where(eq(jobsTable.id, jobId))
           .returning();
+        const updatedJob = await syncReceivedJobTotals(jobId);
         const batteries = await db
           .select()
           .from(jobBatteriesTable)
@@ -1744,18 +1734,6 @@ router.post(
           confirmedCount += changed.length;
         }
 
-        if (job.tonnageManualOverride !== true) {
-          const rows = await tx
-            .select({ estimatedWeightKg: jobBatteriesTable.estimatedWeightKg })
-            .from(jobBatteriesTable)
-            .where(eq(jobBatteriesTable.jobId, jobId));
-          const totalKg = rows.reduce((sum, row) => {
-            const weight = parseFloat(String(row.estimatedWeightKg ?? ""));
-            return sum + (isFinite(weight) && weight > 0 ? weight : 0);
-          }, 0);
-          await tx.update(jobsTable).set({ tonnage: (totalKg / 1000).toFixed(3) }).where(eq(jobsTable.id, jobId));
-        }
-
         const [{ remaining }] = await tx
           .select({ remaining: count() })
           .from(jobBatteriesTable)
@@ -1776,7 +1754,7 @@ router.post(
         .from(jobBatteriesTable)
         .where(eq(jobBatteriesTable.jobId, jobId))
         .orderBy(asc(jobBatteriesTable.id));
-      const [updatedJob] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
+      const updatedJob = await syncReceivedJobTotals(jobId);
       res.json({ confirmedCount, batteries, job: updatedJob });
     } catch (error) {
       console.error("Auto-confirm batteries error:", error);
@@ -2070,7 +2048,55 @@ function toReceiptSnapshot(battery: typeof jobBatteriesTable.$inferSelect): Rece
     adminNotes: battery.adminNotes,
     valueGbp: battery.valueGbp,
     receiptReviewed: battery.receiptReviewed,
+    estimatedWeightKg: battery.estimatedWeightKg,
+    pbContentKg: battery.pbContentKg,
   };
+}
+
+async function syncReceivedJobTotals(jobId: number) {
+  return db.transaction(async (tx) => {
+    const [job] = await tx
+      .select()
+      .from(jobsTable)
+      .where(eq(jobsTable.id, jobId))
+      .for("update");
+    if (!job) return undefined;
+
+    const batteries = await tx
+      .select()
+      .from(jobBatteriesTable)
+      .where(eq(jobBatteriesTable.jobId, jobId));
+    const totals = calculateReceivedReceiptTotals(batteries.map(toReceiptSnapshot));
+    const updates: Partial<typeof jobsTable.$inferInsert> = {
+      totalInvoiceValue: totals.valueGbp.toFixed(2),
+      customerTractionTonnage: (totals.pbKg / 1000).toFixed(3),
+    };
+
+    if (job.tonnageManualOverride !== true) {
+      updates.tonnage = (totals.weightKg / 1000).toFixed(3);
+    }
+
+    const tractionRate = Number.parseFloat(job.customerTractionRate || "");
+    if (Number.isFinite(tractionRate)) {
+      const blocsTonnage = Number.parseFloat(job.customerBlocsTonnage || "") || 0;
+      const blocsRate = Number.parseFloat(job.customerBlocsRate || "") || 0;
+      const transport = Number.parseFloat(job.customerTransportCost || "") || 0;
+      const adHoc = Number.parseFloat(job.customerAdHocCosts || "") || 0;
+      updates.customerInvoiceValue = (
+        (totals.pbKg / 1000) * tractionRate
+        + blocsTonnage * blocsRate
+        - transport
+        - adHoc
+      ).toFixed(2);
+    }
+
+    const [updated] = await tx
+      .update(jobsTable)
+      .set(updates)
+      .where(eq(jobsTable.id, jobId))
+      .returning();
+    return updated;
+  });
 }
 
 router.get(
@@ -2531,47 +2557,13 @@ router.patch(
         });
       }
 
-      // Keep the job's tonnage in sync when a row's weight was re-derived —
-      // otherwise a corrected cell type would fix the row but leave the job
-      // total (and downstream reports/PDFs) showing the old weight. Only do
-      // this when the current tonnage still equals the previous sum of row
-      // weights (i.e. it was auto-derived): a manually overridden tonnage
-      // must never be silently replaced.
       if (
-        updates.estimatedWeightKg !== undefined &&
-        String(updates.estimatedWeightKg ?? "") !== String(existing.estimatedWeightKg ?? "")
+        receiptConfirmed !== undefined
+        || pbContentKg !== undefined
+        || valueGbp !== undefined
+        || updates.estimatedWeightKg !== undefined
       ) {
-        const rows = await db
-          .select({ id: jobBatteriesTable.id, estimatedWeightKg: jobBatteriesTable.estimatedWeightKg })
-          .from(jobBatteriesTable)
-          .where(eq(jobBatteriesTable.jobId, jobId));
-        let newTotalKg = 0;
-        let oldTotalKg = 0;
-        for (const r of rows) {
-          const w = parseFloat(String(r.estimatedWeightKg ?? ""));
-          if (isFinite(w) && w > 0) newTotalKg += w;
-          const oldVal = r.id === batteryId ? existing.estimatedWeightKg : r.estimatedWeightKg;
-          const ow = parseFloat(String(oldVal ?? ""));
-          if (isFinite(ow) && ow > 0) oldTotalKg += ow;
-        }
-        const [parentJob] = await db
-          .select({ tonnage: jobsTable.tonnage, tonnageManualOverride: jobsTable.tonnageManualOverride })
-          .from(jobsTable)
-          .where(eq(jobsTable.id, jobId));
-        const currentTonnage = parseFloat(String(parentJob?.tonnage ?? ""));
-        // Persisted override flag is authoritative; the old-sum equality
-        // check additionally protects legacy jobs created before the flag
-        // existed (their flag defaults to false regardless of provenance).
-        const wasAutoDerived =
-          parentJob?.tonnageManualOverride !== true &&
-          isFinite(currentTonnage) &&
-          Math.abs(currentTonnage - oldTotalKg / 1000) < 0.0015;
-        if (wasAutoDerived) {
-          await db
-            .update(jobsTable)
-            .set({ tonnage: (newTotalKg / 1000).toFixed(3) })
-            .where(eq(jobsTable.id, jobId));
-        }
+        updatedJob = await syncReceivedJobTotals(jobId);
       }
 
       let resolvedByName: string | null = null;
