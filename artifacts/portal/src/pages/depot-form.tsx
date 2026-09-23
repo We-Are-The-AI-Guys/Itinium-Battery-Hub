@@ -167,6 +167,18 @@ const CSV_TEMPLATE_HEADERS = "Pallet Number,Asset No,Battery Serial,Manufacturer
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
 const MANUAL_UNKNOWN_FLAG_REASON = "Unrecognised value — not found in master list";
+const TOKEN_WEIGHT_KG = 500;
+const TOKEN_WEIGHT_FLAG_REASON = "Missing battery details — 500kg token weight applied";
+type LoadState = "empty" | "red-low" | "red-high" | "amber-low" | "amber-high" | "green";
+
+export function getLoadState(currentLoad: number, maxCapacity = 26): LoadState {
+  if (currentLoad > 0 && currentLoad < 9.5) return "red-low";
+  if (currentLoad > maxCapacity) return "red-high";
+  if (currentLoad >= 9.5 && currentLoad < 10) return "amber-low";
+  if (currentLoad > 24 && currentLoad <= maxCapacity) return "amber-high";
+  if (currentLoad >= 10 && currentLoad <= 24) return "green";
+  return "empty";
+}
 const VOLTAGE_VALUES = ["12V", "24V", "36V", "40V", "48V", "80V", "96V"];
 
 function isReviewableProvisionalRow(battery: BatteryRow): boolean {
@@ -1239,55 +1251,25 @@ export default function DepotFormPage() {
       return b;
     });
 
-    const looseCellsMissingInputs = batteriesWithMfrFallback.some(
-      (b) =>
-        b.isLooseCells &&
-        (!b.cellType.trim() || !isPositiveIntegerInput(b.looseCellsQty))
-    );
-    if (looseCellsMissingInputs) {
-      toast({
-        title: "Missing details for loose cells",
-        description: "Please enter a Cell Type and a positive whole-number Cell Qty for all loose cell rows.",
-        variant: "destructive",
-      });
-      return;
-    }
+    const batteriesWithWeightFallback = batteriesWithMfrFallback.map((b) => {
+      if (parsePositiveWeightInput(b.estimatedWeightKg) !== null) return b;
+      return {
+        ...b,
+        estimatedWeightKg: String(TOKEN_WEIGHT_KG),
+        cellModelFlagReason: b.cellModelFlagReason || TOKEN_WEIGHT_FLAG_REASON,
+      };
+    });
 
-    const rowsMissingWeight = batteriesWithMfrFallback
-      .map((b, i) => ({ b, i }))
-      .filter(({ b }) => {
-        return parsePositiveWeightInput(b.estimatedWeightKg) === null;
-      });
-    if (rowsMissingWeight.length > 0) {
-      const looseRows = rowsMissingWeight.filter(({ b }) => b.isLooseCells);
-      const otherRows = rowsMissingWeight.filter(({ b }) => !b.isLooseCells);
-      const parts: string[] = [];
-      if (otherRows.length > 0) {
-        parts.push(
-          `No estimated weight for row${otherRows.length > 1 ? "s" : ""} ${otherRows
-            .map(({ i }) => i + 1)
-            .join(", ")} — complete the battery details or enter the weight manually.`
-        );
-      }
-      if (looseRows.length > 0) {
-        parts.push(
-          `Loose cell row${looseRows.length > 1 ? "s" : ""} ${looseRows
-            .map(({ i }) => i + 1)
-            .join(", ")}: we couldn't work out a weight from the Cell Type and Cell Qty — check they are correct, or enter the estimated weight manually.`
-        );
-      }
-      toast({
-        title: "Missing battery weight",
-        description: parts.join(" "),
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (currentLoad > maxCapacity) {
+    const submissionLoad = tonnageManual && tonnageOverride
+      ? parseFloat(tonnageOverride) || 0
+      : batteriesWithWeightFallback.reduce(
+          (sum, b) => sum + (parsePositiveWeightInput(b.estimatedWeightKg) || 0),
+          0
+        ) * GROSS_WEIGHT_FACTOR / 1000;
+    if (submissionLoad > maxCapacity) {
       toast({
         title: "Exceeds maximum tonnage",
-        description: `Maximum collection weight is ${maxCapacity}t. Current load is ${currentLoad.toFixed(3)}t. Please reduce the load.`,
+        description: `Maximum collection weight is ${maxCapacity}t. Current load is ${submissionLoad.toFixed(3)}t. Please reduce the load.`,
         variant: "destructive",
       });
       return;
@@ -1295,7 +1277,7 @@ export default function DepotFormPage() {
 
     // Validate manufacturer, cell type, and voltage against master lists before submitting.
     // If any value is unrecognised, flag it but do not block — flags are stored for Itinium review.
-    const validatedBatteries = batteriesWithMfrFallback.map((b) => {
+    const validatedBatteries = batteriesWithWeightFallback.map((b) => {
       const updated = { ...b };
       const effMfr =
         b.manufacture === "Other" && b.manufactureCustom ? b.manufactureCustom : b.manufacture;
@@ -1339,9 +1321,6 @@ export default function DepotFormPage() {
     const unresolvedCritical: string[] = [];
     validatedBatteries.forEach((b, i) => {
       const rowLabel = `Row ${i + 1}`;
-      if (b.manufacturerFlagReason === MANUAL_UNKNOWN_FLAG_REASON && !b.manufacturerManuallyConfirmed) {
-        unresolvedCritical.push(`${rowLabel}: Manufacturer`);
-      }
       if (
         b.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON &&
         !b.cellTypeManuallyConfirmed &&
@@ -1372,7 +1351,7 @@ export default function DepotFormPage() {
           depot: getSelectedLocationName() || user?.depot || "Head Office",
           collectionPoint: collectionPoint || null,
           collectionDate: null,
-          tonnage: currentLoad > 0 ? currentLoad.toFixed(3) : "0.000",
+          tonnage: submissionLoad > 0 ? submissionLoad.toFixed(3) : "0.000",
           tonnageManualOverride: tonnageManual,
           notes: jobNotes || null,
           draftId: currentDraftId || undefined,
@@ -1493,37 +1472,27 @@ export default function DepotFormPage() {
   }
 
   const totalWeightKg = batteries.reduce((sum, b) => {
-    const w = parseFloat(b.estimatedWeightKg);
-    return sum + (isNaN(w) ? 0 : w);
+    const hasData = b.batterySerial.trim() || b.assetNumber.trim() || b.cellType.trim() || b.cellModel.trim();
+    if (!hasData) return sum;
+    return sum + (parsePositiveWeightInput(b.estimatedWeightKg) || TOKEN_WEIGHT_KG);
   }, 0);
   // Gross load = total lead content x 1.4 (client-confirmed 30 July 2026).
   // This matches the x1.4 safe-load tonnage stored server-side.
   const GROSS_WEIGHT_FACTOR = 1.4;
   const autoTonnage = (totalWeightKg * GROSS_WEIGHT_FACTOR) / 1000;
-  // Rows with no usable weight (e.g. unrecognised cell types) silently
-  // contribute 0kg — surface this so the total is never quietly understated.
-  const zeroWeightRows = batteries
+  const tokenWeightRows = batteries
     .map((b, i) => ({ b, i }))
     .filter(({ b }) => {
       const hasData = b.batterySerial.trim() || b.assetNumber.trim() || b.cellType.trim() || b.cellModel.trim();
-      const w = parseFloat(b.estimatedWeightKg);
-      return hasData && !(isFinite(w) && w > 0);
+      return hasData && parsePositiveWeightInput(b.estimatedWeightKg) === null;
     });
   const currentLoad = tonnageManual && tonnageOverride ? parseFloat(tonnageOverride) || 0 : autoTonnage;
   const minTonnage = 9.5;
   const maxCapacity = 26.0;
   const targetMin = 10.0;
-  const approachLowerBound = 11.0;
-  const approachUpperBound = 24.0;
   const progressPercent = Math.min(100, Math.round((currentLoad / maxCapacity) * 100));
 
-  type LoadState = "empty" | "red-low" | "red-high" | "amber-low" | "amber-high" | "green";
-  let loadState: LoadState = "empty";
-  if (currentLoad > 0 && currentLoad < minTonnage) loadState = "red-low";
-  else if (currentLoad > maxCapacity) loadState = "red-high";
-  else if (currentLoad >= minTonnage && currentLoad < approachLowerBound) loadState = "amber-low";
-  else if (currentLoad > approachUpperBound && currentLoad <= maxCapacity) loadState = "amber-high";
-  else if (currentLoad >= approachLowerBound && currentLoad <= approachUpperBound) loadState = "green";
+  const loadState = getLoadState(currentLoad, maxCapacity);
 
   const isRed = loadState === "red-low" || loadState === "red-high";
   const isAmber = loadState === "amber-low" || loadState === "amber-high";
@@ -1609,11 +1578,10 @@ export default function DepotFormPage() {
               Load is within the optimal range.
             </p>
           )}
-          {zeroWeightRows.length > 0 && (
+          {tokenWeightRows.length > 0 && (
             <p className="text-xs font-medium text-amber-700 mb-2" data-testid="text-zero-weight-warning">
-              {zeroWeightRows.length} row{zeroWeightRows.length > 1 ? "s have" : " has"} no weight and{" "}
-              {zeroWeightRows.length > 1 ? "are" : "is"} not included in the total (row{zeroWeightRows.length > 1 ? "s" : ""}{" "}
-              {zeroWeightRows.map(({ i }) => i + 1).join(", ")}). Check the Cell Type is correct or enter the weight manually.
+              A 500kg token weight is included for row{tokenWeightRows.length > 1 ? "s" : ""}{" "}
+              {tokenWeightRows.map(({ i }) => i + 1).join(", ")}. The job will be flagged for Itinium to review.
             </p>
           )}
           <div className="relative h-3 w-full bg-slate-200 rounded-full overflow-hidden mt-3">

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  applyTokenWeightFallback,
   canonicalizeSubmittedVoltage,
   deriveEstimatedWeightKg,
   derivePbContentKg,
@@ -128,5 +129,23 @@ describe("parsePositiveWeightKg", () => {
     expect(parsePositiveWeightKg("0")).toBeNull();
     expect(parsePositiveWeightKg("-1")).toBeNull();
     expect(parsePositiveWeightKg("")).toBeNull();
+  });
+});
+
+describe("applyTokenWeightFallback", () => {
+  it("adds a 500kg token and review flag when a row has no usable weight", () => {
+    const battery = { estimatedWeightKg: null, cellModelFlagReason: null };
+    applyTokenWeightFallback(battery);
+    expect(battery.estimatedWeightKg).toBe("500");
+    expect(battery.cellModelFlagReason).toMatch(/500kg token weight/i);
+  });
+
+  it("preserves an existing valid weight and review reason", () => {
+    const battery = { estimatedWeightKg: "725.5", cellModelFlagReason: "Existing review" };
+    applyTokenWeightFallback(battery);
+    expect(battery).toEqual({
+      estimatedWeightKg: "725.5",
+      cellModelFlagReason: "Existing review",
+    });
   });
 });

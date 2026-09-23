@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
-import DepotFormPage, { isUnknownManufacturerValue } from "@/pages/depot-form";
+import DepotFormPage, { getLoadState, isUnknownManufacturerValue } from "@/pages/depot-form";
 import { Toaster } from "@/components/ui/toaster";
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -141,6 +141,14 @@ describe("isUnknownManufacturerValue", () => {
   });
 });
 
+describe("minimum load warning thresholds", () => {
+  it("does not show the approaching-minimum state once the load reaches 10 tonnes", () => {
+    expect(getLoadState(9.6)).toBe("amber-low");
+    expect(getLoadState(10)).toBe("green");
+    expect(getLoadState(10.6)).toBe("green");
+  });
+});
+
 describe("CSV import with 'N/A' in the Manufacturer column", () => {
   it("maps it to Unknown with TAB weights and a review flag instead of an unrecognised-value block", async () => {
     renderPage();
@@ -231,7 +239,7 @@ describe("submitting with a hand-typed 'unknown' manufacturer", () => {
 });
 
 describe("rows that contribute no weight", () => {
-  it("shows a warning that zero-weight rows are excluded from the total", async () => {
+  it("includes a 500kg token weight and flags the row for review", async () => {
     renderPage();
     await screen.findByTestId("button-upload-csv");
 
@@ -253,9 +261,17 @@ describe("rows that contribute no weight", () => {
 
     await waitFor(() => {
       const warning = screen.getByTestId("text-zero-weight-warning");
-      expect(warning.textContent).toMatch(/no weight/i);
-      expect(warning.textContent).toMatch(/not included in the total/i);
+      expect(warning.textContent).toMatch(/500kg token weight/i);
+      expect(warning.textContent).toMatch(/flagged for Itinium to review/i);
     });
+
+    fireEvent.click(screen.getByTestId("button-submit-collection"));
+    await waitFor(() => expect(jobPostBodies).toHaveLength(1));
+    const body = jobPostBodies[0] as {
+      batteries: Array<{ estimatedWeightKg: string | null; cellModelFlagReason: string | null }>;
+    };
+    expect(body.batteries[0].estimatedWeightKg).toBe("500");
+    expect(body.batteries[0].cellModelFlagReason).toBeTruthy();
   });
 
   it("does not warn for a fully empty template row", async () => {

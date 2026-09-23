@@ -43,6 +43,8 @@ import {
 
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
+const TOKEN_WEIGHT_KG = 500;
+const TOKEN_WEIGHT_FLAG_REASON = "Missing battery details — 500kg token weight applied";
 
 const SAFE_LOAD_FACTOR = 1.4;
 
@@ -1088,6 +1090,12 @@ interface BatteryInput {
   rowPhoto?: string | null;
 }
 
+export function applyTokenWeightFallback(battery: BatteryInput): void {
+  if (parsePositiveWeightKg(battery.estimatedWeightKg) !== null) return;
+  battery.estimatedWeightKg = String(TOKEN_WEIGHT_KG);
+  battery.cellModelFlagReason = battery.cellModelFlagReason || TOKEN_WEIGHT_FLAG_REASON;
+}
+
 router.post(
   "/jobs",
   requireAuth,
@@ -1195,21 +1203,6 @@ router.post(
         const cellTypeStr = (b.cellType || "").trim();
         const cellModelApplies = cellTypeStr !== "Blocs" && cellTypeStr !== "Other";
 
-        if (b.isLooseCells) {
-          if (!cellTypeStr) {
-            res.status(400).json({
-              message: `Battery row ${inputIndex + 1}: Cell type is required for loose cells.`,
-            });
-            return;
-          }
-          if (parsePositiveLooseCellQuantity(b.looseCellsQty) === null) {
-            res.status(400).json({
-              message: `Battery row ${inputIndex + 1}: Loose-cell quantity must be a positive whole number.`,
-            });
-            return;
-          }
-        }
-
         if (!b.manufacturerFlagReason) {
           if (!mfrStr || isUnknownMfr) {
             b.manufacturerFlagReason = CSV_FLAG_REASON;
@@ -1245,31 +1238,6 @@ router.post(
           }
         }
 
-        const unresolvedLooseCellType =
-          b.isLooseCells &&
-          cellModelApplies &&
-          !!cellTypeStr &&
-          !selectCatalogueModel(
-            allCellModels,
-            isUnknownMfr ? null : mfrStr,
-            b.cellType || cellTypeStr
-          );
-        if (unresolvedLooseCellType && b.weightManual !== true) {
-          res.status(400).json({
-            message: `Battery row ${inputIndex + 1}: Loose cells with an unknown cell type require an explicit manual/token weight.`,
-          });
-          return;
-        }
-        if (
-          unresolvedLooseCellType &&
-          parsePositiveWeightKg(b.estimatedWeightKg) === null
-        ) {
-          res.status(400).json({
-            message: `Battery row ${inputIndex + 1}: Manual/token weight must be a positive decimal number.`,
-          });
-          return;
-        }
-
         // Authoritative weight derivation: unless the user typed the weight
         // themselves (weightManual), re-derive it from the catalogue using
         // the canonicalised cell type. This guarantees manual entry and CSV
@@ -1289,18 +1257,7 @@ router.post(
           );
           if (derived !== null) b.estimatedWeightKg = derived;
         }
-      }
-
-      // Loose cells must end up with a positive weight — either supplied by
-      // the user or derived from the catalogue above.
-      for (let i = 0; i < batteryInputs.length; i++) {
-        const b = batteryInputs[i];
-        if (b.isLooseCells) {
-          if (parsePositiveWeightKg(b.estimatedWeightKg) === null) {
-            res.status(400).json({ message: `Battery row ${i + 1}: Estimated weight is required for loose cells and must be a positive number.` });
-            return;
-          }
-        }
+        applyTokenWeightFallback(b);
       }
 
       let autoTonnage = 0;

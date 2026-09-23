@@ -20,6 +20,11 @@ description: Source-of-truth conventions for battery weight, safe-load factor an
 - **Why:** client's depots routinely can't identify manufacturers; earlier hard-blocks stopped whole submissions.
 - **How to apply:** applied at both CSV import and submit time in the depot form; keep any new validation path consistent with this rule.
 
+## Missing-weight token (September 23, 2026)
+- Customer submissions with missing battery details or no derivable weight must use a 500 kg raw-weight token, remain submittable, and be flagged for Itinium review.
+- **Why:** incomplete depot data must not block a collection request; Itinium will correct the row during review.
+- **How to apply:** include the token in displayed and stored load calculations using the normal ×1.4 gross-load factor. Preserve any existing review reason rather than replacing it.
+
 ## Pb derivation (fixed July 2026)
 - Total Pb = Pb-per-cell × actual cell count. Actual cell count = voltage/2 for full batteries (each cell 2V), loose-cells quantity for loose rows. Never use the number embedded in the model name (e.g. the 5 in 5PzS575).
 - Voltage parsing must accept only a single clean numeric token; digit concatenation ("12/24V" → 1224) wildly inflates counts.
