@@ -25,6 +25,18 @@ function wantsEmail(prefs: unknown, key: string): boolean {
   return p[key] !== false;
 }
 
+export function shouldSendNotificationEmail(
+  role: string,
+  prefs: unknown,
+  key: string
+): boolean {
+  // Waste collector accounts are running parallel tests. Keep their in-app
+  // notifications active, but suppress all notification emails until testing
+  // is complete. Account-security emails use a separate delivery path.
+  if (role === "collection_company") return false;
+  return wantsEmail(prefs, key);
+}
+
 // Escape user-controlled values before interpolating them into email HTML.
 // Job fields, fleet names/registrations, and site details are all free text
 // that non-admin users can set, so nothing dynamic may be rendered raw.
@@ -108,13 +120,17 @@ export async function dispatchNotification(
 
   try {
     const [user] = await db
-      .select({ email: usersTable.email, notificationPreferences: usersTable.notificationPreferences })
+      .select({
+        email: usersTable.email,
+        role: usersTable.role,
+        notificationPreferences: usersTable.notificationPreferences,
+      })
       .from(usersTable)
       .where(eq(usersTable.id, userId));
 
     if (!user) return;
     const prefKey = payload.emailPrefKey ?? "jobApprovedCompleted";
-    if (!wantsEmail(user.notificationPreferences, prefKey)) return;
+    if (!shouldSendNotificationEmail(user.role, user.notificationPreferences, prefKey)) return;
 
     await resend.emails.send({
       from: FROM_ADDRESS,

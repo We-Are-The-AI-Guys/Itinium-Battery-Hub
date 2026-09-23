@@ -3,6 +3,7 @@ import {
   escapeHtml,
   buildScheduleProposedEmailHtml,
   buildScheduleConfirmedEmailHtml,
+  shouldSendNotificationEmail,
 } from "../notifications";
 
 const XSS_DRIVER = `<img src=x onerror=alert(1)>Driver`;
@@ -11,6 +12,21 @@ const XSS_VEHICLE = `<a href="https://evil.example">K40 CBL</a>`;
 describe("escapeHtml", () => {
   it("escapes all HTML-significant characters", () => {
     expect(escapeHtml(`<b>&"'</b>`)).toBe("&lt;b&gt;&amp;&quot;&#39;&lt;/b&gt;");
+  });
+});
+
+describe("notification email delivery policy", () => {
+  it("suppresses email for waste collector accounts while retaining other account preferences", () => {
+    expect(shouldSendNotificationEmail("collection_company", {
+      newJobSubmitted: true,
+      jobApprovedCompleted: true,
+    }, "newJobSubmitted")).toBe(false);
+    expect(shouldSendNotificationEmail("team_leader", {
+      newJobSubmitted: true,
+    }, "newJobSubmitted")).toBe(true);
+    expect(shouldSendNotificationEmail("team_leader", {
+      newJobSubmitted: false,
+    }, "newJobSubmitted")).toBe(false);
   });
 });
 
