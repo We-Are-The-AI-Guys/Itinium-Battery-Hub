@@ -62,6 +62,16 @@ describe("job-detail save controls", () => {
     expect(source.match(/>Collection Sheet Details</g)).toHaveLength(1);
   });
 
+  it("shows the proposed collection date until Itinium saves a confirmed date", () => {
+    expect(source).toContain(
+      'return job?.collectionDate || job?.proposedCollectionDate || "";'
+    );
+    expect(source).toContain("collectionDate: collectionDetailsDate(data.job)");
+    expect(source).toContain(
+      "siteDetails.collectionDate === collectionDetailsDate(job)"
+    );
+  });
+
   it("keeps the battery admin update handler used by collection rows", () => {
     expect(source).toContain("async function updateBatteryAdmin");
     expect(source).toContain("onSaveField={updateBatteryAdmin}");
@@ -80,6 +90,10 @@ describe("job-detail save controls", () => {
     const rowEnd = source.indexOf("function FinancialField", rowStart);
     const rowSource = source.slice(rowStart, rowEnd);
     expect(rowSource).not.toContain(">Save</Button>");
+    const receiptSectionStart = source.indexOf("Battery Receipt Confirmation & Pb Content");
+    const receiptSectionEnd = source.indexOf("Financial Master", receiptSectionStart);
+    const receiptSection = source.slice(receiptSectionStart, receiptSectionEnd);
+    expect(receiptSection).not.toContain("LME GBP:");
   });
 
   it("pulls collection notes into an editable shared receipt draft", () => {

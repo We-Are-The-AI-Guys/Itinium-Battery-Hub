@@ -127,6 +127,12 @@ interface JobData {
   receiptAccountsDeliveryStatus: string | null;
 }
 
+function collectionDetailsDate(
+  job: Pick<JobData, "collectionDate" | "proposedCollectionDate"> | null | undefined
+): string {
+  return job?.collectionDate || job?.proposedCollectionDate || "";
+}
+
 interface BatteryData {
   id: number;
   jobId: number;
@@ -513,7 +519,7 @@ export default function JobDetailPage() {
             siteContacts: data.job.siteContacts || "",
             siteHours: data.job.siteHours || "",
             specialInstructions: data.job.specialInstructions || "",
-            collectionDate: data.job.collectionDate || "",
+            collectionDate: collectionDetailsDate(data.job),
             notes: data.job.notes || "",
           });
         } else if (result.status === 404) {
@@ -622,11 +628,15 @@ export default function JobDetailPage() {
   async function saveSiteDetails() {
     setSavingSiteDetails(true);
     try {
+      const body: Partial<typeof siteDetails> = { ...siteDetails };
+      if (siteDetails.collectionDate === collectionDetailsDate(job)) {
+        delete body.collectionDate;
+      }
       const res = await fetch(`/api/jobs/${params.id}/admin`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(siteDetails),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         const data = await res.json();
@@ -1681,14 +1691,6 @@ export default function JobDetailPage() {
                       <CheckCircle2 className="w-3 h-3" />
                       {autoConfirming ? "Confirming…" : "Auto-confirm all"}
                     </Button>
-                  {lmePrice && (
-                    <div className="flex items-center gap-1.5 text-xs bg-sky-50 border border-sky-200 rounded-md px-2.5 py-1.5">
-                      <PoundSterling className="w-3 h-3 text-sky-600" />
-                      <span className="text-slate-500">LME GBP:</span>
-                      <span className="font-semibold text-sky-700">£{parseFloat(lmePrice.gbpPrice).toFixed(2)}/t</span>
-                      <span className="text-slate-400">({lmePrice.priceDate})</span>
-                    </div>
-                  )}
                   <Button
                     variant="outline"
                     size="sm"
