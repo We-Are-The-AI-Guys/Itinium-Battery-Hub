@@ -163,6 +163,8 @@ interface ReceiptDraft {
   voltage: string;
 }
 
+type ReceiptDraftField = keyof ReceiptDraft;
+
 function receiptDraftFromBattery(battery: BatteryData): ReceiptDraft {
   return {
     receiptConfirmed: battery.receiptConfirmed ?? false,
@@ -171,6 +173,17 @@ function receiptDraftFromBattery(battery: BatteryData): ReceiptDraft {
     notes: battery.notes || "",
     voltage: battery.voltage || "",
   };
+}
+
+function receiptPatchFromDraft(
+  draft: ReceiptDraft,
+  dirtyFields: Set<ReceiptDraftField>
+): Partial<Record<ReceiptDraftField, string | boolean | null>> {
+  const patch: Partial<Record<ReceiptDraftField, string | boolean | null>> = {};
+  for (const field of dirtyFields) {
+    patch[field] = field === "receiptConfirmed" ? draft[field] : draft[field] || null;
+  }
+  return patch;
 }
 
 interface ReceiptDeliveryInfo {
@@ -311,6 +324,7 @@ export default function JobDetailPage() {
   const financialSnapshotRef = useRef(financials);
   const [receiptDrafts, setReceiptDrafts] = useState<Record<number, ReceiptDraft>>({});
   const [dirtyReceiptIds, setDirtyReceiptIds] = useState<Set<number>>(new Set());
+  const [dirtyReceiptFields, setDirtyReceiptFields] = useState<Record<number, Set<ReceiptDraftField>>>({});
   const [savingReceiptRows, setSavingReceiptRows] = useState(false);
 
   const [siteDetails, setSiteDetails] = useState({
@@ -438,6 +452,7 @@ export default function JobDetailPage() {
             )
           );
           setDirtyReceiptIds(new Set());
+          setDirtyReceiptFields({});
 
           let totalInvoiceValue = data.job.totalInvoiceValue || "";
           if (!totalInvoiceValue) {
@@ -979,6 +994,13 @@ export default function JobDetailPage() {
       },
     }));
     setDirtyReceiptIds((current) => new Set(current).add(batteryId));
+    setDirtyReceiptFields((current) => ({
+      ...current,
+      [batteryId]: new Set([
+        ...(current[batteryId] || []),
+        ...(Object.keys(updates) as ReceiptDraftField[]),
+      ]),
+    }));
   }
 
   async function saveReceiptRows() {
@@ -990,17 +1012,12 @@ export default function JobDetailPage() {
     for (const batteryId of ids) {
       try {
         const draft = receiptDrafts[batteryId];
+        const fields = dirtyReceiptFields[batteryId] || new Set<ReceiptDraftField>();
         const res = await fetch(`/api/jobs/${params.id}/batteries/${batteryId}/admin`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({
-            receiptConfirmed: draft.receiptConfirmed,
-            pbContentKg: draft.pbContentKg || null,
-            valueGbp: draft.valueGbp || null,
-            notes: draft.notes || null,
-            voltage: draft.voltage || null,
-          }),
+          body: JSON.stringify(receiptPatchFromDraft(draft, fields)),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.message || "Failed to save battery");
@@ -1028,6 +1045,11 @@ export default function JobDetailPage() {
       setReceiptDelivery(null);
     }
     setDirtyReceiptIds(new Set(failedIds));
+    setDirtyReceiptFields((current) => {
+      const next = { ...current };
+      for (const result of saved) delete next[result.batteryId];
+      return next;
+    });
     setSavingReceiptRows(false);
     if (failedIds.length === 0) {
       toast({
@@ -1076,6 +1098,14 @@ export default function JobDetailPage() {
     batteryId: number,
     updates: Record<string, string | boolean | null>
   ) {
+    if (dirtyReceiptIds.has(batteryId)) {
+      toast({
+        title: "Save receipt changes first",
+        description: "This battery has unsaved receipt-table changes. Save them before editing the collection row.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       const res = await fetch(`/api/jobs/${params.id}/batteries/${batteryId}/admin`, {
         method: "PATCH",

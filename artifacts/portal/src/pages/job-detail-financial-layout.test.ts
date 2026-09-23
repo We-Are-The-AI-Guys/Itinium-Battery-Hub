@@ -87,7 +87,6 @@ describe("job-detail save controls", () => {
     const rowEnd = source.indexOf("function FinancialField", rowStart);
     const rowSource = source.slice(rowStart, rowEnd);
     expect(source).toContain('notes: battery.notes || ""');
-    expect(source).toContain("notes: draft.notes || null");
     expect(rowSource).toContain("value={draft.notes}");
     expect(rowSource).toContain("notes: e.target.value");
     expect(rowSource).toContain('placeholder="Add notes…"');
@@ -98,11 +97,18 @@ describe("job-detail save controls", () => {
     const rowEnd = source.indexOf("function FinancialField", rowStart);
     const rowSource = source.slice(rowStart, rowEnd);
     expect(source).toContain('voltage: battery.voltage || ""');
-    expect(source).toContain("voltage: draft.voltage || null");
     expect(rowSource).toContain("battery.isLooseCells");
     expect(rowSource).toContain("value={draft.voltage}");
     expect(rowSource).toContain("voltage: e.target.value");
     expect(rowSource).toContain('placeholder="Enter voltage"');
+  });
+
+  it("only sends receipt fields the user actually changed", () => {
+    expect(source).toContain("function receiptPatchFromDraft");
+    expect(source).toContain("for (const field of dirtyFields)");
+    expect(source).toContain("JSON.stringify(receiptPatchFromDraft(draft, fields))");
+    expect(source).not.toContain("notes: draft.notes || null");
+    expect(source).toContain("This battery has unsaved receipt-table changes");
   });
 
   it("keeps optional loose-cell voltage from depot entry through submission", () => {
