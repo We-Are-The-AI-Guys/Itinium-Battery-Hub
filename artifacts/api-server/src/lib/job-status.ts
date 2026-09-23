@@ -5,8 +5,8 @@ export const JOB_STATUSES = [
   "request",
   "confirmed",
   "received",
-  "awaiting_invoice",
   "invoice",
+  "awaiting_invoice",
   "completed",
 ] as const;
 

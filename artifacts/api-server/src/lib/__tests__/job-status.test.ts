@@ -12,8 +12,8 @@ describe("job status progression", () => {
       "request",
       "confirmed",
       "received",
-      "awaiting_invoice",
       "invoice",
+      "awaiting_invoice",
       "completed",
     ]);
   });
@@ -21,9 +21,9 @@ describe("job status progression", () => {
   it.each([
     ["request", "confirmed", "confirmed"],
     ["confirmed", "received", "received"],
-    ["received", "awaiting_invoice", "awaiting_invoice"],
-    ["awaiting_invoice", "invoice", "invoice"],
-    ["invoice", "completed", "completed"],
+    ["received", "invoice", "invoice"],
+    ["invoice", "awaiting_invoice", "awaiting_invoice"],
+    ["awaiting_invoice", "completed", "completed"],
   ] as const)("advances %s to %s", (current, target, expected) => {
     expect(advanceJobStatus(current, target)).toBe(expected);
   });
@@ -36,7 +36,7 @@ describe("job status progression", () => {
   it("is idempotent and never moves a job backwards automatically", () => {
     expect(advanceJobStatus("received", "received")).toBe("received");
     expect(advanceJobStatus("completed", "confirmed")).toBe("completed");
-    expect(advanceJobStatus("invoice", "awaiting_invoice")).toBe("invoice");
+    expect(advanceJobStatus("awaiting_invoice", "invoice")).toBe("awaiting_invoice");
   });
 
   it("recognises only canonical status values", () => {

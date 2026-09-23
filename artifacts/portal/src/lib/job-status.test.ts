@@ -23,8 +23,8 @@ describe("job status journey", () => {
       "request",
       "confirmed",
       "received",
-      "awaiting_invoice",
       "invoice",
+      "awaiting_invoice",
       "completed",
     ]);
   });

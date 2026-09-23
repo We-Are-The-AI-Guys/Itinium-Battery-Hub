@@ -2,8 +2,8 @@ export const JOB_STATUS_JOURNEY = [
   "request",
   "confirmed",
   "received",
-  "awaiting_invoice",
   "invoice",
+  "awaiting_invoice",
   "completed",
 ] as const;
 
