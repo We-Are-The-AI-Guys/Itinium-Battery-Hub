@@ -710,7 +710,7 @@ export default function JobDetailPage() {
   async function autoConfirmAll() {
     const pendingCount = batteries.filter((battery) => battery.receiptConfirmed !== true).length;
     if (pendingCount === 0) return;
-    if (!window.confirm(`This will confirm all ${pendingCount} items with TAB weights — continue?`)) return;
+    if (!window.confirm(`All ${pendingCount} unconfirmed manufacturers will be confirmed with TAB weights — continue?`)) return;
 
     setAutoConfirming(true);
     try {
@@ -731,8 +731,8 @@ export default function JobDetailPage() {
       if (data.job) setJob(data.job);
       setReceiptDelivery(null);
       toast({
-        title: "Items confirmed",
-        description: `${data.confirmedCount} pending ${data.confirmedCount === 1 ? "item was" : "items were"} confirmed with TAB weights.`,
+        title: "Manufacturers confirmed",
+        description: `${data.confirmedCount} unconfirmed ${data.confirmedCount === 1 ? "manufacturer was" : "manufacturers were"} confirmed with TAB weights.`,
       });
     } catch {
       toast({
@@ -1809,8 +1809,10 @@ export default function JobDetailPage() {
                       <FinancialField label="% Spot Traction" value={financials.wasteTractionPercent} onChange={(v) => setFinancials((p) => ({ ...p, wasteTractionPercent: v }))} suffix="%" />
                       <FinancialField label="£/t Traction" value={financials.wasteTractionRate} onChange={() => {}} prefix="£" computed />
                       <FinancialField label="£/t Blocs" value={financials.wasteBlocsRate} onChange={() => {}} prefix="£" computed />
-                      <FinancialField label="Pb tonnage Traction" value={financials.wasteTractionTonnage} onChange={(v) => setFinancials((p) => ({ ...p, wasteTractionTonnage: v }))} suffix="t" />
-                      <FinancialField label="Pb tonnage Blocs" value={financials.wasteBlocsTonnage} onChange={(v) => setFinancials((p) => ({ ...p, wasteBlocsTonnage: v }))} suffix="t" />
+                      <div className="col-span-2 grid grid-cols-2 gap-3">
+                        <FinancialField label="Pb tonnage Traction" value={financials.wasteTractionTonnage} onChange={(v) => setFinancials((p) => ({ ...p, wasteTractionTonnage: v }))} suffix="t" />
+                        <FinancialField label="Pb tonnage Blocs" value={financials.wasteBlocsTonnage} onChange={(v) => setFinancials((p) => ({ ...p, wasteBlocsTonnage: v }))} suffix="t" />
+                      </div>
                     </div>
                     <FinancialField label="Ad hoc costs" value={financials.wasteAdHocCosts} onChange={(v) => setFinancials((p) => ({ ...p, wasteAdHocCosts: v }))} prefix="£" />
                     <FinancialField label="Transport" value={financials.wasteTransportCost} onChange={(v) => setFinancials((p) => ({ ...p, wasteTransportCost: v }))} prefix="£" />

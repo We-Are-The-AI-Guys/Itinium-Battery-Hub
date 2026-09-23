@@ -23,6 +23,10 @@ describe("financial master-log field grouping", () => {
     expect(wasteCollector).not.toContain('label="Customer Invoice No."');
     expect(source).toContain('const wasteBlocsRate = "0.00"');
     expect(source).toContain('const { wasteBlocsPercent: _unusedWasteBlocsPercent, ...financialsWithoutWasteBlocsPercent }');
+    expect(wasteCollector).toContain('<div className="col-span-2 grid grid-cols-2 gap-3">');
+    expect(wasteCollector.indexOf('label="Pb tonnage Traction"')).toBeLessThan(
+      wasteCollector.indexOf('label="Pb tonnage Blocs"')
+    );
   });
 
   it("keeps the customer invoice pair under Customer", () => {
@@ -86,5 +90,10 @@ describe("job-detail save controls", () => {
     expect(rowSource).toContain("value={draft.notes}");
     expect(rowSource).toContain("notes: e.target.value");
     expect(rowSource).toContain('placeholder="Add notes…"');
+  });
+
+  it("distinguishes unconfirmed manufacturers in the TAB-weight message", () => {
+    expect(source).toContain("unconfirmed manufacturers will be confirmed with TAB weights");
+    expect(source).not.toContain("items with TAB weights");
   });
 });
