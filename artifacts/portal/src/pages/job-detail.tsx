@@ -356,6 +356,7 @@ export default function JobDetailPage() {
     collectionDate: "",
     notes: "",
   });
+  const siteDetailsSnapshotRef = useRef(siteDetails);
   const collectionLmeUsable = isCollectionLmeUsable(
     collectionLmeStatus,
     collectionLmePrice !== null,
@@ -381,6 +382,63 @@ export default function JobDetailPage() {
   const canEditFinancials =
     userRole === "team_leader" || userRole === "accounts" || userRole === "head_office_admin";
   const canEditReceipt = canEditFinancials;
+  const siteDetailsDirty = Object.keys(siteDetails).some(
+    (key) =>
+      siteDetails[key as keyof typeof siteDetails]
+      !== siteDetailsSnapshotRef.current[key as keyof typeof siteDetails]
+  );
+  const financialsDirty = financialEditing && Object.keys(financials).some(
+    (key) =>
+      financials[key as keyof typeof financials]
+      !== financialSnapshotRef.current[key as keyof typeof financials]
+  );
+  const hasUnsavedChanges = siteDetailsDirty || financialsDirty || dirtyReceiptIds.size > 0;
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const message = "You have unsaved changes on this job. Leave without saving them?";
+    let restoringHistory = false;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const handleLinkClick = (event: MouseEvent) => {
+      if (
+        event.defaultPrevented
+        || event.button !== 0
+        || event.metaKey
+        || event.ctrlKey
+        || event.shiftKey
+        || event.altKey
+      ) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const link = target.closest<HTMLAnchorElement>("a[href]");
+      if (!link || link.target === "_blank" || link.hasAttribute("download")) return;
+      if (!window.confirm(message)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    };
+    const handlePopState = () => {
+      if (restoringHistory) {
+        restoringHistory = false;
+        return;
+      }
+      if (!window.confirm(message)) {
+        restoringHistory = true;
+        window.history.forward();
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("popstate", handlePopState);
+    document.addEventListener("click", handleLinkClick, true);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("popstate", handlePopState);
+      document.removeEventListener("click", handleLinkClick, true);
+    };
+  }, [hasUnsavedChanges]);
 
   const receivedTotals = useMemo(() => calculateReceivedReceiptTotals(
     batteries.map((battery) => {
@@ -544,13 +602,15 @@ export default function JobDetailPage() {
           financialSnapshotRef.current = loadedFinancials;
           setFinancialEditing(false);
 
-          setSiteDetails({
+          const loadedSiteDetails = {
             siteContacts: data.job.siteContacts || "",
             siteHours: data.job.siteHours || "",
             specialInstructions: data.job.specialInstructions || "",
             collectionDate: collectionDetailsDate(data.job),
             notes: data.job.notes || "",
-          });
+          };
+          setSiteDetails(loadedSiteDetails);
+          siteDetailsSnapshotRef.current = loadedSiteDetails;
         } else if (result.status === 404) {
           setLoadError("not_found");
         } else {
@@ -670,6 +730,7 @@ export default function JobDetailPage() {
       if (res.ok) {
         const data = await res.json();
         setJob(data.job);
+        siteDetailsSnapshotRef.current = { ...siteDetails };
         toast({ title: "Saved", description: "Collection sheet details updated." });
       } else {
         const err = await res.json().catch(() => ({}));

@@ -6,3 +6,4 @@
 - [Receipt table shared saves](receipt-table-shared-saves.md) — shared row saves must lock every competing table mutation and retain failed drafts.
 - [Waste Collector blocs pricing](waste-collector-blocs-pricing.md) — Itinium currently excludes Spot Blocs from Waste Collector pricing; keep Customer LME Blocs independent.
 - [Collection-sheet audit wording](collection-sheet-audit-wording.md) — blank special/loading instructions must print as “None,” never as an empty field.
+- [Job-page unsaved edits](job-page-unsaved-edits.md) — use leave-page warnings until revision-safe autosave prevents overlapping saves from overwriting newer work.

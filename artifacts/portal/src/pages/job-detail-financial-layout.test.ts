@@ -159,6 +159,14 @@ describe("job-detail save controls", () => {
     expect(source).toContain("This battery has unsaved receipt-table changes");
   });
 
+  it("warns before leaving with unsaved site, receipt, or financial changes", () => {
+    expect(source).toContain("siteDetailsDirty || financialsDirty || dirtyReceiptIds.size > 0");
+    expect(source).toContain('window.addEventListener("beforeunload"');
+    expect(source).toContain('window.addEventListener("popstate"');
+    expect(source).toContain('target.closest<HTMLAnchorElement>("a[href]")');
+    expect(source).toContain("You have unsaved changes on this job");
+  });
+
   it("keeps optional loose-cell voltage from depot entry through submission", () => {
     expect(depotFormSource).toContain('"Loose Cell Voltage (optional)"');
     expect(depotFormSource).toContain(

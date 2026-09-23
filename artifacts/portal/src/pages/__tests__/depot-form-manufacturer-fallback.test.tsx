@@ -149,6 +149,19 @@ describe("minimum load warning thresholds", () => {
   });
 });
 
+describe("voltage keyboard selection", () => {
+  it.each([
+    ["24", "24V"],
+    ["48", "48V"],
+  ])("selects %sV when the user types %s and presses Tab", async (typed, expected) => {
+    renderPage();
+    const voltageInput = await screen.findByTestId("input-voltage-0");
+    fireEvent.change(voltageInput, { target: { value: typed } });
+    fireEvent.keyDown(voltageInput, { key: "Tab", code: "Tab" });
+    await waitFor(() => expect(voltageInput).toHaveValue(expected));
+  });
+});
+
 describe("CSV import with 'N/A' in the Manufacturer column", () => {
   it("maps it to Unknown with TAB weights and a review flag instead of an unrecognised-value block", async () => {
     renderPage();

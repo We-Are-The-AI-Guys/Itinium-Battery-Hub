@@ -2822,7 +2822,15 @@ function TypeaheadInput({
               setOpen(false);
               onBlurValidate(value);
             }
-            if (e.key === "Enter" || e.key === "Tab") {
+            if (e.key === "Tab") {
+              const exact = options.find(
+                (option) => option.toLowerCase() === value.trim().toLowerCase()
+              );
+              const committed = exact || (filtered.length === 1 ? filtered[0] : value);
+              if (committed !== value) onChange(committed);
+              setOpen(false);
+              onBlurValidate(committed);
+            } else if (e.key === "Enter") {
               setOpen(false);
               onBlurValidate(value);
             }
