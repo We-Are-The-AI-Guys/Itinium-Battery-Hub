@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/select";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { JobDocumentsPanel } from "@/components/job-documents";
+import { CollectionConversation } from "@/components/collection-conversation";
 import { useToast } from "@/hooks/use-toast";
 import {
   getJobNextStep,
@@ -123,6 +124,7 @@ interface JobData {
   vehicleReg: string | null;
   proposedCollectionDate: string | null;
   scheduleStatus: string;
+  collectionCompanyId: number | null;
   receiptSentAt: string | null;
   receiptClientDeliveryStatus: string | null;
   receiptAccountsDeliveryStatus: string | null;
@@ -1592,6 +1594,20 @@ export default function JobDetailPage() {
                 </Button>
               </div>
             </div>
+          </div>
+        )}
+
+        {job.collectionCompanyId && (userRole === "accounts" || userRole === "head_office_admin") && (
+          <div className="mb-6">
+            <CollectionConversation
+              jobId={job.id}
+              companyId={job.collectionCompanyId}
+              scheduleStatus={job.scheduleStatus}
+              jobStatus={job.status}
+              driverName={job.driverName}
+              vehicleReg={job.vehicleReg}
+              onAssignmentChanged={() => void loadJob()}
+            />
           </div>
         )}
 

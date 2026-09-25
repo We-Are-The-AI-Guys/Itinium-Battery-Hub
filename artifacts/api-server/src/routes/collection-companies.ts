@@ -49,6 +49,17 @@ function resolveCompanyId(req: AuthenticatedRequest, requested?: number): number
   return requested ?? null;
 }
 
+export function mayProposeCollectionSchedule(
+  user: Pick<NonNullable<AuthenticatedRequest["user"]>, "role" | "collectionCompanyId">,
+  job: { collectionCompanyId: number | null; status: string; scheduleStatus: string },
+): boolean {
+  return user.role === "collection_company"
+    && user.collectionCompanyId != null
+    && job.collectionCompanyId === user.collectionCompanyId
+    && ["request", "confirmed"].includes(job.status)
+    && ["unassigned", "proposed"].includes(job.scheduleStatus);
+}
+
 // ---- Companies -------------------------------------------------------------
 
 router.get(
@@ -334,6 +345,10 @@ router.post(
         res.status(400).json({ message: "This collection has been confirmed by Itinium. Please contact Itinium to change the schedule." });
         return;
       }
+      if (!mayProposeCollectionSchedule(req.user!, job)) {
+        res.status(403).json({ message: "Only the assigned collection company can propose a schedule" });
+        return;
+      }
 
       const [vehicle] = await db
         .select()
@@ -356,7 +371,12 @@ router.post(
           proposedCollectionDate: parsed.data.proposedDate,
           scheduleStatus: "proposed",
         })
-        .where(eq(jobsTable.id, jobId))
+        .where(and(
+          eq(jobsTable.id, jobId),
+          eq(jobsTable.collectionCompanyId, companyId),
+          inArray(jobsTable.status, ["request", "confirmed"]),
+          inArray(jobsTable.scheduleStatus, ["unassigned", "proposed"]),
+        ))
         .returning({
           id: jobsTable.id,
           reference: jobsTable.reference,
@@ -365,6 +385,10 @@ router.post(
           proposedCollectionDate: jobsTable.proposedCollectionDate,
           scheduleStatus: jobsTable.scheduleStatus,
         });
+      if (!updated) {
+        res.status(409).json({ message: "This collection changed while you were scheduling it. Refresh and try again." });
+        return;
+      }
 
       const [company] = await db
         .select({ name: collectionCompaniesTable.name })

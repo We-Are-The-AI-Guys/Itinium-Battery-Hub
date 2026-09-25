@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,8 @@ import {
 } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { JobDocumentsPanel } from "@/components/job-documents";
+import { CollectionConversation } from "@/components/collection-conversation";
+import { NotificationBell } from "@/components/notification-panel";
 
 interface CollectionJob {
   id: number;
@@ -100,9 +102,13 @@ async function downloadFromApi(url: string, fallbackFilename: string) {
 
 export default function CollectionsPage() {
   const { user } = useAuth();
+  const search = useSearch();
   const [tab, setTab] = useState<"collections" | "fleet">("collections");
   const [jobs, setJobs] = useState<CollectionJob[]>([]);
+  const [openConversationId, setOpenConversationId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [jobsError, setJobsError] = useState("");
+  const [fleetError, setFleetError] = useState("");
   const [vehicles, setVehicles] = useState<FleetItem[]>([]);
   const [drivers, setDrivers] = useState<FleetItem[]>([]);
   const [companyName, setCompanyName] = useState("");
@@ -114,31 +120,47 @@ export default function CollectionsPage() {
   const [downloadingSheetId, setDownloadingSheetId] = useState<number | null>(null);
   const [downloadError, setDownloadError] = useState<{ jobId: number; message: string } | null>(null);
 
+  useEffect(() => {
+    const id = Number(new URLSearchParams(search).get("conversation"));
+    if (Number.isSafeInteger(id) && id > 0) {
+      setTab("collections");
+      setOpenConversationId(id);
+    }
+  }, [search]);
+
   const fetchJobs = useCallback(async () => {
     try {
       const res = await fetch("/api/collection/jobs", { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        setJobs(data.jobs || []);
-      }
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.message || "Could not load collections");
+      const data = await res.json();
+      setJobs(data.jobs || []);
+      setJobsError("");
+    } catch (error) {
+      setJobsError(error instanceof Error ? error.message : "Could not load collections. Please retry.");
     } finally {
       setLoading(false);
     }
   }, []);
 
   const fetchFleet = useCallback(async () => {
-    const res = await fetch("/api/collection-companies/fleet", { credentials: "include" });
-    if (res.ok) {
+    try {
+      const res = await fetch("/api/collection-companies/fleet", { credentials: "include" });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.message || "Could not load fleet");
       const data = await res.json();
       setVehicles(data.vehicles || []);
       setDrivers(data.drivers || []);
       setCompanyName(data.company?.name || "");
+      setFleetError("");
+    } catch (error) {
+      setFleetError(error instanceof Error ? error.message : "Could not load fleet. Please retry.");
     }
   }, []);
 
   useEffect(() => {
     fetchJobs();
     fetchFleet();
+    const timer = window.setInterval(() => { void fetchJobs(); }, 30_000);
+    return () => window.clearInterval(timer);
   }, [fetchJobs, fetchFleet]);
 
   async function handleLogout() {
@@ -149,8 +171,8 @@ export default function CollectionsPage() {
   function openAssign(job: CollectionJob) {
     setAssignError("");
     setAssignForm({
-      vehicleId: "",
-      driverId: "",
+      vehicleId: String(vehicles.find((v) => v.registration === job.vehicleReg && v.isActive)?.id || ""),
+      driverId: String(drivers.find((d) => d.name === job.driverName && d.isActive)?.id || ""),
       proposedDate: job.proposedCollectionDate || "",
     });
     setAssigningJob(job);
@@ -180,7 +202,11 @@ export default function CollectionsPage() {
         fetchJobs();
       } else {
         const data = await res.json().catch(() => null);
-        setAssignError(data?.message || "Failed to save the schedule. Please try again.");
+        setAssignError(
+          res.status === 403 && data?.message === "Insufficient permissions"
+            ? "Your sign-in no longer has collection-company access. Sign out and back in; if this continues, ask an admin to check your company link."
+            : data?.message || "Failed to save the schedule. Please try again."
+        );
       }
     } catch {
       setAssignError("Failed to save the schedule. Please try again.");
@@ -221,6 +247,7 @@ export default function CollectionsPage() {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <Link
               href="/help"
               className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-[#475569] hover:text-[#0f2744] hover:bg-slate-100 rounded-md transition-colors"
@@ -280,6 +307,10 @@ export default function CollectionsPage() {
         {tab === "collections" ? (
           loading ? (
             <p className="text-sm text-[#64748b]">Loading collections…</p>
+          ) : jobsError ? (
+            <div role="alert" className="bg-white rounded-xl border border-red-200 p-6 text-sm text-red-700">
+              {jobsError} <Button variant="outline" size="sm" onClick={() => void fetchJobs()}>Retry</Button>
+            </div>
           ) : jobs.length === 0 ? (
             <div className="bg-white rounded-xl border border-slate-200 p-10 text-center">
               <Truck className="w-10 h-10 text-slate-300 mx-auto mb-3" />
@@ -317,11 +348,7 @@ export default function CollectionsPage() {
                           <Calendar className="w-3.5 h-3.5 mr-1.5" />
                           {job.scheduleStatus === "unassigned" ? "Schedule Collection" : "Change Schedule"}
                         </Button>
-                      ) : (
-                        <p className="text-xs text-slate-500 max-w-[220px] text-right">
-                          Schedule confirmed — contact Itinium to make changes.
-                        </p>
-                      )}
+                      ) : <p className="text-xs text-slate-500">Date confirmed · driver and vehicle can be changed below.</p>}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 text-sm">
@@ -417,13 +444,28 @@ export default function CollectionsPage() {
                         <JobDocumentsPanel jobId={job.id} mode="upload" />
                       </div>
                     )}
+                    <Button variant="outline" size="sm" className="mt-4" onClick={() => setOpenConversationId(openConversationId === job.id ? null : job.id)}>
+                      {openConversationId === job.id ? "Hide conversation & changes" : "Messages & assignment changes"}
+                    </Button>
+                    {openConversationId === job.id && (
+                      <CollectionConversation
+                        jobId={job.id}
+                        scheduleStatus={job.scheduleStatus}
+                        jobStatus={job.status}
+                        driverName={job.driverName}
+                        vehicleReg={job.vehicleReg}
+                        onAssignmentChanged={() => void fetchJobs()}
+                      />
+                    )}
                   </div>
                 );
               })}
             </div>
           )
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            {fleetError && <p role="alert" className="mb-4 text-sm text-red-600">{fleetError} <Button variant="outline" size="sm" onClick={() => void fetchFleet()}>Retry</Button></p>}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <FleetPanel
               title="Vehicles"
               items={vehicles}
@@ -438,6 +480,7 @@ export default function CollectionsPage() {
               endpoint="drivers"
               onChanged={fetchFleet}
             />
+            </div>
           </div>
         )}
       </main>
@@ -489,13 +532,14 @@ export default function CollectionsPage() {
               />
             </div>
             {assignError && <p className="text-sm text-red-600">{assignError}</p>}
+            {fleetError && <p className="text-sm text-red-600">{fleetError} <button className="underline" onClick={() => void fetchFleet()}>Retry</button></p>}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAssigningJob(null)}>Cancel</Button>
             <Button
               className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
               onClick={submitAssign}
-              disabled={assignSaving}
+              disabled={assignSaving || !!fleetError}
               data-testid="button-submit-schedule"
             >
               {assignSaving ? "Saving…" : "Propose Schedule"}
