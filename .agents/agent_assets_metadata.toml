@@ -6,9 +6,11 @@ id = "Yz-ASYEfwXujOf8oafGUC"
 uri = "file://exports/QA_Test_Plan.docx"
 type = "word_document"
 title = "QA Test Plan (Word)"
+logical_id = "266ab0fa-01ad-4875-87bc-7eda4fa08bf4"
 
 [[outputs]]
 id = "rhO5ITpMUbfJZrgJfVaXs"
 uri = "file://exports/QA_Test_Plan.pdf"
 type = "pdf"
 title = "QA Test Plan (PDF)"
+logical_id = "199a10fc-1706-4a56-89c6-b9ba06e59e7f"
