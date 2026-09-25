@@ -152,6 +152,9 @@ export function rankCellTypeSuggestions(
       score = 1;
     } else if (coreKey(normM) === coreV) {
       score = 0.9;
+    } else if (/^\d+[a-z]{1,3}$/.test(coreV) && coreKey(normM).startsWith(coreV)) {
+      // Partial designation such as "4P" is a search, not a product identity.
+      score = 0.82;
     } else {
       score = similarity(normM, normV);
     }

@@ -64,7 +64,9 @@ import {
   canonicalizeVoltageInput,
   isPositiveIntegerInput,
   isProvisionalLooseCellInput,
+  manufacturerMatches,
   parsePositiveWeightInput,
+  rankCellTypeSuggestions,
   selectPreferredCatalogueModel,
 } from "@/lib/cell-type-suggestions";
 
@@ -188,6 +190,7 @@ const CSV_TEMPLATE_HEADERS = "Pallet Number,Asset No,Battery Serial,Manufacturer
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
 const MANUAL_UNKNOWN_FLAG_REASON = "Unrecognised value — not found in master list";
+const OTHER_REVIEW_FLAG_REASON = "Other — requires Itinium review";
 const TOKEN_WEIGHT_KG = 500;
 const TOKEN_WEIGHT_FLAG_REASON = "Missing battery details — 500kg token weight applied";
 type LoadState = "empty" | "red-low" | "red-high" | "amber-low" | "amber-high" | "green";
@@ -305,12 +308,14 @@ function validateBatteryField(
       // weights apply); it must never block submission — the server flags it.
       if (v.toLowerCase() === "unknown") return "";
       const knownLower = new Set(manufacturers.map((m) => m.toLowerCase()));
+      if (v.toLowerCase() === "other") return OTHER_REVIEW_FLAG_REASON;
       if (knownLower.has(v.toLowerCase())) return "";
       if (Object.keys(aliases).some((a) => a.toLowerCase() === v.toLowerCase())) return "";
       return MANUAL_UNKNOWN_FLAG_REASON;
     }
     case "cellType": {
-      if (v === "Blocs" || v === "Other") return "";
+      if (v === "Other") return OTHER_REVIEW_FLAG_REASON;
+      if (v === "Blocs") return "";
       const normV = normalizeForMatch(v);
       if (cellModels.some((m) => normalizeForMatch(m.cellFamily) === normV)) return "";
       if (cellModels.some((m) => normalizeForMatch(m.modelName) === normV)) return "";
@@ -839,7 +844,7 @@ export default function DepotFormPage() {
               mfrAutoUnknown ? null : normalizedMfr,
               rawCellTrim
             );
-            if (preferred) {
+          if (preferred && normalizeForMatch(preferred.modelName) === normalizeForMatch(rawCellTrim)) {
               normalizedCellModel = preferred.modelName;
               normalizedCellType = preferred.cellFamily;
             } else {
@@ -894,7 +899,7 @@ export default function DepotFormPage() {
             notes: colMap["notes"] !== undefined ? row[colMap["notes"]] || "" : "",
             isLooseCells: !!(looseQty && parseInt(looseQty, 10) > 0),
             manufacturerFlagReason: mfrAutoUnknown ? CSV_FLAG_REASON : "",
-            cellModelFlagReason: "",
+            cellModelFlagReason: normalizedCellType === "Other" ? OTHER_REVIEW_FLAG_REASON : "",
             voltageFlagReason: "",
             rowPhoto: "",
           };
@@ -1083,6 +1088,7 @@ export default function DepotFormPage() {
             voltageApplies && !b.voltage.trim() ? CSV_FLAG_REASON : b.voltageFlagReason;
           const cellTypeTrim = b.cellType.trim();
           let cellModelFlagReason = b.cellModelFlagReason;
+          if (cellTypeTrim === "Other") cellModelFlagReason = OTHER_REVIEW_FLAG_REASON;
           if (
             cellTypeTrim &&
             cellTypeTrim !== "Blocs" &&
@@ -1128,14 +1134,6 @@ export default function DepotFormPage() {
         if (field === "cellType" && (value === "Blocs" || value === "Other")) {
           newB.cellModel = "";
         }
-        if (field === "manufacture" && newB.cellModel) {
-          const effMfr = value === "Other" ? newB.manufactureCustom : value;
-          const stillValid = !effMfr || cellModels.some((m) => m.modelName === newB.cellModel && m.manufacturer === effMfr);
-          if (!stillValid) {
-            newB.cellModel = "";
-            newB.cellType = "";
-          }
-        }
         if (field === "cellModel") {
           const mfr = newB.manufacture === "Other" ? newB.manufactureCustom : newB.manufacture;
           const model = cellModels.find((m) => m.modelName === value && (!mfr || m.manufacturer === mfr)) || cellModels.find((m) => m.modelName === value);
@@ -1144,14 +1142,14 @@ export default function DepotFormPage() {
           }
         }
         // Auto-clear CSV-import flags as soon as the user fills in a value
-        if (field === "manufacture" && value.trim()) {
-          newB.manufacturerFlagReason = "";
+        if (field === "manufacture") {
+          newB.manufacturerFlagReason = validateBatteryField("manufacture", value, manufacturers, cellModels, manufacturerAliases);
         }
         if (
           (field === "cellType" || field === "cellModel") &&
           (newB.cellModel.trim() || newB.cellType === "Blocs" || newB.cellType === "Other")
         ) {
-          newB.cellModelFlagReason = "";
+          newB.cellModelFlagReason = newB.cellType === "Other" ? OTHER_REVIEW_FLAG_REASON : "";
         }
         if (field === "voltage" || field === "customVoltage") {
           const effectiveVoltage = newB.voltage === "Other" ? newB.customVoltage : newB.voltage;
@@ -1978,13 +1976,17 @@ export default function DepotFormPage() {
                       icon={<Factory className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />}
                       testId={`input-manufacture-${index}`}
                       onChange={(v) => {
-                        setBatteries((prev) =>
-                          prev.map((b) =>
-                            b.id === battery.id
-                              ? { ...b, manufacture: v, manufactureCustom: "", manufacturerFlagReason: "", manufacturerSuggestion: undefined, manufacturerSuggestionConfidence: undefined, manufacturerOriginalValue: undefined, manufacturerManuallyConfirmed: undefined }
-                              : b
-                          )
-                        );
+                         setBatteries((prev) => prev.map((b) => {
+                           if (b.id !== battery.id) return b;
+                           const next = {
+                             ...b, manufacture: v, manufactureCustom: "",
+                             manufacturerFlagReason: validateBatteryField("manufacture", v, manufacturers, cellModels, manufacturerAliases),
+                             manufacturerSuggestion: undefined, manufacturerSuggestionConfidence: undefined,
+                             manufacturerOriginalValue: undefined, manufacturerManuallyConfirmed: undefined,
+                           };
+                           if (!next.weightManual) computeAndSetAutoWeight(next);
+                           return next;
+                         }));
                       }}
                       onBlurValidate={(v) => {
                         const trimmed = v.trim();
@@ -2126,7 +2128,7 @@ export default function DepotFormPage() {
                                     ...b,
                                     cellType: val,
                                     cellModel: "",
-                                    cellModelFlagReason: (val === "Blocs" || val === "Other") ? "" : b.cellModelFlagReason,
+                                     cellModelFlagReason: val === "Other" ? OTHER_REVIEW_FLAG_REASON : val === "Blocs" ? "" : b.cellModelFlagReason,
                                     voltageFlagReason: (val === "Blocs" || val === "Other") ? "" : b.voltageFlagReason,
                                     cellTypeSuggestion: undefined,
                                     cellTypeSuggestionConfidence: undefined,
@@ -2141,41 +2143,6 @@ export default function DepotFormPage() {
                         }
                       }}
                       onBlurValidate={(committed) => {
-                        const effectiveManufacturer =
-                          battery.manufacture === "Other"
-                            ? battery.manufactureCustom
-                            : battery.manufacture;
-                        const preferred = selectPreferredCatalogueModel(
-                          cellModels,
-                          effectiveManufacturer,
-                          committed
-                        );
-                        if (preferred) {
-                          const originalValue = committed.trim();
-                          const canonicalValue = preferred.modelName;
-                          const updatedBattery: BatteryRow = {
-                            ...battery,
-                            cellType: preferred.cellFamily,
-                            cellModel: canonicalValue,
-                            cellModelFlagReason: "",
-                            cellTypeSuggestion: undefined,
-                            cellTypeSuggestionConfidence: "high",
-                            cellTypeOriginalValue:
-                              normalizeForMatch(originalValue) !== normalizeForMatch(canonicalValue)
-                                ? originalValue
-                                : undefined,
-                            cellTypeSuggestedValue: canonicalValue,
-                            cellTypeWasAccepted: true,
-                            cellTypeManuallyConfirmed: undefined,
-                          };
-                          setBatteries((prev) =>
-                            prev.map((b) => (b.id === battery.id ? updatedBattery : b))
-                          );
-                          if (!updatedBattery.weightManual) {
-                            computeAndSetAutoWeight(updatedBattery);
-                          }
-                          return;
-                        }
                         const reason = validateBatteryField(
                           "cellType", committed, manufacturers, cellModels, manufacturerAliases
                         );
@@ -2184,16 +2151,6 @@ export default function DepotFormPage() {
                             b.id === battery.id ? { ...b, cellModelFlagReason: reason, cellTypeSuggestion: undefined, cellTypeSuggestionConfidence: undefined, cellTypeOriginalValue: undefined, cellTypeManuallyConfirmed: undefined } : b
                           )
                         );
-                        if (reason === MANUAL_UNKNOWN_FLAG_REASON) {
-                          const cellFamilies = Array.from(new Set(cellModels.map((m) => m.cellFamily)));
-                          const prefix = committed.trim().toLowerCase().slice(0, 3);
-                          const nearbyModels = cellModels
-                            .filter((m) => m.modelName.toLowerCase().startsWith(prefix))
-                            .slice(0, 40)
-                            .map((m) => m.modelName);
-                          const candidates = [...cellFamilies, ...nearbyModels];
-                          fetchSuggestion(battery.id, "cellType", committed, candidates);
-                        }
                       }}
                     />
                     {battery.cellTypeOriginalValue && !battery.cellModelFlagReason && (
@@ -2222,6 +2179,7 @@ export default function DepotFormPage() {
                     )}
                     {battery.cellModelFlagReason && (
                       <div className="space-y-1">
+                        <p className="text-[10px] font-semibold text-amber-700">Needs Review — {battery.cellModelFlagReason}</p>
                         {battery.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.cellTypeSuggestion && (
                           <CorrectionPrompt
                             suggestion={battery.cellTypeSuggestion}
@@ -2997,8 +2955,8 @@ function CellModelCombobox({
       (m) => m.modelName.toLowerCase().replace(/[^a-z0-9]/g, "") === normT
     );
     if (model) {
-      onChangeRef.current(model.modelName, true);
-      onBlurValidateRef.current?.(model.modelName);
+      onChangeRef.current(t, true);
+      onBlurValidateRef.current?.(t);
     } else {
       const family = models.find(
         (m) => m.cellFamily.toLowerCase().replace(/[^a-z0-9]/g, "") === normT
@@ -3026,16 +2984,16 @@ function CellModelCombobox({
 
   const manufacturerModels = useMemo(() => {
     if (!manufacturer) return cellModels;
-    const filtered = cellModels.filter((m) => m.manufacturer === manufacturer);
-    return filtered;
+    const filtered = cellModels.filter((m) => manufacturerMatches(manufacturer, m.manufacturer));
+    return [...filtered, ...cellModels.filter((m) => m.manufacturer === "TAB" && !filtered.includes(m))];
   }, [cellModels, manufacturer]);
 
   const filteredModels = useMemo(() => {
     if (!search.trim()) return manufacturerModels.slice(0, 50);
-    const q = search.toLowerCase().replace(/\s+/g, "");
-    return manufacturerModels
-      .filter((m) => m.modelName.toLowerCase().replace(/\s+/g, "").startsWith(q) || m.cellFamily.toLowerCase().includes(q))
-      .slice(0, 50);
+    const suggestions = rankCellTypeSuggestions(search, manufacturer, manufacturerModels, 50, 0.72);
+    return suggestions.map((suggestion) => manufacturerModels.find(
+      (model) => model.modelName === suggestion.modelName && model.manufacturer === suggestion.manufacturer
+    )!).filter(Boolean);
   }, [manufacturerModels, search]);
 
   const groupedModels = useMemo(() => {
@@ -3139,11 +3097,14 @@ function CellModelCombobox({
                       }`}
                       onClick={() => {
                         onChange(m.modelName, true);
+                         // The input's delayed blur must not commit the old
+                         // search text over a deliberately selected model.
+                         searchRef.current = "";
                         setOpen(false);
                         setSearch("");
                       }}
                     >
-                      <span>{m.modelName}</span>
+                      <span>{m.modelName} <span className="text-xs text-slate-400">({m.manufacturer})</span></span>
                     </button>
                   ))}
                 </div>

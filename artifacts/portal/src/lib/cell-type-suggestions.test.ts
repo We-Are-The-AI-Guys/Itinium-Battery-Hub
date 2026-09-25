@@ -4,6 +4,7 @@ import {
   isPositiveIntegerInput,
   isProvisionalLooseCellInput,
   parsePositiveWeightInput,
+  rankCellTypeSuggestions,
   selectPreferredCatalogueModel,
 } from "./cell-type-suggestions";
 
@@ -38,6 +39,19 @@ describe("manufacturer-specific catalogue selection", () => {
     expect(
       selectPreferredCatalogueModel(models, "Exide / GNB", "6PzS930")?.modelName
     ).toBe("6 EPzS 930");
+  });
+});
+
+describe("designation suggestions", () => {
+  it("offers partial 4P matches without treating the shorthand as a model", () => {
+    const suggestions = rankCellTypeSuggestions("4P", "Hoppecke", models);
+    expect(suggestions.map((s) => s.modelName)).toContain("4 HPzS 460");
+    expect(suggestions.map((s) => s.modelName)).toContain("4 PzS 460");
+    expect(selectPreferredCatalogueModel(models, "Hoppecke", "4P")).toBeUndefined();
+  });
+
+  it("does not propose an unrelated manufacturer's model for an unknown designation", () => {
+    expect(rankCellTypeSuggestions("4P", "Nobody", models).some((s) => s.manufacturer === "TAB")).toBe(true);
   });
 });
 

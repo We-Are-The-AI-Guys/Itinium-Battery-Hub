@@ -131,6 +131,20 @@ export function selectCatalogueModel<T extends { manufacturer: string; modelName
   );
 }
 
+export function flagOtherSelectionsForReview(battery: {
+  manufacture?: string | null;
+  cellType?: string | null;
+  manufacturerFlagReason?: string | null;
+  cellModelFlagReason?: string | null;
+}): void {
+  if (battery.manufacture?.trim().toLowerCase() === "other") {
+    battery.manufacturerFlagReason = "Other — requires Itinium review";
+  }
+  if (battery.cellType?.trim().toLowerCase() === "other") {
+    battery.cellModelFlagReason = "Other — requires Itinium review";
+  }
+}
+
 interface PbCatalogueEntry {
   manufacturer: string;
   modelName: string;
@@ -1249,8 +1263,9 @@ router.post(
         const mfrStr = (b.manufacture || "").trim();
         const isUnknownMfr = mfrStr.toLowerCase() === "unknown";
         const cellTypeStr = (b.cellType || "").trim();
-        const cellModelApplies = cellTypeStr !== "Blocs" && cellTypeStr !== "Other";
+        const cellModelApplies = !["blocs", "other"].includes(cellTypeStr.toLowerCase());
 
+        flagOtherSelectionsForReview(b);
         if (!b.manufacturerFlagReason) {
           if (!mfrStr || isUnknownMfr) {
             b.manufacturerFlagReason = CSV_FLAG_REASON;
@@ -1259,18 +1274,8 @@ router.post(
           }
         }
 
-        if (cellModelApplies && cellTypeStr && allCellModels.length > 0) {
-          // Canonicalise to the requested manufacturer's model variant first.
-          // TAB is the only automatic fallback.
-          const preferred = selectCatalogueModel(
-            allCellModels,
-            isUnknownMfr ? null : mfrStr,
-            cellTypeStr
-          );
-          if (preferred) {
-            b.cellType = preferred.modelName;
-          }
-        }
+        // Keep the submitted designation. Catalogue equivalence may provide
+        // a calculation fallback, but is not permission to change identity.
 
         if (!b.cellModelFlagReason && cellModelApplies) {
           const finalCellType = (b.cellType || "").trim();
@@ -1589,13 +1594,22 @@ router.post(
       }
 
       const battery = await db.transaction(async (tx) => {
+        const reviewFlags = {
+          manufacture: clean(req.body.manufacture),
+          cellType: clean(req.body.cellType),
+          manufacturerFlagReason: null as string | null,
+          cellModelFlagReason: null as string | null,
+        };
+        flagOtherSelectionsForReview(reviewFlags);
         const [created] = await tx.insert(jobBatteriesTable).values({
           jobId,
           palletNumber: clean(req.body.palletNumber),
           assetNumber: clean(req.body.assetNumber),
           batterySerial: clean(req.body.batterySerial),
-          manufacture: clean(req.body.manufacture),
-          cellType: clean(req.body.cellType),
+          manufacture: reviewFlags.manufacture,
+          cellType: reviewFlags.cellType,
+          manufacturerFlagReason: reviewFlags.manufacturerFlagReason,
+          cellModelFlagReason: reviewFlags.cellModelFlagReason,
           voltage: clean(req.body.voltage),
           notes: clean(req.body.notes),
           estimatedWeightKg: estimatedWeight.toFixed(3),
@@ -2378,6 +2392,7 @@ router.patch(
       }
 
       let clearedAnyFlag = false;
+      const canResolveReview = ["accounts", "head_office_admin"].includes(req.user!.role);
       if (batterySerial !== undefined) {
         const v = toTrimmedStr(batterySerial);
         updates.batterySerial = v;
@@ -2407,29 +2422,19 @@ router.patch(
       if (manufacture !== undefined) {
         const v = toTrimmedStr(manufacture);
         updates.manufacture = v;
-        if (v !== null) {
+        if (v?.toLowerCase() === "other") {
+          updates.manufacturerFlagReason = "Other — requires Itinium review";
+        } else if (v !== null && canResolveReview) {
           updates.manufacturerFlagReason = null;
           if (existing.manufacturerFlagReason) clearedAnyFlag = true;
         }
       }
       if (cellType !== undefined) {
-        let v = toTrimmedStr(cellType);
-        // Canonicalise to the catalogue's exact model name so spacing/case
-        // variants ("5EPzS775" vs "5 EPzS 775") resolve consistently and
-        // downstream Pb/weight lookups hit.
-        if (v !== null && v !== "Blocs" && v !== "Other") {
-          const catalogue = await db
-            .select({
-              manufacturer: cellModelsTable.manufacturer,
-              modelName: cellModelsTable.modelName,
-            })
-            .from(cellModelsTable);
-          const effMfr = (typeof manufacture === "string" ? manufacture.trim() : "") || (existing.manufacture || "").trim();
-          const preferred = selectCatalogueModel(catalogue, effMfr, v);
-          if (preferred) v = preferred.modelName;
-        }
+        const v = toTrimmedStr(cellType);
         updates.cellType = v;
-        if (v !== null) {
+        if (v?.toLowerCase() === "other") {
+          updates.cellModelFlagReason = "Other — requires Itinium review";
+        } else if (v !== null && canResolveReview) {
           updates.cellModelFlagReason = null;
           if (existing.cellModelFlagReason) clearedAnyFlag = true;
         }

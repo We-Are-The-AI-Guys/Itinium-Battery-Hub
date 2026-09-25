@@ -5,6 +5,7 @@ import {
   deriveEstimatedWeightKg,
   derivePbContentKg,
   deriveTabGrossWeightKg,
+  flagOtherSelectionsForReview,
   parsePositiveLooseCellQuantity,
   parsePositiveWeightKg,
 } from "../jobs";
@@ -20,6 +21,7 @@ const catalogue = [
   { manufacturer: "Hawker", modelName: "6 PzS 750", weightPerCellKg: "33.500", pbContentKgPerCell: null, cellsCount: 6 },
   { manufacturer: "TAB", modelName: "4 PzS 460", weightPerCellKg: "19.900", pbContentKgPerCell: "19.900", cellsCount: 4 },
   { manufacturer: "Exide / GNB", modelName: "4 EPzS 460", weightPerCellKg: "18.500", pbContentKgPerCell: "18.500", cellsCount: 4 },
+  { manufacturer: "Hoppecke", modelName: "6 PzBH 390", weightPerCellKg: "18.900", pbContentKgPerCell: "18.900", cellsCount: 6 },
 ];
 
 describe("deriveEstimatedWeightKg — the fix behind the 67kg CSV/manual discrepancy", () => {
@@ -51,6 +53,11 @@ describe("deriveEstimatedWeightKg — the fix behind the 67kg CSV/manual discrep
   it("uses a manufacturer's prefixed model before the generic TAB model", () => {
     expect(deriveEstimatedWeightKg(catalogue, "GNB", "4 PzS 460", 12)).toBe("222.000");
     expect(deriveEstimatedWeightKg(catalogue, "Unknown", "4 PzS 460", 12)).toBe("238.800");
+  });
+
+  it("uses the verified Hoppecke PzBH designation for weight and Pb", () => {
+    expect(deriveEstimatedWeightKg(catalogue, "Hoppecke", "6 PzBH 390", 12)).toBe("226.800");
+    expect(derivePbContentKg(catalogue, "Hoppecke", "6 PzBH 390", 12)).toBe("226.800");
   });
 
   it("uses the cell count from voltage or loose quantity, never the digits in the model name", () => {
@@ -147,5 +154,21 @@ describe("applyTokenWeightFallback", () => {
       estimatedWeightKg: "725.5",
       cellModelFlagReason: "Existing review",
     });
+  });
+});
+
+describe("submitted Other values", () => {
+  it("flags both fields even if a client omitted or cleared their flags", () => {
+    const battery = { manufacture: "Other", cellType: "Other", manufacturerFlagReason: null, cellModelFlagReason: null };
+    flagOtherSelectionsForReview(battery);
+    expect(battery.manufacturerFlagReason).toMatch(/requires Itinium review/);
+    expect(battery.cellModelFlagReason).toMatch(/requires Itinium review/);
+  });
+
+  it("leaves a typed unknown manufacturer and designation intact", () => {
+    const battery = { manufacture: "New Supplier", cellType: "4P" };
+    flagOtherSelectionsForReview(battery);
+    expect(battery).toEqual({ manufacture: "New Supplier", cellType: "4P" });
+    expect(deriveEstimatedWeightKg(catalogue, battery.manufacture, battery.cellType, 12)).toBeNull();
   });
 });
