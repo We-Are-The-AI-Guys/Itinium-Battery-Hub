@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
 import { db } from "@workspace/db";
-import { usersTable, clientsTable, locationsTable } from "@workspace/db/schema";
+import { usersTable, clientsTable, locationsTable, sessionsTable } from "@workspace/db/schema";
 import { eq, sql, and, ilike, or } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
@@ -300,7 +300,10 @@ router.patch(
       }
 
       const passwordHash = await bcrypt.hash(password, 10);
-      await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, userId));
+      await db.transaction(async (tx) => {
+        await tx.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, userId));
+        await tx.delete(sessionsTable).where(eq(sessionsTable.userId, userId));
+      });
 
       res.json({ success: true });
     } catch (error) {

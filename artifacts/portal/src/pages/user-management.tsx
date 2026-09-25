@@ -3,6 +3,7 @@ import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { shareableSignInLink } from "@/lib/shareable-sign-in-link";
 import {
   Users,
   Shield,
@@ -17,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   KeyRound,
+  Link as LinkIcon,
   Copy,
   Check,
   Eye,
@@ -122,6 +124,8 @@ export default function UserManagementPage() {
 
   const [createdTempPassword, setCreatedTempPassword] = useState<string | null>(null);
   const [copiedPassword, setCopiedPassword] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [linkError, setLinkError] = useState("");
 
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
   const [editForm, setEditForm] = useState({ fullName: "", role: "", clientId: "", locationId: "" });
@@ -377,6 +381,17 @@ export default function UserManagementPage() {
     }
   }
 
+  async function copySignInLink() {
+    setLinkError("");
+    try {
+      await navigator.clipboard.writeText(shareableSignInLink());
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    } catch {
+      setLinkError("Could not copy the sign-in link. Your clipboard may still contain a password; do not paste it as a link. Check the portal address or clipboard permissions.");
+    }
+  }
+
   async function openEditModal(user: UserData) {
     setEditingUser(user);
     const clientIdStr = user.clientId ? String(user.clientId) : "";
@@ -568,7 +583,7 @@ export default function UserManagementPage() {
             </div>
           </div>
 
-          <div className="px-6 py-3 border-b border-slate-100 flex items-center justify-between gap-4">
+          <div className="px-6 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4">
             <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <Input
@@ -578,14 +593,21 @@ export default function UserManagementPage() {
                 className="pl-9 h-9 text-sm bg-slate-50 border-slate-200 focus-visible:ring-[#0ea5e9]"
               />
             </div>
-            <Button
-              className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-none shadow-sm"
-              onClick={() => { setShowModal(true); setFormError(""); }}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add New User
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" onClick={copySignInLink}>
+                {copiedLink ? <Check className="w-4 h-4 mr-2" /> : <LinkIcon className="w-4 h-4 mr-2" />}
+                {copiedLink ? "Link copied" : "Copy sign-in link"}
+              </Button>
+              <Button
+                className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-none shadow-sm"
+                onClick={() => { setShowModal(true); setFormError(""); }}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add New User
+              </Button>
+            </div>
           </div>
+          {linkError && <p role="alert" className="px-6 py-2 text-sm text-red-700">{linkError}</p>}
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
@@ -729,7 +751,7 @@ export default function UserManagementPage() {
                 </div>
                 <div className="p-6 space-y-5">
                   <p className="text-sm text-slate-600">
-                    The account has been created. Share this temporary password with the user — <strong>it will only be shown once.</strong>
+                    The account has been created. This temporary password will only be shown once. Send it privately, separately from the sign-in link. Never share a screenshot of this page.
                   </p>
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
                     <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Temporary Password</p>
@@ -745,6 +767,14 @@ export default function UserManagementPage() {
                         {copiedPassword ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                       </button>
                     </div>
+                  </div>
+                  <div className="border-t border-slate-200 pt-4 space-y-2">
+                    <p className="text-sm text-slate-600">The sign-in link contains no email, password or session details. Opening it alone does not sign anyone in.</p>
+                    <Button variant="outline" onClick={copySignInLink}>
+                      {copiedLink ? <Check className="w-4 h-4 mr-2" /> : <LinkIcon className="w-4 h-4 mr-2" />}
+                      {copiedLink ? "Link copied" : "Copy sign-in link"}
+                    </Button>
+                    {linkError && <p role="alert" className="text-sm text-red-700">{linkError}</p>}
                   </div>
                   <p className="text-xs text-slate-400">
                     The user can change their password after logging in via Settings, or via "Forgot Password" on the login page.

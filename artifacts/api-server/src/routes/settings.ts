@@ -80,10 +80,17 @@ router.post(
       }
 
       const newHash = await bcrypt.hash(parsed.data.newPassword, 10);
-      await db
-        .update(usersTable)
-        .set({ passwordHash: newHash })
-        .where(eq(usersTable.id, req.user!.id));
+      await db.transaction(async (tx) => {
+        await tx
+          .update(usersTable)
+          .set({ passwordHash: newHash })
+          .where(eq(usersTable.id, req.user!.id));
+        // Keep this browser signed in; end other sessions after a password change.
+        await tx.delete(sessionsTable).where(and(
+          eq(sessionsTable.userId, req.user!.id),
+          ne(sessionsTable.token, req.cookies.session_token),
+        ));
+      });
 
       res.json({ message: "Password updated successfully" });
     } catch (error) {
