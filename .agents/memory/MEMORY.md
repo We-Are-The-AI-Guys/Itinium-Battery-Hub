@@ -11,3 +11,4 @@
 - [Location details on jobs](location-job-snapshots.md) — copy location contacts, hours, and instructions onto each job so later master-data edits do not rewrite history.
 - [Shareable portal address](shareable-portal-address.md) — use the verified branded published portal domain for external sign-in links, not preview or the deployment's unrelated primary hostname.
 - [Cell designation identity](cell-designation-identity.md) — preserve the submitted model name; catalogue equivalence supports calculations and suggestions, not silent identity changes.
+- [Client upload review policy](client-upload-review-policy.md) — Itinium owns catalogue review; clients see genuine upload failures, not detailed review prompts.

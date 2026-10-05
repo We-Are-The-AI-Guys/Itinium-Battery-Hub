@@ -49,6 +49,7 @@ const MANUFACTURERS = {
 let createdInputs: HTMLInputElement[];
 let originalCreateElement: typeof document.createElement;
 let jobPostBodies: unknown[];
+let userRole: string;
 
 function installFetchMock() {
   jobPostBodies = [];
@@ -66,7 +67,9 @@ function installFetchMock() {
         return Promise.resolve(jsonResponse(200, { collectionPoints: [] }));
       }
       if (url.includes("/api/auth/me")) {
-        return Promise.resolve(jsonResponse(401, { message: "unauthenticated" }));
+        return Promise.resolve(jsonResponse(200, {
+          user: { id: 1, email: "test@example.invalid", fullName: "Test User", role: userRole, clientId: null, locationId: null },
+        }));
       }
       if (url.includes("/api/jobs") && init?.method === "POST") {
         jobPostBodies.push(JSON.parse(String(init.body)));
@@ -119,6 +122,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  userRole = "depot_user";
   installFetchMock();
   trackDynamicInputs();
 });
@@ -262,21 +266,14 @@ describe("rows that contribute no weight", () => {
     ].join("\n");
     await uploadCsvViaButton(csv);
 
-    // The unrecognised cell type opens the review dialog; import anyway.
-    const importAnyway = await screen.findByText(/Import anyway and flag for review/i);
-    await act(async () => {
-      fireEvent.click(importAnyway);
-    });
+    await screen.findByText("CSV imported");
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("SER-ZW1")).toBeInTheDocument();
     });
 
-    await waitFor(() => {
-      const warning = screen.getByTestId("text-zero-weight-warning");
-      expect(warning.textContent).toMatch(/500kg token weight/i);
-      expect(warning.textContent).toMatch(/flagged for Itinium to review/i);
-    });
+    expect(screen.queryByTestId("text-zero-weight-warning")).not.toBeInTheDocument();
+    expect(screen.queryByText("Needs Review")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("button-submit-collection"));
     await waitFor(() => expect(jobPostBodies).toHaveLength(1));
@@ -291,5 +288,101 @@ describe("rows that contribute no weight", () => {
     renderPage();
     await screen.findByTestId("button-upload-csv");
     expect(screen.queryByTestId("text-zero-weight-warning")).not.toBeInTheDocument();
+  });
+});
+
+describe("CSV review feedback by role", () => {
+  const reviewCsv = [
+    "Pallet Number,Asset No,Battery Serial,Manufacturer,Cell Type,Voltage",
+    "P1,ASSET-OK,SER-OK,Hawker,4PzS460,24",
+    "P2,ASSET-MISSING,SER-MISSING,,,",
+    "P3,ASSET-UNKNOWN,SER-UNKNOWN,Unlisted maker,Unlisted model,30",
+  ].join("\n");
+
+  it.each(["depot_user", "team_leader"])(
+    "lets %s import and submit without review messages while retaining all review flags",
+    async (role) => {
+      userRole = role;
+      renderPage();
+      await screen.findByTestId("button-upload-csv");
+      await uploadCsvViaButton(reviewCsv);
+      await screen.findByText("CSV imported");
+      await screen.findByDisplayValue("SER-UNKNOWN");
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Needs Review|flagged for Itinium review|Missing from CSV|Unrecognised value/i)).not.toBeInTheDocument();
+      expect(screen.queryByTestId("text-zero-weight-warning")).not.toBeInTheDocument();
+      expect(screen.getByTestId("battery-row-2").className).not.toContain("border-l-amber");
+      expect(screen.getByDisplayValue("Unlisted maker")).toBeInTheDocument();
+      expect(screen.getByText("Unlisted model")).toBeInTheDocument();
+      await waitFor(() => expect(screen.getAllByText(/1\.734t/).length).toBeGreaterThan(0));
+
+      fireEvent.click(screen.getByTestId("button-submit-collection"));
+      await waitFor(() => expect(jobPostBodies).toHaveLength(1));
+      const body = jobPostBodies[0] as {
+        batteries: Array<{
+          manufacturerFlagReason: string | null;
+          cellModelFlagReason: string | null;
+          voltageFlagReason: string | null;
+          estimatedWeightKg: string | null;
+          cellType: string | null;
+        }>;
+      };
+      expect(body.batteries).toHaveLength(3);
+      expect(body.batteries[0].manufacturerFlagReason).toBeNull();
+      expect(body.batteries[0].cellModelFlagReason).toBeNull();
+      expect(body.batteries[1].manufacturerFlagReason).toBeTruthy();
+      expect(body.batteries[1].voltageFlagReason).toBeTruthy();
+      expect(body.batteries[1].cellModelFlagReason).toMatch(/500kg/);
+      expect(body.batteries[2].manufacturerFlagReason).toBeTruthy();
+      expect(body.batteries[2].cellModelFlagReason).toBeTruthy();
+      expect(body.batteries[2].voltageFlagReason).toBeTruthy();
+      expect(body.batteries[2].cellType).toBe("Unlisted model");
+      expect(body.batteries[2].estimatedWeightKg).toBe("500");
+      expect(screen.queryByText("Unrecognised fields must be resolved")).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(["accounts", "head_office_admin"])(
+    "keeps the import review window and row warnings available to %s",
+    async (role) => {
+      userRole = role;
+      renderPage();
+      await screen.findByTestId("button-upload-csv");
+      await uploadCsvViaButton(reviewCsv);
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByText("CSV rows need attention")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /Import anyway and flag for review/i }));
+      await screen.findByText("CSV imported");
+      expect(screen.getAllByText("Needs Review")).toHaveLength(2);
+      expect(screen.getByTestId("text-zero-weight-warning")).toBeInTheDocument();
+      expect(screen.getByText(/flagged for Itinium review/)).toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ["empty file", "", "Empty CSV"],
+    ["missing required columns", "Manufacturer,Cell Type\nHawker,PzS", "Missing required columns"],
+  ])("still explains an upload failure for a client: %s", async (_case, csv, message) => {
+    renderPage();
+    await screen.findByTestId("button-upload-csv");
+    await uploadCsvViaButton(csv);
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.queryByText("CSV imported")).not.toBeInTheDocument();
+    expect(jobPostBodies).toHaveLength(0);
+  });
+
+  it("still blocks loads above the maximum capacity for clients", async () => {
+    renderPage();
+    await screen.findByTestId("button-upload-csv");
+    await uploadCsvViaButton([
+      "Pallet Number,Asset No,Battery Serial,Manufacturer,Cell Type,Voltage,Weight",
+      "P1,ASSET-HEAVY,SER-HEAVY,Hawker,4PzS460,24,30000",
+    ].join("\n"));
+    await screen.findByText("CSV imported");
+    expect(screen.queryByText(/Manual\/token weight/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("button-submit-collection"));
+    expect(await screen.findByText("Exceeds maximum tonnage")).toBeInTheDocument();
+    expect(jobPostBodies).toHaveLength(0);
   });
 });

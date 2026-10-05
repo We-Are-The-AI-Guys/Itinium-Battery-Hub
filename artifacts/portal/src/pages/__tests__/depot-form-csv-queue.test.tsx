@@ -192,7 +192,7 @@ describe("CSV import with an empty Manufacturer column", () => {
       expect(screen.getByDisplayValue("SER-UT2")).toBeInTheDocument();
     });
     expect(screen.getByDisplayValue("Unknown")).toBeInTheDocument();
-    expect(screen.getByText("Needs Review")).toBeInTheDocument();
+    expect(screen.queryByText("Needs Review")).not.toBeInTheDocument();
   });
 });
 

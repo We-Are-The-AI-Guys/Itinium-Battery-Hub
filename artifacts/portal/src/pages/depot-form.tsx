@@ -403,6 +403,7 @@ export default function DepotFormPage() {
   const searchStr = useSearch();
   const [, navigate] = useLocation();
   const [user, setUser] = useState<User | null>(null);
+  const showReviewFeedback = user?.role === "accounts" || user?.role === "head_office_admin";
   const [collectionPoint, setCollectionPoint] = useState("");
   const [jobNotes, setJobNotes] = useState("");
   const [batteries, setBatteries] = useState<BatteryRow[]>([createEmptyBattery()]);
@@ -948,12 +949,14 @@ export default function DepotFormPage() {
 
         const issues = validateImportRows(expanded);
 
-        if (issues.length > 0) {
+        if (showReviewFeedback && issues.length > 0) {
           setPendingCsvImport({ rows: expanded, issues });
           return;
         }
 
-        commitCsvImport(expanded);
+        // Clients import directly, retaining review flags for Itinium rather
+        // than asking the requester to resolve catalogue details.
+        commitCsvImport(expanded, !showReviewFeedback);
       } catch {
         toast({ title: "CSV import failed", description: "Could not parse the CSV file. Please check the format.", variant: "destructive" });
       }
@@ -1120,7 +1123,7 @@ export default function DepotFormPage() {
       : 0;
     toast({
       title: "CSV imported",
-      description: flaggedCount > 0
+      description: showReviewFeedback && flaggedCount > 0
         ? `${finalRows.length} row(s) added — ${flaggedCount} flagged for Itinium review.`
         : `${finalRows.length} battery row(s) added from CSV.`,
     });
@@ -1184,7 +1187,9 @@ export default function DepotFormPage() {
     value: string,
     candidates: string[]
   ) {
-    if (!value.trim() || !candidates.length) return;
+    // Do not silently auto-correct values when the requester cannot see or
+    // accept/restore the correction. Itinium can review the saved flags.
+    if (!showReviewFeedback || !value.trim() || !candidates.length) return;
     const key = `${batteryId}_${field}`;
     setFetchingSuggestions((prev) => new Set([...prev, key]));
     try {
@@ -1365,7 +1370,7 @@ export default function DepotFormPage() {
         unresolvedCritical.push(`${rowLabel}: Voltage`);
       }
     });
-    if (unresolvedCritical.length > 0) {
+    if (showReviewFeedback && unresolvedCritical.length > 0) {
       toast({
         title: "Unrecognised fields must be resolved",
         description: `Please accept a suggestion or confirm the following before submitting: ${unresolvedCritical.join(", ")}.`,
@@ -1621,7 +1626,7 @@ export default function DepotFormPage() {
               Load is within the optimal range.
             </p>
           )}
-          {tokenWeightRows.length > 0 && (
+          {showReviewFeedback && tokenWeightRows.length > 0 && (
             <p className="text-xs font-medium text-amber-700 mb-2" data-testid="text-zero-weight-warning">
               A 500kg token weight is included for row{tokenWeightRows.length > 1 ? "s" : ""}{" "}
               {tokenWeightRows.map(({ i }) => i + 1).join(", ")}. The job will be flagged for Itinium to review.
@@ -1870,7 +1875,7 @@ export default function DepotFormPage() {
 
           <div className="divide-y divide-slate-100">
             {batteries.map((battery, index) => {
-              const hasAnyFlag = !!battery.manufacturerFlagReason || !!battery.cellModelFlagReason || !!battery.voltageFlagReason;
+              const hasAnyFlag = showReviewFeedback && (!!battery.manufacturerFlagReason || !!battery.cellModelFlagReason || !!battery.voltageFlagReason);
               return (
               <div
                 key={battery.id}
@@ -2018,7 +2023,7 @@ export default function DepotFormPage() {
                         }
                       }}
                     />
-                    {battery.manufacturerOriginalValue && !battery.manufacturerFlagReason && (
+                    {showReviewFeedback && battery.manufacturerOriginalValue && !battery.manufacturerFlagReason && (
                       <div className="flex items-center gap-2 px-2.5 py-1.5 bg-sky-50 border border-sky-200 rounded-md mt-1">
                         <Lightbulb className="w-3 h-3 text-sky-500 flex-shrink-0" />
                         <p className="text-[11px] text-sky-700 flex-1 min-w-0">
@@ -2042,7 +2047,7 @@ export default function DepotFormPage() {
                         </button>
                       </div>
                     )}
-                    {battery.manufacturerFlagReason && (
+                    {showReviewFeedback && battery.manufacturerFlagReason && (
                       <div className="space-y-1">
                         {battery.manufacturerFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.manufacturerSuggestion && (
                           <CorrectionPrompt
@@ -2153,7 +2158,7 @@ export default function DepotFormPage() {
                         );
                       }}
                     />
-                    {battery.cellTypeOriginalValue && !battery.cellModelFlagReason && (
+                    {showReviewFeedback && battery.cellTypeOriginalValue && !battery.cellModelFlagReason && (
                       <div className="flex items-center gap-2 px-2.5 py-1.5 bg-sky-50 border border-sky-200 rounded-md mt-1">
                         <Lightbulb className="w-3 h-3 text-sky-500 flex-shrink-0" />
                         <p className="text-[11px] text-sky-700 flex-1 min-w-0">
@@ -2177,7 +2182,7 @@ export default function DepotFormPage() {
                         </button>
                       </div>
                     )}
-                    {battery.cellModelFlagReason && (
+                    {showReviewFeedback && battery.cellModelFlagReason && (
                       <div className="space-y-1">
                         <p className="text-[10px] font-semibold text-amber-700">Needs Review — {battery.cellModelFlagReason}</p>
                         {battery.cellModelFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.cellTypeSuggestion && (
@@ -2340,7 +2345,7 @@ export default function DepotFormPage() {
                             }
                           }}
                         />
-                        {battery.voltageOriginalValue && !battery.voltageFlagReason && (
+                        {showReviewFeedback && battery.voltageOriginalValue && !battery.voltageFlagReason && (
                           <div className="flex items-center gap-2 px-2.5 py-1.5 bg-sky-50 border border-sky-200 rounded-md mt-1">
                             <Lightbulb className="w-3 h-3 text-sky-500 flex-shrink-0" />
                             <p className="text-[11px] text-sky-700 flex-1 min-w-0">
@@ -2364,7 +2369,7 @@ export default function DepotFormPage() {
                             </button>
                           </div>
                         )}
-                        {battery.voltageFlagReason && (
+                        {showReviewFeedback && battery.voltageFlagReason && (
                           <div className="space-y-1">
                             <p className="text-[10px] text-amber-600 flex items-center gap-1">
                               <AlertTriangle className="w-3 h-3" />
@@ -2466,7 +2471,9 @@ export default function DepotFormPage() {
                     />
                     <p className="text-[10px] text-slate-400">
                       {battery.weightManual
-                        ? "Manual/token weight; Itinium can confirm it after collection."
+                        ? showReviewFeedback
+                          ? "Manual/token weight; Itinium can confirm it after collection."
+                          : "Entered manually."
                         : "Calculated automatically when catalogue details are available."}
                     </p>
                   </div>
@@ -2670,7 +2677,7 @@ export default function DepotFormPage() {
       </footer>
 
       <Dialog
-        open={!!pendingCsvImport}
+        open={showReviewFeedback && !!pendingCsvImport}
         onOpenChange={(open) => { if (!open) setPendingCsvImport(null); }}
       >
         <DialogContent className="max-w-2xl">

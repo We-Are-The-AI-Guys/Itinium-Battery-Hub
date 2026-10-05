@@ -65,7 +65,9 @@ function installFetchMock() {
         return Promise.resolve(jsonResponse(200, { collectionPoints: [] }));
       }
       if (url.includes("/api/auth/me")) {
-        return Promise.resolve(jsonResponse(401, { message: "unauthenticated" }));
+        return Promise.resolve(jsonResponse(200, {
+          user: { id: 1, email: "test@example.invalid", fullName: "Test User", role: "depot_user", clientId: null, locationId: null },
+        }));
       }
       if (url.includes("/api/jobs") && init?.method === "POST") {
         jobPostBodies.push(JSON.parse(String(init.body)));
@@ -195,12 +197,8 @@ describe("weight parity: submit payload weightManual flag", () => {
     ].join("\n");
     await uploadCsvViaButton(csv);
 
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: /Import anyway and flag for review/i,
-      })
-    );
     await screen.findByText("CSV imported");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("button-submit-collection"));
     await waitFor(() => {
