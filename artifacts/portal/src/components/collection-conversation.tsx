@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { COLLECTION_CONVERSATION_DESCRIPTION } from "@/lib/collection-notes-copy";
 
 type Message = { id: number; authorName: string; authorRole: string; body: string; createdAt: string };
 type Change = {
@@ -130,7 +131,7 @@ export function CollectionConversation({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="font-bold text-[#0f2744]">Collection conversation</h3>
-          <p className="text-xs text-slate-500">Messages between Itinium and the collection company. Requester and internal notes stay separate.</p>
+          <p className="text-xs text-slate-500 max-w-2xl">{COLLECTION_CONVERSATION_DESCRIPTION}</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => void refresh()}>Refresh</Button>
       </div>

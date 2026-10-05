@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import CollectionsPage from "@/pages/collections";
+import { JOB_NOTES_DESCRIPTION } from "@/lib/collection-notes-copy";
 
 vi.mock("@/contexts/auth-context", () => ({
   useAuth: () => ({ user: { fullName: "Transport User" } }),
@@ -66,6 +67,7 @@ describe("collection partner internal notes", () => {
     render(<CollectionsPage />);
     expect(await screen.findByText("Use rear gate")).toBeInTheDocument();
     expect(screen.getByText("Internal notes")).toBeInTheDocument();
+    expect(screen.getByText(JOB_NOTES_DESCRIPTION)).toBeInTheDocument();
     expect(
       screen.getByText("Call the requester before entering the loading area.")
     ).toBeInTheDocument();

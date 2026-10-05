@@ -31,6 +31,7 @@ import {
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { JobDocumentsPanel } from "@/components/job-documents";
 import { CollectionConversation } from "@/components/collection-conversation";
+import { JOB_NOTES_DESCRIPTION } from "@/lib/collection-notes-copy";
 import { NotificationBell } from "@/components/notification-panel";
 
 interface CollectionJob {
@@ -390,6 +391,7 @@ export default function CollectionsPage() {
                           <AlertCircle className="w-4 h-4 text-[#0ea5e9] mt-0.5 shrink-0" />
                           <div>
                             <p className="text-xs font-medium text-slate-500 uppercase">Internal notes</p>
+                            <p className="text-xs text-slate-500 mt-1">{JOB_NOTES_DESCRIPTION}</p>
                             <p className="text-slate-700 whitespace-pre-wrap break-words">{internalNotes}</p>
                           </div>
                         </div>

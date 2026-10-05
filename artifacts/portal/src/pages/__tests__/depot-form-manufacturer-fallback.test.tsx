@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
 import DepotFormPage, { getLoadState, isUnknownManufacturerValue } from "@/pages/depot-form";
 import { Toaster } from "@/components/ui/toaster";
+import { JOB_NOTES_DESCRIPTION } from "@/lib/collection-notes-copy";
 
 function jsonResponse(status: number, body: unknown): Response {
   return {
@@ -384,5 +385,15 @@ describe("CSV review feedback by role", () => {
     fireEvent.click(screen.getByTestId("button-submit-collection"));
     expect(await screen.findByText("Exceeds maximum tonnage")).toBeInTheDocument();
     expect(jobPostBodies).toHaveLength(0);
+  });
+});
+
+describe("client job notes explanation", () => {
+  it("explains who can read notes while preserving normal text entry", async () => {
+    renderPage();
+    const notes = await screen.findByRole("textbox", { name: "Internal notes" });
+    expect(notes).toHaveAccessibleDescription(JOB_NOTES_DESCRIPTION);
+    fireEvent.change(notes, { target: { value: "Use the loading bay." } });
+    expect(notes).toHaveValue("Use the loading bay.");
   });
 });

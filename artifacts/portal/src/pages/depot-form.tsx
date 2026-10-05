@@ -60,6 +60,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { JOB_NOTES_DESCRIPTION, JOB_NOTES_PLACEHOLDER } from "@/lib/collection-notes-copy";
 import {
   canonicalizeVoltageInput,
   isPositiveIntegerInput,
@@ -2637,8 +2638,11 @@ export default function DepotFormPage() {
             </h3>
           </div>
           <div className="p-5">
+            <p id="job-notes-description" className="text-sm text-slate-500 mb-3">{JOB_NOTES_DESCRIPTION}</p>
             <Textarea
-              placeholder="Add internal notes for Itinium and CBL..."
+              aria-label="Internal notes"
+              aria-describedby="job-notes-description"
+              placeholder={JOB_NOTES_PLACEHOLDER}
               className="min-h-[120px] bg-slate-50 border-slate-200 focus-visible:ring-[#0ea5e9] focus-visible:border-[#0ea5e9] resize-y"
               data-testid="textarea-notes"
               value={jobNotes}
