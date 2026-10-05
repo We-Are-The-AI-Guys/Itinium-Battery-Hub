@@ -34,6 +34,7 @@ import {
 } from "../lib/job-status";
 import { drawConfirmedCollectionTable } from "../lib/confirmed-collection-table";
 import { drawRawCollectionTable } from "../lib/raw-collection-table";
+import { reconcileBatteryReview } from "../lib/battery-review";
 import {
   calculateReceiptValueGbp,
   isAutomaticReceiptValue,
@@ -2391,19 +2392,16 @@ router.patch(
         return;
       }
 
-      let clearedAnyFlag = false;
       const canResolveReview = ["accounts", "head_office_admin"].includes(req.user!.role);
       if (batterySerial !== undefined) {
         const v = toTrimmedStr(batterySerial);
         updates.batterySerial = v;
         if (v !== null) {
           updates.serialFlagReason = null;
-          if (existing.serialFlagReason) clearedAnyFlag = true;
         }
       }
       if (clearSerialFlag === true || clearSerialFlag === "true") {
         updates.serialFlagReason = null;
-        if (existing.serialFlagReason) clearedAnyFlag = true;
       }
       if (looseCellsQty !== undefined) {
         const trimmed = String(looseCellsQty ?? "").trim();
@@ -2426,7 +2424,6 @@ router.patch(
           updates.manufacturerFlagReason = "Other — requires Itinium review";
         } else if (v !== null && canResolveReview) {
           updates.manufacturerFlagReason = null;
-          if (existing.manufacturerFlagReason) clearedAnyFlag = true;
         }
       }
       if (cellType !== undefined) {
@@ -2436,7 +2433,6 @@ router.patch(
           updates.cellModelFlagReason = "Other — requires Itinium review";
         } else if (v !== null && canResolveReview) {
           updates.cellModelFlagReason = null;
-          if (existing.cellModelFlagReason) clearedAnyFlag = true;
         }
       }
 
@@ -2519,14 +2515,10 @@ router.patch(
         updates.voltage = v;
         if (v !== null) {
           updates.voltageFlagReason = null;
-          if (existing.voltageFlagReason) clearedAnyFlag = true;
         }
       }
 
-      if (clearedAnyFlag) {
-        updates.resolvedById = req.user!.id;
-        updates.resolvedAt = new Date();
-      }
+      const reviewResolved = reconcileBatteryReview(existing, updates, req.user!.id, canResolveReview);
 
       if (Object.keys(updates).length === 0) {
         res.status(400).json({ message: "No fields to update" });
@@ -2625,7 +2617,7 @@ router.patch(
         });
       }
 
-      if (clearedAnyFlag && resolvedByName) {
+      if (reviewResolved && resolvedByName) {
         const [parentJob] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
         if (parentJob) {
           notifyFlagResolved(parentJob, resolvedByName).catch(() => {});

@@ -52,6 +52,7 @@ import { SidebarLayout } from "@/components/sidebar-layout";
 import { JobDocumentsPanel } from "@/components/job-documents";
 import { CollectionConversation } from "@/components/collection-conversation";
 import { JOB_NOTES_DESCRIPTION, JOB_NOTES_PLACEHOLDER } from "@/lib/collection-notes-copy";
+import { hasBatteryReviewFlags, reviewSaveSummary } from "@/lib/battery-review";
 import { useToast } from "@/hooks/use-toast";
 import {
   getJobNextStep,
@@ -878,12 +879,7 @@ export default function JobDetailPage() {
   }
 
   async function autofillReviewFields() {
-    const flagged = batteries.filter((battery) =>
-      battery.serialFlagReason
-      || battery.manufacturerFlagReason
-      || battery.cellModelFlagReason
-      || battery.voltageFlagReason
-    );
+    const flagged = batteries.filter(hasBatteryReviewFlags);
     if (flagged.length === 0) return;
     if (!window.confirm(`Accept the existing values for all ${flagged.length} items under review?`)) return;
 
@@ -911,10 +907,7 @@ export default function JobDetailPage() {
       const updatedById = new Map(results.map((battery) => [battery.id, battery]));
       setBatteries((current) => current.map((battery) => updatedById.get(battery.id) || battery));
       setReceiptDelivery(null);
-      toast({
-        title: "Review fields accepted",
-        description: `${results.length} ${results.length === 1 ? "item was" : "items were"} saved using the existing job data.`,
-      });
+      toast(reviewSaveSummary(results));
     } catch (error) {
       await loadJob();
       toast({
@@ -2349,12 +2342,7 @@ function CollectionBatteryRow({
       : aiSuggestion
       ? [{ label: aiSuggestion, hint: "AI suggestion" }]
       : [];
-  const hasAnyFlag = !!(
-    battery.serialFlagReason ||
-    battery.manufacturerFlagReason ||
-    battery.cellModelFlagReason ||
-    battery.voltageFlagReason
-  );
+  const hasAnyFlag = hasBatteryReviewFlags(battery);
 
   return (
     <tr className={`${hasAnyFlag ? "bg-amber-50/60 border-l-4 border-l-amber-400" : (index % 2 === 0 ? "bg-white" : "bg-slate-50/30")}`}>
@@ -2499,7 +2487,7 @@ function CollectionBatteryRow({
           ) : (
             <span className="truncate">{battery.notes || "—"}</span>
           )}
-          {battery.resolvedByName && battery.resolvedAt && (
+          {!hasAnyFlag && battery.resolvedByName && battery.resolvedAt && (
             <span className="text-[10px] text-slate-400" title={new Date(battery.resolvedAt).toLocaleString("en-GB")}>
               Resolved by {battery.resolvedByName} on {formatDate(battery.resolvedAt)}
             </span>
