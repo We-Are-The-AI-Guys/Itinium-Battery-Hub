@@ -61,6 +61,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { JOB_NOTES_DESCRIPTION, JOB_NOTES_PLACEHOLDER } from "@/lib/collection-notes-copy";
+import { reviewFlagAfterWeightCorrection, TOKEN_WEIGHT_FLAG_REASON } from "@/lib/battery-review";
 import {
   canonicalizeVoltageInput,
   isPositiveIntegerInput,
@@ -193,7 +194,6 @@ const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
 const MANUAL_UNKNOWN_FLAG_REASON = "Unrecognised value — not found in master list";
 const OTHER_REVIEW_FLAG_REASON = "Other — requires Itinium review";
 const TOKEN_WEIGHT_KG = 500;
-const TOKEN_WEIGHT_FLAG_REASON = "Missing battery details — 500kg token weight applied";
 type LoadState = "empty" | "red-low" | "red-high" | "amber-low" | "amber-high" | "green";
 
 export function getLoadState(currentLoad: number, maxCapacity = 26): LoadState {
@@ -660,7 +660,11 @@ export default function DepotFormPage() {
     }
     if (weightLookupVersion.current[battery.id] !== version) return;
     setBatteries((prev) =>
-      prev.map((b) => (b.id === battery.id && !b.weightManual ? { ...b, estimatedWeightKg: weight } : b))
+      prev.map((b) => (b.id === battery.id && !b.weightManual ? {
+        ...b,
+        estimatedWeightKg: weight,
+        cellModelFlagReason: reviewFlagAfterWeightCorrection(b.cellModelFlagReason, weight),
+      } : b))
     );
   }
 

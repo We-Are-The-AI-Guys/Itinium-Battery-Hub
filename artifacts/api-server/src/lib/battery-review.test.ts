@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reconcileBatteryReview } from "./battery-review";
+import { reconcileBatteryReview, reconcileTokenWeightReview, TOKEN_WEIGHT_FLAG_REASON } from "./battery-review";
 
 const clean = {
   serialFlagReason: null,
@@ -9,6 +9,61 @@ const clean = {
   cellType: "5 PzS 700",
   isLooseCells: false,
 };
+
+describe("500kg token warning after corrections", () => {
+  const existing = { ...clean, cellModelFlagReason: TOKEN_WEIGHT_FLAG_REASON };
+
+  const replacementCases: Array<Record<string, string | number | boolean | Date | null>> = [
+    { voltage: "24V", estimatedWeightKg: "552.720" },
+    { manufacture: "TAB", estimatedWeightKg: "552.720" },
+    { looseCellsQty: 12, estimatedWeightKg: "552.720" },
+    { cellType: "5 PzS 700", cellModelFlagReason: null, estimatedWeightKg: "552.720" },
+    { receiptConfirmed: true, estimatedWeightKg: "552.720", weightManual: false },
+  ];
+  it.each(replacementCases)("clears the token warning only with a saved replacement weight: %j", (input) => {
+    const updates = { ...input };
+    reconcileTokenWeightReview(existing, updates);
+    expect(updates.cellModelFlagReason).toBeNull();
+    expect(reconcileBatteryReview(existing, updates, 7, true)).toBe(true);
+  });
+
+  it.each([undefined, null, "", "0", "-1", "NaN", "500kg"])(
+    "keeps the token warning if a model edit has no valid replacement weight (%s)", (weight) => {
+      const updates: Record<string, string | number | boolean | Date | null> = {
+        cellType: "Unknown model", cellModelFlagReason: null,
+        ...(weight !== undefined ? { estimatedWeightKg: weight } : {}),
+      };
+      reconcileTokenWeightReview(existing, updates);
+      expect(updates.cellModelFlagReason).toBe(TOKEN_WEIGHT_FLAG_REASON);
+      expect(reconcileBatteryReview(existing, updates, 7, true)).toBe(false);
+    },
+  );
+
+  it("preserves other review reasons when replacing a weight", () => {
+    const updates = { estimatedWeightKg: "552.720" };
+    reconcileTokenWeightReview({ cellModelFlagReason: "Unknown model" }, updates);
+    expect(updates).not.toHaveProperty("cellModelFlagReason");
+  });
+
+  it("preserves a new identity flag even if the old weight is replaced", () => {
+    const updates = { estimatedWeightKg: "552.720", cellModelFlagReason: "Other — requires Itinium review" };
+    reconcileTokenWeightReview(existing, updates);
+    expect(updates.cellModelFlagReason).toBe("Other — requires Itinium review");
+  });
+
+  it("does not infer a token from the numerical weight alone", () => {
+    const updates = { estimatedWeightKg: "700.000" };
+    reconcileTokenWeightReview(clean, updates);
+    expect(updates).not.toHaveProperty("cellModelFlagReason");
+  });
+
+  it("keeps the warning when no weight update was made, including protected manual weights", () => {
+    const updates = { voltage: "24V" };
+    reconcileTokenWeightReview(existing, updates);
+    expect(updates).not.toHaveProperty("cellModelFlagReason");
+    expect(reconcileBatteryReview(existing, updates, 7, true)).toBe(false);
+  });
+});
 
 describe("battery review after saved corrections", () => {
   it.each([

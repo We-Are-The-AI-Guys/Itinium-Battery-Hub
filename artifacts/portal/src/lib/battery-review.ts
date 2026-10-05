@@ -1,3 +1,13 @@
+import { parsePositiveWeightInput } from "./cell-type-suggestions";
+
+export const TOKEN_WEIGHT_FLAG_REASON = "Missing battery details — 500kg token weight applied";
+
+export function reviewFlagAfterWeightCorrection(reason: string, correctedWeight: string): string {
+  return reason === TOKEN_WEIGHT_FLAG_REASON && parsePositiveWeightInput(correctedWeight) !== null
+    ? ""
+    : reason;
+}
+
 export interface BatteryReviewFlags {
   serialFlagReason: string | null;
   manufacturerFlagReason: string | null;

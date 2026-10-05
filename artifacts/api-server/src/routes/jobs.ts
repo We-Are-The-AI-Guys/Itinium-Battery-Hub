@@ -34,7 +34,7 @@ import {
 } from "../lib/job-status";
 import { drawConfirmedCollectionTable } from "../lib/confirmed-collection-table";
 import { drawRawCollectionTable } from "../lib/raw-collection-table";
-import { reconcileBatteryReview } from "../lib/battery-review";
+import { reconcileBatteryReview, reconcileTokenWeightReview, TOKEN_WEIGHT_FLAG_REASON } from "../lib/battery-review";
 import {
   calculateReceiptValueGbp,
   isAutomaticReceiptValue,
@@ -45,7 +45,6 @@ import {
 const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
 const TOKEN_WEIGHT_KG = 500;
-const TOKEN_WEIGHT_FLAG_REASON = "Missing battery details — 500kg token weight applied";
 
 const SAFE_LOAD_FACTOR = 1.4;
 
@@ -1737,14 +1736,20 @@ router.post(
       let confirmedCount = 0;
       await db.transaction(async (tx) => {
         for (const { battery, tabWeightKg } of prepared) {
+          const updates: Record<string, string | boolean | number | Date | null> = {
+            receiptConfirmed: true,
+            receiptReviewed: true,
+            estimatedWeightKg: tabWeightKg!,
+            weightManual: false,
+          };
+          reconcileTokenWeightReview(battery, updates);
+          reconcileBatteryReview(
+            battery, updates, req.user!.id,
+            ["accounts", "head_office_admin"].includes(req.user!.role),
+          );
           const changed = await tx
             .update(jobBatteriesTable)
-            .set({
-              receiptConfirmed: true,
-              receiptReviewed: true,
-              estimatedWeightKg: tabWeightKg!,
-              weightManual: false,
-            })
+            .set(updates)
             .where(and(
               eq(jobBatteriesTable.id, battery.id),
               eq(jobBatteriesTable.jobId, jobId),
@@ -2518,6 +2523,7 @@ router.patch(
         }
       }
 
+      reconcileTokenWeightReview(existing, updates);
       const reviewResolved = reconcileBatteryReview(existing, updates, req.user!.id, canResolveReview);
 
       if (Object.keys(updates).length === 0) {

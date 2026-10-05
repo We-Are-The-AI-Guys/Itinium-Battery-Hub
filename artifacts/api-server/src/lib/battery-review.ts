@@ -11,6 +11,28 @@ type ReviewRow = Record<(typeof FLAG_FIELDS)[number], string | null> & {
 };
 type ReviewUpdates = Record<string, string | boolean | number | Date | null>;
 
+export const TOKEN_WEIGHT_FLAG_REASON = "Missing battery details — 500kg token weight applied";
+
+/** Remove only the token warning, and only after the stored weight is replaced. */
+export function reconcileTokenWeightReview(
+  existing: Pick<ReviewRow, "cellModelFlagReason">,
+  updates: ReviewUpdates,
+): void {
+  if (existing.cellModelFlagReason !== TOKEN_WEIGHT_FLAG_REASON) return;
+  const weight = updates.estimatedWeightKg;
+  const replaced = (typeof weight === "string" || typeof weight === "number")
+    && Number.isFinite(Number(weight)) && Number(weight) > 0;
+  const reason = updates.cellModelFlagReason;
+  // Do not remove a new identity flag introduced by the correction.
+  if (reason !== undefined && reason !== null && reason !== TOKEN_WEIGHT_FLAG_REASON) return;
+  if (replaced) {
+    updates.cellModelFlagReason = null;
+  } else if (reason === null) {
+    // Correcting a model alone does not prove the temporary weight was replaced.
+    updates.cellModelFlagReason = TOKEN_WEIGHT_FLAG_REASON;
+  }
+}
+
 /** Finish a correction using the remaining flags, not just the flag it cleared. */
 export function reconcileBatteryReview(
   existing: ReviewRow,
