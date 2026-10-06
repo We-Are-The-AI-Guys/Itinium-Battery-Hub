@@ -34,7 +34,7 @@ import {
 } from "../lib/job-status";
 import { drawConfirmedCollectionTable } from "../lib/confirmed-collection-table";
 import { drawRawCollectionTable } from "../lib/raw-collection-table";
-import { reconcileBatteryReview, reconcileTokenWeightReview, TOKEN_WEIGHT_FLAG_REASON } from "../lib/battery-review";
+import { isUnknownManufacturerValue, reconcileBatteryReview, reconcileTokenWeightReview, TOKEN_WEIGHT_FLAG_REASON } from "../lib/battery-review";
 import {
   calculateReceiptValueGbp,
   isAutomaticReceiptValue,
@@ -95,7 +95,7 @@ function manufacturerMatches(
   catalogueManufacturer: string
 ): boolean {
   const requested = (requestedManufacturer || "").trim().toLowerCase();
-  if (!requested || requested === "unknown") return false;
+  if (isUnknownManufacturerValue(requested)) return false;
   const catalogue = catalogueManufacturer.trim().toLowerCase();
   if (
     requested === catalogue
@@ -119,8 +119,7 @@ export function selectCatalogueModel<T extends { manufacturer: string; modelName
     (entry) => comparableCellModelKey(entry.modelName) === modelKey
   );
   const requestedManufacturer = (manufacturer || "").trim();
-  const isUnknownManufacturer =
-    !requestedManufacturer || requestedManufacturer.toLowerCase() === "unknown";
+  const isUnknownManufacturer = isUnknownManufacturerValue(requestedManufacturer);
   return (
     (!isUnknownManufacturer
       ? matches.find((entry) =>
@@ -137,8 +136,8 @@ export function flagOtherSelectionsForReview(battery: {
   manufacturerFlagReason?: string | null;
   cellModelFlagReason?: string | null;
 }): void {
-  if (battery.manufacture?.trim().toLowerCase() === "other") {
-    battery.manufacturerFlagReason = "Other — requires Itinium review";
+  if (isUnknownManufacturerValue(battery.manufacture)) {
+    battery.manufacturerFlagReason = null;
   }
   if (battery.cellType?.trim().toLowerCase() === "other") {
     battery.cellModelFlagReason = "Other — requires Itinium review";
@@ -1064,6 +1063,7 @@ router.get(
 
       const batteries = batteryRows.map(b => ({
         ...b,
+        manufacturerFlagReason: isUnknownManufacturerValue(b.manufacture) ? null : b.manufacturerFlagReason,
         resolvedByName: b.resolvedById != null ? (resolverMap.get(b.resolvedById) || null) : null,
       }));
 
@@ -1263,15 +1263,13 @@ router.post(
       for (let inputIndex = 0; inputIndex < batteryInputs.length; inputIndex++) {
         const b = batteryInputs[inputIndex];
         const mfrStr = (b.manufacture || "").trim();
-        const isUnknownMfr = mfrStr.toLowerCase() === "unknown";
+        const isUnknownMfr = isUnknownManufacturerValue(mfrStr);
         const cellTypeStr = (b.cellType || "").trim();
         const cellModelApplies = !["blocs", "other"].includes(cellTypeStr.toLowerCase());
 
         flagOtherSelectionsForReview(b);
-        if (!b.manufacturerFlagReason) {
-          if (!mfrStr || isUnknownMfr) {
-            b.manufacturerFlagReason = CSV_FLAG_REASON;
-          } else if (!knownManufacturers.has(mfrStr.toLowerCase())) {
+        if (!isUnknownMfr && !b.manufacturerFlagReason) {
+          if (!knownManufacturers.has(mfrStr.toLowerCase())) {
             b.manufacturerFlagReason = CSV_UNKNOWN_FLAG_REASON;
           }
         }
@@ -2427,8 +2425,8 @@ router.patch(
       if (manufacture !== undefined) {
         const v = toTrimmedStr(manufacture);
         updates.manufacture = v;
-        if (v?.toLowerCase() === "other") {
-          updates.manufacturerFlagReason = "Other — requires Itinium review";
+        if (isUnknownManufacturerValue(v)) {
+          updates.manufacturerFlagReason = null;
         } else if (v !== null && canResolveReview) {
           updates.manufacturerFlagReason = null;
         }

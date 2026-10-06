@@ -66,6 +66,27 @@ describe("500kg token warning after corrections", () => {
 });
 
 describe("battery review after saved corrections", () => {
+  it.each(["Unknown", "N/A", "", "Other", "none", "-", "?", null])(
+    "automatically clears the manufacturer-only review for %s", (manufacture) => {
+      const updates = { notes: "Saved" };
+      expect(reconcileBatteryReview({
+        ...clean, manufacture, manufacturerFlagReason: "Missing from CSV",
+      }, updates, 7, false)).toBe(true);
+      expect(updates).toMatchObject({ manufacturerFlagReason: null });
+    },
+  );
+
+  it("retains independent model and voltage reviews on unknown-manufacturer rows", () => {
+    const updates = { notes: "Saved" };
+    expect(reconcileBatteryReview({
+      ...clean, manufacture: "Unknown", manufacturerFlagReason: "Missing from CSV",
+      cellModelFlagReason: "Missing model", voltageFlagReason: "Missing voltage",
+    }, updates, 7, false)).toBe(false);
+    expect(updates).toMatchObject({ manufacturerFlagReason: null, resolvedAt: null });
+    expect(updates).not.toHaveProperty("cellModelFlagReason");
+    expect(updates).not.toHaveProperty("voltageFlagReason");
+  });
+
   it.each([
     "serialFlagReason", "manufacturerFlagReason", "cellModelFlagReason", "voltageFlagReason",
   ])("finishes review when %s is the last flag corrected", (field) => {
@@ -153,7 +174,7 @@ describe("battery review after saved corrections", () => {
   });
 
   it("removes an old resolution stamp when a new flag is introduced", () => {
-    const updates = { manufacture: "Other", manufacturerFlagReason: "Other — requires Itinium review" };
+    const updates = { cellType: "Other", cellModelFlagReason: "Other — requires Itinium review" };
     expect(reconcileBatteryReview(clean, updates, 7, true)).toBe(false);
     expect(updates).toMatchObject({ resolvedById: null, resolvedAt: null });
   });

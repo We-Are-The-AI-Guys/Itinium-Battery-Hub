@@ -1,4 +1,5 @@
 import { parsePositiveWeightInput } from "./cell-type-suggestions";
+import { isUnknownManufacturerValue } from "./manufacturer-policy";
 
 export const TOKEN_WEIGHT_FLAG_REASON = "Missing battery details — 500kg token weight applied";
 
@@ -9,6 +10,7 @@ export function reviewFlagAfterWeightCorrection(reason: string, correctedWeight:
 }
 
 export interface BatteryReviewFlags {
+  manufacture?: string | null;
   serialFlagReason: string | null;
   manufacturerFlagReason: string | null;
   cellModelFlagReason: string | null;
@@ -16,7 +18,9 @@ export interface BatteryReviewFlags {
 }
 
 export function hasBatteryReviewFlags(battery: BatteryReviewFlags): boolean {
-  return !!(battery.serialFlagReason || battery.manufacturerFlagReason
+  const manufacturerFlag = battery.manufacturerFlagReason
+    && (battery.manufacture === undefined || !isUnknownManufacturerValue(battery.manufacture));
+  return !!(battery.serialFlagReason || manufacturerFlag
     || battery.cellModelFlagReason || battery.voltageFlagReason);
 }
 

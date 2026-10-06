@@ -168,7 +168,7 @@ describe("voltage keyboard selection", () => {
 });
 
 describe("CSV import with 'N/A' in the Manufacturer column", () => {
-  it("maps it to Unknown with TAB weights and a review flag instead of an unrecognised-value block", async () => {
+  it("maps it to Unknown with TAB weights without a manufacturer review", async () => {
     renderPage();
     await screen.findByTestId("button-upload-csv");
 
@@ -191,7 +191,7 @@ describe("CSV import with 'N/A' in the Manufacturer column", () => {
 });
 
 describe("submitting with an 'Other' manufacturer and no custom name", () => {
-  it("submits successfully as Unknown + review flag instead of blocking with 'Missing manufacturer name'", async () => {
+  it("submits successfully as Unknown without a manufacturer review", async () => {
     renderPage();
     await screen.findByTestId("button-upload-csv");
 
@@ -220,12 +220,12 @@ describe("submitting with an 'Other' manufacturer and no custom name", () => {
       batteries: Array<{ manufacture: string | null; manufacturerFlagReason: string | null }>;
     };
     expect(body.batteries[0].manufacture).toBe("Unknown");
-    expect(body.batteries[0].manufacturerFlagReason).toBeTruthy();
+    expect(body.batteries[0].manufacturerFlagReason).toBeNull();
   });
 });
 
 describe("submitting with a hand-typed 'unknown' manufacturer", () => {
-  it("submits as Unknown with a review flag instead of blocking", async () => {
+  it("submits as Unknown using TAB without a manufacturer review", async () => {
     renderPage();
     await screen.findByTestId("button-upload-csv");
 
@@ -252,7 +252,7 @@ describe("submitting with a hand-typed 'unknown' manufacturer", () => {
       batteries: Array<{ manufacture: string | null; manufacturerFlagReason: string | null }>;
     };
     expect(body.batteries[0].manufacture).toBe("Unknown");
-    expect(body.batteries[0].manufacturerFlagReason).toBeTruthy();
+    expect(body.batteries[0].manufacturerFlagReason).toBeNull();
   });
 });
 
@@ -332,7 +332,7 @@ describe("CSV review feedback by role", () => {
       expect(body.batteries).toHaveLength(3);
       expect(body.batteries[0].manufacturerFlagReason).toBeNull();
       expect(body.batteries[0].cellModelFlagReason).toBeNull();
-      expect(body.batteries[1].manufacturerFlagReason).toBeTruthy();
+      expect(body.batteries[1].manufacturerFlagReason).toBeNull();
       expect(body.batteries[1].voltageFlagReason).toBeTruthy();
       expect(body.batteries[1].cellModelFlagReason).toMatch(/500kg/);
       expect(body.batteries[2].manufacturerFlagReason).toBeTruthy();

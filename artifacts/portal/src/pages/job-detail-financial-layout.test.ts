@@ -125,6 +125,7 @@ describe("job-detail save controls", () => {
     const rowSource = source.slice(rowStart, rowEnd);
     expect(receiptSection).toContain(">Serial</th>");
     expect(receiptSection).toContain(">Pallet</th>");
+    expect(receiptSection.indexOf(">Pallet</th>")).toBeLessThan(receiptSection.indexOf(">Serial</th>"));
     expect(receiptSection).not.toContain("Serial / Pallet");
     expect(source).toContain('batterySerial: battery.batterySerial || ""');
     expect(source).toContain('palletNumber: battery.palletNumber || ""');
@@ -132,6 +133,7 @@ describe("job-detail save controls", () => {
     expect(rowSource).toContain("value={draft.batterySerial}");
     expect(rowSource).toContain("batterySerial: e.target.value");
     expect(rowSource).toContain("value={draft.palletNumber}");
+    expect(rowSource.indexOf("value={draft.palletNumber}")).toBeLessThan(rowSource.indexOf("value={draft.batterySerial}"));
     expect(rowSource).toContain("palletNumber: e.target.value");
     expect(rowSource).toContain("value={draft.cellType}");
     expect(rowSource).toContain("cellType: e.target.value");

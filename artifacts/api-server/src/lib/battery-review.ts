@@ -8,8 +8,14 @@ const FLAG_FIELDS = [
 type ReviewRow = Record<(typeof FLAG_FIELDS)[number], string | null> & {
   cellType: string | null;
   isLooseCells: boolean | null;
+  manufacture?: string | null;
 };
 type ReviewUpdates = Record<string, string | boolean | number | Date | null>;
+
+export function isUnknownManufacturerValue(value: string | null | undefined): boolean {
+  return ["", "n/a", "na", "unknown", "other", "none", "-", "?"]
+    .includes(String(value ?? "").trim().toLowerCase());
+}
 
 export const TOKEN_WEIGHT_FLAG_REASON = "Missing battery details — 500kg token weight applied";
 
@@ -41,6 +47,11 @@ export function reconcileBatteryReview(
   canResolveReview: boolean,
 ): boolean {
   if (Object.keys(updates).length === 0) return false;
+  const manufacturer = updates.manufacture !== undefined ? updates.manufacture : existing.manufacture;
+  if (manufacturer !== undefined && isUnknownManufacturerValue(String(manufacturer ?? ""))) {
+    // Unknown manufacturers are accepted with TAB fallback, not sent for review.
+    updates.manufacturerFlagReason = null;
+  }
   // Voltage is not required for loose cells, Blocs, or an unidentified Other
   // row. Only reconsider it during an authorised identity/quantity correction.
   const reviewingIdentity = ["cellType", "manufacture", "voltage", "looseCellsQty", "batterySerial", ...FLAG_FIELDS]

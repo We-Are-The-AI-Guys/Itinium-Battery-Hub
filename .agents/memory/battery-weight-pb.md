@@ -15,10 +15,10 @@ description: Source-of-truth conventions for battery weight, safe-load factor an
 ## Cell count reconfirmed (July 30, 2026)
 - Ingrid (client) confirmed a 24V battery = 12 cells (voltage/2). The one-cell-per-volt reading in her July 28 feedback was wrong; the portal math is correct. Do not revisit.
 
-## Placeholder manufacturers never block (July 30, 2026)
-- Blank, "N/A", "unknown", "Other" (no name), "none", "-", "?" manufacturers must all be treated identically: map to "Unknown" → TAB weights, flag for Itinium review, never block import or submission.
-- **Why:** client's depots routinely can't identify manufacturers; earlier hard-blocks stopped whole submissions.
-- **How to apply:** applied at both CSV import and submit time in the depot form; keep any new validation path consistent with this rule.
+## Placeholder manufacturers use TAB without manufacturer review (updated October 6, 2026)
+- Blank, "N/A", "unknown", "Other" (no name), "none", "-", "?" manufacturers must all be treated identically: use "Unknown" → TAB weights, without a manufacturer review requirement. Retain independent serial, model, voltage and missing-weight warnings.
+- **Why:** the user explicitly requested accepting unknown manufacturers as-is with TAB weights rather than requiring Itinium review. Depots routinely cannot identify manufacturers.
+- **How to apply:** keep CSV import, manual entry, submission, corrections and existing-job review consistent. Preserve submitted model identity and manual weight overrides. This exception does not approve genuinely unrecognised named manufacturers or resolve unrelated flags.
 
 ## Missing-weight token (September 23, 2026)
 - Customer submissions with missing battery details or no derivable weight must use a 500 kg raw-weight token, remain submittable, and be flagged for Itinium review.

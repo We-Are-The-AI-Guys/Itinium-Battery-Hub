@@ -178,6 +178,26 @@ async function saveCorrection(updates: Record<string, unknown>) {
 }
 
 describe("both collection PDF downloads use saved corrections", () => {
+  it("accepts legacy Unknown manufacturers without requiring review and uses TAB on save", async () => {
+    saved.batteries[0].manufacture = "Unknown";
+    saved.batteries[0].manufacturerFlagReason = "Missing from CSV";
+    const response = await fetch(`${origin}/api/jobs/901`);
+    expect(response.status).toBe(200);
+    const details = await response.json() as {
+      batteries: (typeof jobBatteriesTable.$inferSelect)[];
+    };
+    expect(details.batteries[0].manufacture).toBe("Unknown");
+    expect(details.batteries[0].manufacturerFlagReason).toBeNull();
+    expect(details.batteries[0].cellModelFlagReason).toBe("Unknown");
+    // Reading an existing job must not mutate its stored data.
+    expect(saved.batteries[0].manufacturerFlagReason).toBe("Missing from CSV");
+
+    const corrected = await saveCorrection({ manufacture: "Unknown" });
+    expect(corrected.battery.manufacture).toBe("Unknown");
+    expect(corrected.battery.manufacturerFlagReason).toBeNull();
+    expect(corrected.battery.estimatedWeightKg).toBe("552.720");
+  });
+
   it("regenerates both PDFs after a real correction handler saves the new row", async () => {
     for (const endpoint of ["collection-sheet.pdf", "invoice.pdf"]) {
       const before = await download(endpoint);

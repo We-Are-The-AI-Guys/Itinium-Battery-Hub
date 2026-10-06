@@ -20,6 +20,15 @@ describe("draft token-weight warning", () => {
 });
 
 describe("saved review status", () => {
+  it.each(["Unknown", "N/A", "", "Other", "-", "?"])("accepts legacy manufacturer-only flags for %s", (manufacture) => {
+    expect(hasBatteryReviewFlags({
+      ...clean, manufacture, manufacturerFlagReason: "Missing from CSV",
+    })).toBe(false);
+    expect(hasBatteryReviewFlags({
+      ...clean, manufacture, manufacturerFlagReason: "Missing from CSV",
+      cellModelFlagReason: "Missing battery details",
+    })).toBe(true);
+  });
   it.each(Object.keys(clean))("keeps Needs Review when %s remains", (field) => {
     expect(hasBatteryReviewFlags({ ...clean, [field]: "Needs attention" })).toBe(true);
   });

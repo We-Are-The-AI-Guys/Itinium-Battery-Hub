@@ -199,12 +199,22 @@ describe("applyTokenWeightFallback", () => {
 });
 
 describe("submitted Other values", () => {
-  it("flags both fields even if a client omitted or cleared their flags", () => {
+  it("accepts an unidentified manufacturer but still flags an unidentified model", () => {
     const battery = { manufacture: "Other", cellType: "Other", manufacturerFlagReason: null, cellModelFlagReason: null };
     flagOtherSelectionsForReview(battery);
-    expect(battery.manufacturerFlagReason).toMatch(/requires Itinium review/);
+    expect(battery.manufacturerFlagReason).toBeNull();
     expect(battery.cellModelFlagReason).toMatch(/requires Itinium review/);
   });
+
+  it.each(["Unknown", "N/A", "", "Other", "none", "-", "?"])(
+    "accepts %s without manufacturer review and derives TAB weight", (manufacture) => {
+      const battery = { manufacture, cellType: "4 EPzS 460", manufacturerFlagReason: "Missing from CSV" };
+      flagOtherSelectionsForReview(battery);
+      expect(battery.manufacture).toBe(manufacture);
+      expect(battery.manufacturerFlagReason).toBeNull();
+      expect(deriveEstimatedWeightKg(catalogue, manufacture, battery.cellType, 12)).toBe("238.800");
+    },
+  );
 
   it("leaves a typed unknown manufacturer and designation intact", () => {
     const battery = { manufacture: "New Supplier", cellType: "4P" };

@@ -1842,8 +1842,8 @@ export default function JobDetailPage() {
                   <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-y border-slate-100">
                     <tr>
                       <th className="px-3 py-2.5 text-left font-semibold">#</th>
-                      <th className="px-3 py-2.5 text-left font-semibold">Serial</th>
                       <th className="px-3 py-2.5 text-left font-semibold">Pallet</th>
+                      <th className="px-3 py-2.5 text-left font-semibold">Serial</th>
                       <th className="px-3 py-2.5 text-left font-semibold">Type</th>
                       <th className="px-3 py-2.5 text-left font-semibold">Voltage</th>
                       <th className="px-3 py-2.5 text-center font-semibold">Receipt Confirmed</th>
@@ -2690,21 +2690,21 @@ function BatteryAdminRow({
       <td className="px-3 py-2.5">
         <Input
           disabled={disabled}
-          value={draft.batterySerial}
-          onChange={(e) => onChange(battery.id, { batterySerial: e.target.value })}
-          placeholder="Serial"
-          className="h-8 w-32 bg-slate-50 text-sm"
-          aria-label={`Serial for receipt row ${index + 1}`}
-        />
-      </td>
-      <td className="px-3 py-2.5">
-        <Input
-          disabled={disabled}
           value={draft.palletNumber}
           onChange={(e) => onChange(battery.id, { palletNumber: e.target.value })}
           placeholder="Pallet"
           className="h-8 w-24 bg-slate-50 text-sm"
           aria-label={`Pallet for receipt row ${index + 1}`}
+        />
+      </td>
+      <td className="px-3 py-2.5">
+        <Input
+          disabled={disabled}
+          value={draft.batterySerial}
+          onChange={(e) => onChange(battery.id, { batterySerial: e.target.value })}
+          placeholder="Serial"
+          className="h-8 w-32 bg-slate-50 text-sm"
+          aria-label={`Serial for receipt row ${index + 1}`}
         />
       </td>
       <td className="px-3 py-2.5">

@@ -30,6 +30,8 @@ import {
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { isUnknownManufacturerValue } from "@/lib/manufacturer-policy";
+export { isUnknownManufacturerValue } from "@/lib/manufacturer-policy";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -239,14 +241,6 @@ function levenshtein(a: string, b: string): number {
   return dp[n];
 }
 
-// Placeholder manufacturer values that should be treated the same as a blank
-// manufacturer: mapped to "Unknown" (TAB weights), flagged for Itinium review,
-// and never allowed to block import or submission.
-const UNKNOWN_MANUFACTURER_VALUES = new Set(["n/a", "na", "unknown", "other", "none", "-", "?"]);
-export function isUnknownManufacturerValue(value: string): boolean {
-  return UNKNOWN_MANUFACTURER_VALUES.has(value.trim().toLowerCase());
-}
-
 function normalizeForMatch(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -305,11 +299,9 @@ function validateBatteryField(
   if (!v) return "";
   switch (field) {
     case "manufacture": {
-      // "Unknown" is the auto-default for missing CSV manufacturers (TAB
-      // weights apply); it must never block submission — the server flags it.
-      if (v.toLowerCase() === "unknown") return "";
+      // Unknown/placeholder manufacturers are accepted using TAB weights.
+      if (isUnknownManufacturerValue(v)) return "";
       const knownLower = new Set(manufacturers.map((m) => m.toLowerCase()));
-      if (v.toLowerCase() === "other") return OTHER_REVIEW_FLAG_REASON;
       if (knownLower.has(v.toLowerCase())) return "";
       if (Object.keys(aliases).some((a) => a.toLowerCase() === v.toLowerCase())) return "";
       return MANUAL_UNKNOWN_FLAG_REASON;
@@ -834,8 +826,8 @@ export default function DepotFormPage() {
             if (canonical) normalizedMfr = canonical;
           } else {
             // Empty/placeholder manufacturers (blank, "N/A", "unknown",
-            // "Other", "-", "none"): default to "Unknown" + TAB weights and
-            // flag the row for Itinium review instead of blocking the import.
+            // "Other", "-", "none"): default to "Unknown" + TAB weights,
+            // without requiring manufacturer review.
             normalizedMfr = "Unknown";
             mfrAutoUnknown = true;
           }
@@ -904,7 +896,7 @@ export default function DepotFormPage() {
             weightManual: !!(colMap["estimatedWeightKg"] !== undefined && row[colMap["estimatedWeightKg"]]),
             notes: colMap["notes"] !== undefined ? row[colMap["notes"]] || "" : "",
             isLooseCells: !!(looseQty && parseInt(looseQty, 10) > 0),
-            manufacturerFlagReason: mfrAutoUnknown ? CSV_FLAG_REASON : "",
+            manufacturerFlagReason: "",
             cellModelFlagReason: normalizedCellType === "Other" ? OTHER_REVIEW_FLAG_REASON : "",
             voltageFlagReason: "",
             rowPhoto: "",
@@ -1005,7 +997,7 @@ export default function DepotFormPage() {
       const voltageApplies = !b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other";
       const mfrVal = b.manufacture.trim();
       // Empty manufacturers are auto-mapped to "Unknown" (TAB weights) at
-      // import time and flagged for Itinium review — never block on them.
+      // import time and accepted without manufacturer review.
       if (
         mfrVal &&
         mfrVal.toLowerCase() !== "unknown" &&
@@ -1087,8 +1079,8 @@ export default function DepotFormPage() {
           const voltageApplies = !b.isLooseCells && b.cellType !== "Blocs" && b.cellType !== "Other";
           let manufacturerFlagReason = b.manufacturerFlagReason;
           const mfrVal = b.manufacture.trim();
-          if (!mfrVal || mfrVal.toLowerCase() === "unknown") {
-            manufacturerFlagReason = CSV_FLAG_REASON;
+          if (isUnknownManufacturerValue(mfrVal)) {
+            manufacturerFlagReason = "";
           } else if (manufacturers.length > 0 && !knownManufacturers.has(mfrVal.toLowerCase())) {
             manufacturerFlagReason = CSV_UNKNOWN_FLAG_REASON;
           }
@@ -1276,7 +1268,7 @@ export default function DepotFormPage() {
 
     // Rows marked "Other" with no manufacturer name (and placeholder names
     // like "N/A" or "unknown") are treated as Unknown manufacturers: they use
-    // TAB weights and are flagged for Itinium review — never blocked.
+    // TAB weights without a manufacturer review requirement.
     const batteriesWithMfrFallback = batteries.map((b) => {
       const effRaw = b.manufacture === "Other" ? b.manufactureCustom : b.manufacture;
       if (
@@ -1288,7 +1280,7 @@ export default function DepotFormPage() {
           ...b,
           manufacture: "Unknown",
           manufactureCustom: "",
-          manufacturerFlagReason: b.manufacturerFlagReason || CSV_FLAG_REASON,
+          manufacturerFlagReason: "",
         };
       }
       return b;
@@ -1880,7 +1872,10 @@ export default function DepotFormPage() {
 
           <div className="divide-y divide-slate-100">
             {batteries.map((battery, index) => {
-              const hasAnyFlag = showReviewFeedback && (!!battery.manufacturerFlagReason || !!battery.cellModelFlagReason || !!battery.voltageFlagReason);
+              const hasAnyFlag = showReviewFeedback && (
+                (!!battery.manufacturerFlagReason && !isUnknownManufacturerValue(battery.manufacture))
+                || !!battery.cellModelFlagReason || !!battery.voltageFlagReason
+              );
               return (
               <div
                 key={battery.id}
@@ -2052,7 +2047,7 @@ export default function DepotFormPage() {
                         </button>
                       </div>
                     )}
-                    {showReviewFeedback && battery.manufacturerFlagReason && (
+                    {showReviewFeedback && battery.manufacturerFlagReason && !isUnknownManufacturerValue(battery.manufacture) && (
                       <div className="space-y-1">
                         {battery.manufacturerFlagReason === MANUAL_UNKNOWN_FLAG_REASON && battery.manufacturerSuggestion && (
                           <CorrectionPrompt
