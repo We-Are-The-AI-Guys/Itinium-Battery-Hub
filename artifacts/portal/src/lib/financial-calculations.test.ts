@@ -4,6 +4,7 @@ import {
   calculateCustomerLmeValue,
   calculateCustomerFinanceMasterValues,
   isCollectionLmeUsable,
+  resolveCollectionLmeDate,
   calculateGrossProfit,
   calculateNetProfit,
   calculatePercentageRate,
@@ -14,6 +15,17 @@ import {
 } from "./financial-calculations";
 
 describe("existing financial calculations", () => {
+  it("uses the CBL date when there is no confirmed collection date", () => {
+    expect(resolveCollectionLmeDate(null, "2026-09-18")).toBe("2026-09-18");
+    expect(resolveCollectionLmeDate("", "2026-09-18")).toBe("2026-09-18");
+  });
+
+  it("keeps confirmed collection dates authoritative", () => {
+    expect(resolveCollectionLmeDate("2026-08-20", "2026-09-18")).toBe("2026-08-20");
+    expect(resolveCollectionLmeDate("2026-08-20", null)).toBe("2026-08-20");
+    expect(resolveCollectionLmeDate(null, null)).toBe("");
+  });
+
   it("keeps the existing CBL LME calculation", () => {
     expect(calculateCblLmeValue("10", "1800", "75")).toBe("13500.00");
   });

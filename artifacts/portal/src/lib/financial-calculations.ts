@@ -112,6 +112,16 @@ export function calculateCustomerFinanceMasterValues(
   };
 }
 
+/** Confirmed collection dates take priority; CBL supplies the date otherwise.
+ * A proposed collection date alone is not an actual pricing date.
+ */
+export function resolveCollectionLmeDate(
+  collectionDate: string | null | undefined,
+  cblDate: string | null | undefined
+): string {
+  return collectionDate || cblDate || "";
+}
+
 export function isCollectionLmeUsable(
   status: "idle" | "loading" | "ready" | "unavailable",
   hasPrice: boolean,

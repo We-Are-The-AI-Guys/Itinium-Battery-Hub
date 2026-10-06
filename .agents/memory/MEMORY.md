@@ -12,3 +12,4 @@
 - [Shareable portal address](shareable-portal-address.md) — use the verified branded published portal domain for external sign-in links, not preview or the deployment's unrelated primary hostname.
 - [Cell designation identity](cell-designation-identity.md) — preserve the submitted model name; catalogue equivalence supports calculations and suggestions, not silent identity changes.
 - [Client upload review policy](client-upload-review-policy.md) — Itinium owns catalogue review; clients see genuine upload failures, not detailed review prompts.
+- [LME pricing date](lme-date-policy.md) — CBL dates supply pricing when no confirmed collection date exists; confirmed dates retain priority, and proposed dates alone do not set prices.

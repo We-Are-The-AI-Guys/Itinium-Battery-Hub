@@ -9,6 +9,7 @@ import {
   calculateCblLmeValue,
   calculateCustomerFinanceMasterValues,
   isCollectionLmeUsable,
+  resolveCollectionLmeDate,
   calculateGrossProfit,
   calculateNetProfit,
   calculatePercentageRate,
@@ -367,12 +368,14 @@ export default function JobDetailPage() {
     notes: "",
   });
   const siteDetailsSnapshotRef = useRef(siteDetails);
-  const collectionLmeUsable = isCollectionLmeUsable(
+  const lmeEffectiveDate = resolveCollectionLmeDate(job?.collectionDate, financials.cblDate);
+  const hasUnsavedCollectionDate = siteDetails.collectionDate !== collectionDetailsDate(job);
+  const collectionLmeUsable = !hasUnsavedCollectionDate && isCollectionLmeUsable(
     collectionLmeStatus,
     collectionLmePrice !== null,
     collectionLmeEffectiveDate,
-    job?.collectionDate || "",
-    siteDetails.collectionDate
+    lmeEffectiveDate,
+    lmeEffectiveDate
   );
   const [savingSiteDetails, setSavingSiteDetails] = useState(false);
   const [downloadingCollectionSheet, setDownloadingCollectionSheet] = useState(false);
@@ -654,7 +657,7 @@ export default function JobDetailPage() {
   }, [loadJob]);
 
   useEffect(() => {
-    const collectionDate = job?.collectionDate || "";
+    const collectionDate = lmeEffectiveDate;
     if (!collectionDate) {
       setCollectionLmePrice(null);
       setCollectionLmeEffectiveDate(null);
@@ -684,7 +687,7 @@ export default function JobDetailPage() {
         setCollectionLmeStatus("unavailable");
       });
     return () => controller.abort();
-  }, [job?.collectionDate]);
+  }, [lmeEffectiveDate]);
 
   async function handleDownloadInvoice() {
     if (!job) return;
@@ -946,7 +949,7 @@ export default function JobDetailPage() {
   }, [financials.totalInvoiceValue, financials.transportCost, financials.cblLmePrice]);
 
   useEffect(() => {
-    if (collectionLmeStatus !== "ready" || !collectionLmePrice) return;
+    if (!collectionLmeUsable || !collectionLmePrice) return;
     const customerLmeAverage = collectionLmePrice?.gbpPrice || "";
     const confirmedPbKg = receivedTotals.pbKg;
     const wasteTractionRate = calculatePercentageRate(financials.wasteSpotRate, financials.wasteTractionPercent);
@@ -978,7 +981,7 @@ export default function JobDetailPage() {
       netProfit,
     }));
   }, [
-    receivedTotals.pbKg, collectionLmePrice?.gbpPrice, collectionLmeStatus,
+    receivedTotals.pbKg, collectionLmePrice?.gbpPrice, collectionLmeUsable,
     financials.wasteSpotRate, financials.wasteTractionPercent,
     financials.wasteTractionTonnage,
     financials.wasteTransportCost, financials.wasteAdHocCosts,
@@ -1052,9 +1055,9 @@ export default function JobDetailPage() {
       toast({
         title: "Collection LME price unavailable",
         description:
-          siteDetails.collectionDate !== (job?.collectionDate || "")
+          hasUnsavedCollectionDate
             ? "Save the collection date before saving financial details."
-            : "A monthly LME price is required for the saved collection date.",
+            : "A monthly LME price is required for the collection or CBL date.",
         variant: "destructive",
       });
       return;
@@ -1940,7 +1943,7 @@ export default function JobDetailPage() {
                         />
                       </div>
                       <p className="mt-1.5 text-[11px] leading-4 text-slate-500">
-                        {siteDetails.collectionDate !== (job?.collectionDate || "")
+                        {hasUnsavedCollectionDate
                           ? "Save the changed collection date to apply its monthly LME price"
                           : collectionLmeStatus === "loading"
                           ? "Loading the LME price for the collection month…"
@@ -1949,10 +1952,10 @@ export default function JobDetailPage() {
                               day: "numeric",
                               month: "long",
                               year: "numeric",
-                            })} · based on collection date`
-                          : job?.collectionDate
-                          ? "No LME price is available for the collection month"
-                          : "Set a collection date to select the applicable LME price"}
+                            })} · based on ${job?.collectionDate ? "collection date" : "CBL date"}`
+                          : lmeEffectiveDate
+                          ? "No LME price is available for the collection / CBL month"
+                          : "Set a collection or CBL date to select the applicable LME price"}
                       </p>
                     </div>
                     <FinancialField label="Net Profit" value={collectionLmeUsable ? financials.netProfit : ""} onChange={() => {}} prefix="£" computed />
