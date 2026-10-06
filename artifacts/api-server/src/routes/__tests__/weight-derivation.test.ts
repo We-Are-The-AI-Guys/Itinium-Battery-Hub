@@ -90,6 +90,47 @@ describe("derivePbContentKg", () => {
 });
 
 describe("deriveTabGrossWeightKg", () => {
+  const tabCatalogue = [
+    { manufacturer: "TAB", modelName: "3PzS375", weightPerCellKg: "16.200", pbContentKgPerCell: "16.200", cellsCount: 3 },
+    { manufacturer: "TAB", modelName: "5PzS775", weightPerCellKg: "32.900", pbContentKgPerCell: "32.900", cellsCount: 5 },
+    { manufacturer: "TAB", modelName: "4PzS620", weightPerCellKg: "26.700", pbContentKgPerCell: "26.700", cellsCount: 4 },
+    { manufacturer: "TAB", modelName: "7PzS560", weightPerCellKg: "24.700", pbContentKgPerCell: "24.700", cellsCount: 7 },
+    { manufacturer: "TAB", modelName: "4PzS500", weightPerCellKg: "21.100", pbContentKgPerCell: "21.100", cellsCount: 4 },
+  ];
+
+  it.each([
+    ["3 EPzS 375", 24, "544.320"],
+    ["5 EPzS 775", 24, "1105.440"],
+    ["4 EPzS 620", 24, "897.120"],
+    ["7 EPzS 560", 24, "829.920"],
+    ["7 EPzS 560", 40, "1383.200"],
+    ["4 EPzS 500", 12, "354.480"],
+  ] as const)("recognises %s as its TAB PzS equivalent with %i actual cells", (model, cells, gross) => {
+    expect(deriveTabGrossWeightKg(tabCatalogue, model, cells)).toBe(gross);
+    const normalWeight = deriveEstimatedWeightKg(tabCatalogue, "Unknown", model, cells);
+    expect(Number(normalWeight) * 1.4).toBeCloseTo(Number(gross), 3);
+  });
+
+  it("ignores case, spacing and punctuation without changing the supplied model", () => {
+    const battery = Object.freeze({ cellType: " 5-ePzS-775 ", manufacture: "Exide / GNB" });
+    expect(deriveTabGrossWeightKg(tabCatalogue, battery.cellType, 24)).toBe("1105.440");
+    expect(battery.cellType).toBe(" 5-ePzS-775 ");
+    expect(battery.manufacture).toBe("Exide / GNB");
+  });
+
+  it("uses loose-cell quantity and applies the safety factor only once", () => {
+    expect(deriveTabGrossWeightKg(tabCatalogue, "5 EPzS 775", 13)).toBe("598.780");
+  });
+
+  it("does not substitute another capacity, family, suffix or manufacturer", () => {
+    expect(deriveTabGrossWeightKg(tabCatalogue, "4 EPzS 560", 24)).toBeNull();
+    expect(deriveTabGrossWeightKg(tabCatalogue, "5 EPzB 775", 24)).toBeNull();
+    expect(deriveTabGrossWeightKg(tabCatalogue, "5 EPzS 775 L", 24)).toBeNull();
+    expect(deriveTabGrossWeightKg(catalogue, "5 EPzS 775", 24)).toBeNull();
+    expect(deriveTabGrossWeightKg(tabCatalogue, "5 EPzS 775", null)).toBeNull();
+    expect(deriveTabGrossWeightKg(tabCatalogue, "5 EPzS 775", 0)).toBeNull();
+  });
+
   it("uses TAB even when the item has another manufacturer and applies the safe-load factor", () => {
     expect(deriveTabGrossWeightKg(catalogue, "5 EPzS 700", 24)).toBe("1041.600");
   });

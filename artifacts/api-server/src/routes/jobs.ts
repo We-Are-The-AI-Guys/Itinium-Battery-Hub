@@ -237,12 +237,14 @@ export function deriveTabGrossWeightKg(
   const cellStr = (cellType || "").trim();
   if (!cellStr || cellStr === "Blocs" || cellStr === "Other") return null;
   if (cellCount === null || !isFinite(cellCount) || cellCount <= 0) return null;
-  const normCell = normalizeCellKey(cellStr);
+  // Use the same equivalence as ordinary weight derivation (EPzS ↔ PzS),
+  // while keeping the saved designation intact and using TAB rates only.
+  const normCell = comparableCellModelKey(cellStr);
   const tabEntry = catalogue.find(
     (entry) =>
       entry.manufacturer.toLowerCase() === "tab" &&
       entry.weightPerCellKg != null &&
-      normalizeCellKey(entry.modelName) === normCell
+      comparableCellModelKey(entry.modelName) === normCell
   );
   if (!tabEntry) return null;
   const grossWeight = parseFloat(tabEntry.weightPerCellKg!) * cellCount * SAFE_LOAD_FACTOR;
