@@ -465,7 +465,7 @@ async function collectionCompanyUserIds(companyId: number): Promise<number[]> {
   return users.map((u) => u.id);
 }
 
-// New collection created — tell the assigned collection company so they can
+// Collection released by Itinium — tell the assigned collection company so they can
 // log in and assign a vehicle, driver, and collection date.
 export async function notifyCollectionCompanyNewJob(job: JobRef, companyId: number): Promise<void> {
   const userIds = await collectionCompanyUserIds(companyId);
@@ -473,7 +473,7 @@ export async function notifyCollectionCompanyNewJob(job: JobRef, companyId: numb
   const link = portalLink(`/collections`);
   const emailHtml = buildBrandedEmail(
     "New collection to schedule",
-    `<p style="color:#475569;margin:0 0 4px;">A new battery collection has been requested and needs a vehicle, driver, and collection date.</p>
+    `<p style="color:#475569;margin:0 0 4px;">Itinium has reviewed and submitted a battery collection for scheduling. Please check the collection weight, pallet count and any provisional-item notes in the portal before selecting a vehicle and driver.</p>
     ${jobTable(job)}
     ${ctaButton(link, "Schedule Collection")}
     <p style="color:#475569;margin:16px 0 0;font-size:13px;">Please log in to the portal to assign a vehicle and driver and propose a collection date.</p>`,

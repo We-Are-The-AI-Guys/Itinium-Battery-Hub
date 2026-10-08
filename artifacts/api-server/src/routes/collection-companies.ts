@@ -6,8 +6,10 @@ import {
   companyDriversTable,
   jobsTable,
   locationsTable,
+  jobBatteriesTable,
 } from "@workspace/db/schema";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, isNotNull } from "drizzle-orm";
+import { collectionReleaseSummary } from "../lib/collection-release";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { z } from "zod";
 import {
@@ -275,6 +277,7 @@ router.get(
         .where(
           and(
             eq(jobsTable.collectionCompanyId, companyId),
+            isNotNull(jobsTable.collectionReleasedAt),
             // Post-collection statuses stay visible so the company can upload
             // the signed paperwork and their statement after the collection.
             inArray(jobsTable.status, ["request", "confirmed", "received", "awaiting_invoice", "invoice", "completed"])
@@ -283,6 +286,8 @@ router.get(
         .orderBy(desc(jobsTable.submittedAt))
         .limit(200);
 
+      const collectionRows = jobs.length ? await db.select().from(jobBatteriesTable)
+        .where(inArray(jobBatteriesTable.jobId, jobs.map((job) => job.id))) : [];
       const locationIds = [...new Set(jobs.map((j) => j.locationId).filter((v): v is number => v != null))];
       const addresses = new Map<number, string>();
       if (locationIds.length > 0) {
@@ -297,6 +302,7 @@ router.get(
       res.json({
         jobs: jobs.map((j) => ({
           ...j,
+          ...collectionReleaseSummary(collectionRows.filter((row) => row.jobId === j.id)),
           siteAddress: j.collectionPoint || (j.locationId ? addresses.get(j.locationId) : null) || j.depot,
         })),
       });

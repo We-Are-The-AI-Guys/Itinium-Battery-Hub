@@ -72,6 +72,7 @@ interface LmePrice {
 }
 
 interface JobData {
+  collectionReleasedAt?: string | null;
   id: number;
   reference: string;
   clientName: string;
@@ -296,6 +297,7 @@ export default function JobDetailPage() {
   const [saving, setSaving] = useState(false);
   const [financialEditing, setFinancialEditing] = useState(false);
   const [autoConfirming, setAutoConfirming] = useState(false);
+  const [releasingCollection, setReleasingCollection] = useState(false);
   const [autofillingReview, setAutofillingReview] = useState(false);
   const [lmePrice, setLmePrice] = useState<LmePrice | null>(null);
   const [collectionLmePrice, setCollectionLmePrice] = useState<LmePrice | null>(null);
@@ -861,6 +863,31 @@ export default function JobDetailPage() {
     } finally {
       batteryAdminSaveRef.current = false;
       setSavingBatteryAdmin(false);
+    }
+  }
+
+  async function releaseCollection() {
+    if (batteryAdminSaveRef.current || savingReceiptRows || hasUnsavedChanges || !job) return;
+    if (!window.confirm("Submit this collection to CBL? Confirm that you have reviewed and saved the collection details, pallet numbers and items. Any provisional weights will be clearly marked for CBL and must have Itinium notes explaining what needs checking at collection.")) return;
+    batteryAdminSaveRef.current = true;
+    setSavingBatteryAdmin(true);
+    setReleasingCollection(true);
+    try {
+      const res = await fetch(`/api/jobs/${params.id}/release-collection`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmReviewed: true, acknowledgeProvisional: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Could not submit collection");
+      setJob(data.job);
+      toast({ title: "Submitted for collection", description: "The collection is now visible to CBL." });
+    } catch (error) {
+      toast({ title: "Collection not submitted", description: error instanceof Error ? error.message : "Please retry.", variant: "destructive" });
+    } finally {
+      batteryAdminSaveRef.current = false;
+      setSavingBatteryAdmin(false);
+      setReleasingCollection(false);
     }
   }
 
@@ -1822,6 +1849,19 @@ export default function JobDetailPage() {
                   </tbody>
                 </table>
               </div>
+              {canEditResolved && (
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 p-4">
+                  <div className="text-sm text-slate-700">
+                    {job.collectionReleasedAt ? "Submitted for collection — visible to CBL." : "Internal review — CBL cannot see this collection until you submit it."}
+                    {!job.collectionReleasedAt && <p className="mt-1 text-xs">Save your changes first. Provisional items need Itinium notes; CBL will see the warnings and notes.</p>}
+                  </div>
+                  <Button onClick={releaseCollection}
+                    disabled={!!job.collectionReleasedAt || releasingCollection || savingBatteryAdmin || savingReceiptRows || hasUnsavedChanges}
+                    data-testid="button-submit-for-collection">
+                    {releasingCollection ? "Submitting…" : job.collectionReleasedAt ? "Submitted for collection" : "Submit for collection"}
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </div>

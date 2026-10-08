@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { collectionReleaseSummary } from "../lib/collection-release";
 import { db } from "@workspace/db";
 import { jobsTable, jobBatteriesTable, cellModelsTable, batteryWeightReferenceTable, lmePricesTable, locationsTable, clientsTable, usersTable, jobDraftsTable, scheduleRescheduleLogTable, correctionAuditLogTable, collectionCompaniesTable } from "@workspace/db/schema";
 import { eq, sql, and, count, ilike, or, inArray, desc, asc, getTableColumns, type SQL } from "drizzle-orm";
@@ -1558,25 +1559,8 @@ router.post(
         notifyAdminsFlaggedBatteries(jobForNotify, flaggedCount).catch(() => {});
       }
 
-      // Assign the default (first active) collection company and let them
-      // know a new collection needs scheduling.
-      try {
-        const [defaultCompany] = await db
-          .select({ id: collectionCompaniesTable.id })
-          .from(collectionCompaniesTable)
-          .where(eq(collectionCompaniesTable.isActive, true))
-          .orderBy(collectionCompaniesTable.id)
-          .limit(1);
-        if (defaultCompany) {
-          await db
-            .update(jobsTable)
-            .set({ collectionCompanyId: defaultCompany.id })
-            .where(eq(jobsTable.id, result.job.id));
-          notifyCollectionCompanyNewJob(jobForNotify, defaultCompany.id).catch(() => {});
-        }
-      } catch (assignErr) {
-        console.error("Failed to assign collection company to new job:", assignErr);
-      }
+      // Itinium explicitly releases the reviewed collection before assignment
+      // or collector notifications. Client submission alone stays internal.
     } catch (error) {
       console.error("Job creation error:", error);
       const pgErr = (error as { cause?: { code?: string; detail?: string; constraint?: string } })?.cause
@@ -1684,6 +1668,55 @@ router.delete(
       if (error instanceof Error && error.message === "BATTERY_NOT_FOUND") return void res.status(404).json({ message: "Battery not found" });
       console.error("Remove job battery error:", error);
       res.status(500).json({ message: "Internal server error" });
+    }
+  }
+);
+
+router.post(
+  "/jobs/:id/release-collection",
+  requireAuth,
+  requireRole("accounts", "head_office_admin"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const jobId = Number(req.params.id);
+      if (!Number.isInteger(jobId) || jobId <= 0) {
+        res.status(400).json({ message: "Invalid job ID" }); return;
+      }
+      const result = await db.transaction(async (tx) => {
+        const [job] = await tx.select().from(jobsTable).where(eq(jobsTable.id, jobId)).for("update");
+        if (!job) return { error: "Job not found", status: 404 };
+        if (job.collectionReleasedAt) return { job, alreadyReleased: true };
+        if (!["request", "confirmed"].includes(job.status)) return { error: "This job cannot be released for collection", status: 400 };
+        const rows = await tx.select().from(jobBatteriesTable).where(eq(jobBatteriesTable.jobId, jobId)).for("update");
+        if (!rows.length) return { error: "Add the collection items before submitting", status: 400 };
+        const summary = collectionReleaseSummary(rows);
+        if (summary.missingPalletRows) return { error: "Enter a pallet number for each collection row so the collector has an accurate pallet count.", status: 400 };
+        if (summary.provisionalItems.some((item) => !item.notes.trim())) {
+          return { error: "Add Itinium notes to each provisional item explaining what CBL must check during collection.", status: 400 };
+        }
+        if (summary.provisionalItems.length && req.body.acknowledgeProvisional !== true) {
+          return { error: "Acknowledge the provisional-weight warning before submitting.", status: 400 };
+        }
+        if (rows.some((row) => !(Number(row.estimatedWeightKg) > 0))) {
+          return { error: "Every row needs a positive weight or token allowance before submission.", status: 400 };
+        }
+        if (req.body.confirmReviewed !== true) return { error: "Confirm that the collection details and table have been reviewed.", status: 400 };
+        const [company] = await tx.select().from(collectionCompaniesTable)
+          .where(eq(collectionCompaniesTable.isActive, true)).orderBy(asc(collectionCompaniesTable.id)).limit(1);
+        if (!company) return { error: "No active collection company is configured.", status: 400 };
+        const [released] = await tx.update(jobsTable).set({
+          collectionCompanyId: company.id,
+          collectionReleasedAt: new Date(),
+          ...(job.tonnageManualOverride ? {} : { tonnage: calculateCollectionTonnage(rows) }),
+        }).where(eq(jobsTable.id, jobId)).returning();
+        return { job: released, alreadyReleased: false };
+      });
+      if ("error" in result) { res.status(result.status!).json({ message: result.error }); return; }
+      if (!result.alreadyReleased) await notifyCollectionCompanyNewJob(result.job, result.job.collectionCompanyId!);
+      res.json({ job: result.job, alreadyReleased: result.alreadyReleased });
+    } catch (error) {
+      console.error("Collection release error:", error);
+      res.status(500).json({ message: "Could not submit this collection. Please reload to check its status before retrying." });
     }
   }
 );

@@ -81,6 +81,19 @@ async function bootstrap() {
     await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS collection_company_id INTEGER REFERENCES collection_companies(id)`);
     await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS proposed_collection_date DATE`);
     await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS schedule_status VARCHAR(30) NOT NULL DEFAULT 'unassigned'`);
+    await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS collection_released_at TIMESTAMP`);
+    // Preserve collections already being scheduled/carried out. Unreleased
+    // requests must have no collector assignment (also gates direct access).
+    await db.execute(sql`
+      UPDATE jobs SET collection_released_at = NOW()
+      WHERE collection_released_at IS NULL AND collection_company_id IS NOT NULL
+        AND (schedule_status IN ('proposed', 'confirmed')
+          OR status IN ('received', 'awaiting_invoice', 'invoice', 'completed'))
+    `);
+    await db.execute(sql`
+      UPDATE jobs SET collection_company_id = NULL
+      WHERE collection_released_at IS NULL AND collection_company_id IS NOT NULL
+    `);
 
     // Seed CBL with its current fleet the first time (per Ingrid, 11 Aug).
     const existing = await db.execute(sql`SELECT id FROM collection_companies LIMIT 1`);

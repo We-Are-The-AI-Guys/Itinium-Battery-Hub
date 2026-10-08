@@ -69,6 +69,7 @@ export const jobsTable = pgTable("jobs", {
   // a driver/vehicle/date; Itinium confirms (possibly adjusting the date).
   // schedule_status: unassigned -> proposed -> confirmed
   collectionCompanyId: integer("collection_company_id"),
+  collectionReleasedAt: timestamp("collection_released_at"),
   proposedCollectionDate: date("proposed_collection_date"),
   scheduleStatus: varchar("schedule_status", { length: 30 }).notNull().default("unassigned"),
   siteContacts: text("site_contacts"),

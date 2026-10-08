@@ -35,6 +35,9 @@ import { JOB_NOTES_DESCRIPTION } from "@/lib/collection-notes-copy";
 import { NotificationBell } from "@/components/notification-panel";
 
 interface CollectionJob {
+  palletCount: number;
+  missingPalletRows: number;
+  provisionalItems: Array<{ id: number; palletNumber: string | null; cellType: string | null; notes: string }>;
   id: number;
   reference: string;
   clientName: string;
@@ -336,7 +339,7 @@ export default function CollectionsPage() {
                           </Badge>
                         </div>
                         <p className="text-sm text-[#64748b] mt-1">
-                          {job.clientName} — {job.depot} · {parseFloat(job.tonnage).toFixed(3)}t
+                          {job.clientName} — {job.depot} · {parseFloat(job.tonnage).toFixed(3)}t · {job.palletCount} pallets
                         </p>
                       </div>
                       {job.scheduleStatus !== "confirmed" ? (
@@ -374,6 +377,18 @@ export default function CollectionsPage() {
                           <p className="text-slate-700">{job.siteContacts || "—"}</p>
                         </div>
                       </div>
+                      {!!job.provisionalItems?.length && (
+                        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                          <p className="font-semibold">Provisional weight included — check these items during collection</p>
+                          {job.provisionalItems.map((item) => (
+                            <p key={item.id} className="mt-2 whitespace-pre-wrap">
+                              <strong>Pallet {item.palletNumber || "not specified"} · {item.cellType || "Model to identify"}:</strong>{" "}
+                              {item.notes || "Identification required at collection."}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      {!!job.missingPalletRows && <p className="text-sm text-amber-800">{job.missingPalletRows} rows have no pallet number; the pallet count includes identified pallets only.</p>}
                       {job.specialInstructions && (
                         <div className="flex items-start gap-2 sm:col-span-2 lg:col-span-3">
                           <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
