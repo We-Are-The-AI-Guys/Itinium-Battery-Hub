@@ -22,6 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SidebarLayout } from "@/components/sidebar-layout";
+import { formatCustomerPbWeight } from "@/lib/customer-pb-weight";
 
 interface DashboardStats {
   pendingJobs: number;
@@ -44,6 +45,8 @@ interface Job {
   depot: string;
   submittedAt: string;
   tonnage: string;
+  customerTractionTonnage: string | null;
+  customerBlocsTonnage: string | null;
   status: string;
   calculatedValue: string | null;
   invoiceStatus: string | null;
@@ -455,7 +458,9 @@ export default function AdminDashboardPage() {
                 <th className="px-6 py-4 font-semibold">Client Name</th>
                 <th className="px-6 py-4 font-semibold">Depot</th>
                 <th className="px-6 py-4 font-semibold">Date Submitted</th>
-                <th className="px-6 py-4 font-semibold">Tonnage</th>
+                <th className="px-6 py-4 font-semibold">
+                  {dashboardTab === "financial" ? "Customer Pb weight (t)" : "Tonnage"}
+                </th>
                 <th className="px-6 py-4 font-semibold">Status</th>
                 <th className="px-6 py-4 font-semibold">Invoice</th>
                 <th className="px-6 py-4 font-semibold text-right">Actions</th>
@@ -478,7 +483,9 @@ export default function AdminDashboardPage() {
                     {formatDate(job.submittedAt)}
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">
-                    {parseFloat(job.tonnage).toFixed(1)}t
+                    {dashboardTab === "financial"
+                      ? formatCustomerPbWeight(job.customerTractionTonnage, job.customerBlocsTonnage)
+                      : `${parseFloat(job.tonnage).toFixed(1)}t`}
                   </td>
                   <td className="px-6 py-4">
                     <Badge
