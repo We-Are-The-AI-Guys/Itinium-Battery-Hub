@@ -2470,42 +2470,6 @@ export default function DepotFormPage() {
                     </div>
                   )}
 
-                  {showReviewFeedback && <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-600">
-                      Estimated Weight (kg)
-                    </label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.001"
-                      placeholder="Calculated or enter manually"
-                      className="h-10 bg-slate-50 border-slate-200 text-sm text-[#1e293b] focus-visible:ring-[#0ea5e9]"
-                      value={battery.estimatedWeightKg}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setBatteries((prev) =>
-                          prev.map((b) =>
-                            b.id === battery.id
-                              ? {
-                                  ...b,
-                                  estimatedWeightKg: value,
-                                  weightManual: value.trim() !== "",
-                                }
-                              : b
-                          )
-                        );
-                      }}
-                      data-testid={`input-estimated-weight-${index}`}
-                    />
-                    <p className="text-[10px] text-slate-400">
-                      {battery.weightManual
-                        ? showReviewFeedback
-                          ? "Manual/token weight; Itinium can confirm it after collection."
-                          : "Entered manually."
-                        : "Calculated automatically when catalogue details are available."}
-                    </p>
-                  </div>}
-
                   <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
                     <label className="text-xs font-medium text-slate-600">
                       Notes

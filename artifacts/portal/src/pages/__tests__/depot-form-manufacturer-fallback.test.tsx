@@ -290,6 +290,24 @@ describe("rows that contribute no weight", () => {
 });
 
 describe("CSV review feedback by role", () => {
+  it.each(["depot_user", "team_leader", "accounts", "head_office_admin"])(
+    "never exposes the per-battery estimated-weight input on the request form for %s",
+    async (role) => {
+      userRole = role;
+      renderPage();
+      await screen.findByTestId("button-upload-csv");
+      await uploadCsvViaButton([
+        "Pallet Number,Asset No,Battery Serial,Manufacturer,Cell Type,Voltage",
+        "P1,ASSET-W,SER-W,Hawker,4PzS460,24",
+      ].join("\n"));
+      await screen.findByText("CSV imported");
+      await waitFor(() => expect(screen.getAllByText(/0\.334t/).length).toBeGreaterThan(0));
+      expect(screen.queryByText("Estimated Weight (kg)")).not.toBeInTheDocument();
+      expect(screen.queryByPlaceholderText("Calculated or enter manually")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("input-estimated-weight-0")).not.toBeInTheDocument();
+    },
+  );
+
   const reviewCsv = [
     "Pallet Number,Asset No,Battery Serial,Manufacturer,Cell Type,Voltage",
     "P1,ASSET-OK,SER-OK,Hawker,4PzS460,24",
