@@ -1,13 +1,22 @@
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
 import { db } from "@workspace/db";
-import { usersTable, clientsTable, locationsTable, sessionsTable } from "@workspace/db/schema";
+import { usersTable, clientsTable, locationsTable, sessionsTable, userLocationsTable } from "@workspace/db/schema";
+import { userLocationIds } from "../lib/user-memberships";
 import { eq, sql, and, ilike, or } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { z } from "zod";
 
 const router: IRouter = Router();
+
+function managedUserScope(user: NonNullable<AuthenticatedRequest["user"]>) {
+  const ids = user.permittedLocationIds ?? [];
+  if (!ids.length || !user.clientId) return sql`false`;
+  return sql`${usersTable.clientId} = ${user.clientId} AND ${usersTable.role} = 'depot_user'
+    AND EXISTS (SELECT 1 FROM user_locations ul WHERE ul.user_id = ${usersTable.id})
+    AND NOT EXISTS (SELECT 1 FROM user_locations ul WHERE ul.user_id = ${usersTable.id} AND ul.location_id NOT IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)}))`;
+}
 
 router.get(
   "/users/stats",
@@ -21,7 +30,7 @@ router.get(
         return;
       }
       const clientFilter = isTeamLeader
-        ? sql`AND client_id = ${req.user!.clientId}`
+        ? sql`AND ${managedUserScope(req.user!)}`
         : sql``;
 
       const result = await db.execute(sql`
@@ -63,6 +72,7 @@ router.get(
           return;
         }
         conditions.push(eq(usersTable.clientId, req.user!.clientId));
+        conditions.push(managedUserScope(req.user!));
       }
 
       if (role && role !== "all") {
@@ -117,7 +127,7 @@ router.get(
           const [l] = await db.select({ name: locationsTable.name }).from(locationsTable).where(eq(locationsTable.id, u.locationId));
           if (l) locationName = l.name;
         }
-        enrichedUsers.push({ ...u, clientName, locationName });
+        enrichedUsers.push({ ...u, clientName, locationName, permittedLocationIds: await userLocationIds(u.id, u.clientId) });
       }
 
       res.json({ users: enrichedUsers, total: count });
@@ -129,6 +139,7 @@ router.get(
 );
 
 const createUserSchema = z.object({
+  permittedLocationIds: z.array(z.number().int().positive()).optional(),
   fullName: z.string().min(1),
   email: z.string().email(),
   role: z.enum(["depot_user", "team_leader", "accounts", "head_office_admin", "collection_company"]),
@@ -193,9 +204,15 @@ router.post(
         return;
       }
 
-      if (role === "depot_user" && !locationId) {
-        res.status(400).json({ message: "Location is required for Depot User role" });
-        return;
+      const permittedIds = [...new Set(parsed.data.permittedLocationIds ?? (locationId ? [locationId] : []))];
+      for (const id of permittedIds) {
+        const [loc] = await db.select().from(locationsTable).where(eq(locationsTable.id, id));
+        if (!loc || loc.clientId !== clientId || (req.user!.role === "team_leader" && !req.user!.permittedLocationIds?.includes(id))) {
+          res.status(403).json({ message: "Cannot grant access to this location" }); return;
+        }
+      }
+      if (locationId && !permittedIds.includes(locationId)) {
+        res.status(400).json({ message: "Default location must be a permitted location" }); return;
       }
 
       if (locationId && !clientId) {
@@ -235,7 +252,8 @@ router.post(
       const tempPassword = password || crypto.randomBytes(12).toString("base64url");
       const passwordHash = await bcrypt.hash(tempPassword, 10);
 
-      const [user] = await db
+      const user = await db.transaction(async tx => {
+      const [created] = await tx
         .insert(usersTable)
         .values({
           fullName,
@@ -260,7 +278,10 @@ router.post(
           createdAt: usersTable.createdAt,
         });
 
-      res.status(201).json({ user, tempPassword });
+      if (permittedIds.length) await tx.insert(userLocationsTable).values(permittedIds.map(locationId => ({ userId: created.id, locationId })));
+      return created;
+      });
+      res.status(201).json({ user: { ...user, permittedLocationIds: permittedIds }, tempPassword });
     } catch (error) {
       console.error("Create user error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -301,6 +322,10 @@ router.patch(
           res.status(403).json({ message: "Access denied" });
           return;
         }
+        const ids = await userLocationIds(userId, target.clientId);
+        if (!ids.length || ids.some(id => !req.user!.permittedLocationIds?.includes(id))) {
+          res.status(403).json({ message: "User is outside your permitted locations" }); return;
+        }
       }
 
       const passwordHash = await bcrypt.hash(password, 10);
@@ -318,6 +343,7 @@ router.patch(
 );
 
 const updateUserSchema = z.object({
+  permittedLocationIds: z.array(z.number().int().positive()).optional(),
   fullName: z.string().min(1).optional(),
   role: z.enum(["depot_user", "team_leader", "accounts", "head_office_admin", "collection_company"]).optional(),
   collectionCompanyId: z.number().nullable().optional(),
@@ -370,6 +396,25 @@ router.patch(
         return;
       }
 
+      const [membershipTarget] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+      if (!membershipTarget) { res.status(404).json({ message: "User not found" }); return; }
+      const oldIds = await userLocationIds(userId, membershipTarget.clientId);
+      if (req.user!.role === "team_leader" && (!oldIds.length || oldIds.some(id => !req.user!.permittedLocationIds?.includes(id)))) {
+        res.status(403).json({ message: "User is outside your permitted locations" }); return;
+      }
+      const nextClient = req.user!.role === "head_office_admin" && parsed.data.clientId !== undefined ? parsed.data.clientId : membershipTarget.clientId;
+      const permittedIds = [...new Set(parsed.data.permittedLocationIds ?? (nextClient !== membershipTarget.clientId ? [] : oldIds))];
+      for (const id of permittedIds) {
+        const [loc] = await db.select().from(locationsTable).where(eq(locationsTable.id, id));
+        if (!loc || loc.clientId !== nextClient || (req.user!.role === "team_leader" && !req.user!.permittedLocationIds?.includes(id))) {
+          res.status(403).json({ message: "Cannot grant access to this location" }); return;
+        }
+      }
+      const requestedDefault = parsed.data.locationId === undefined ? membershipTarget.locationId : parsed.data.locationId;
+      if (parsed.data.locationId && !permittedIds.includes(parsed.data.locationId)) {
+        res.status(400).json({ message: "Default location must be a permitted location" }); return;
+      }
+      if (requestedDefault && !permittedIds.includes(requestedDefault)) parsed.data.locationId = null;
       const updates: Record<string, unknown> = {};
       if (parsed.data.fullName !== undefined) updates.fullName = parsed.data.fullName;
       if (parsed.data.role !== undefined) updates.role = parsed.data.role;
@@ -438,17 +483,19 @@ router.patch(
           updates.depot = loc.name;
         } else {
           updates.locationId = null;
+          updates.depot = null;
         }
       }
 
-      if (Object.keys(updates).length === 0) {
+      if (Object.keys(updates).length === 0 && parsed.data.permittedLocationIds === undefined) {
         res.status(400).json({ message: "No fields to update" });
         return;
       }
 
-      const [user] = await db
+      const user = await db.transaction(async tx => {
+      const [updated] = await tx
         .update(usersTable)
-        .set(updates)
+        .set(Object.keys(updates).length ? updates : { fullName: membershipTarget.fullName })
         .where(eq(usersTable.id, userId))
         .returning({
           id: usersTable.id,
@@ -462,12 +509,16 @@ router.patch(
           createdAt: usersTable.createdAt,
         });
 
+      await tx.delete(userLocationsTable).where(eq(userLocationsTable.userId, userId));
+      if (permittedIds.length) await tx.insert(userLocationsTable).values(permittedIds.map(locationId => ({ userId, locationId })));
+      return updated;
+      });
       if (!user) {
         res.status(404).json({ message: "User not found" });
         return;
       }
 
-      res.json({ user });
+      res.json({ user: { ...user, permittedLocationIds: permittedIds } });
     } catch (error) {
       console.error("Update user error:", error);
       res.status(500).json({ message: "Internal server error" });

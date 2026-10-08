@@ -6,6 +6,8 @@ import { usersTable } from "./users";
 export const stillageMovementsTable = pgTable("stillage_movements", {
   id: serial("id").primaryKey(),
   depot: varchar("depot", { length: 255 }).notNull(),
+  clientId: integer("client_id"),
+  locationId: integer("location_id"),
   movementDate: date("movement_date").notNull(),
   collected: integer("collected").notNull().default(0),
   droppedOff: integer("dropped_off").notNull().default(0),

@@ -1,5 +1,7 @@
 import { db } from "@workspace/db";
-import { notificationsTable, usersTable } from "@workspace/db/schema";
+import { notificationsTable, usersTable, jobsTable, userLocationsTable } from "@workspace/db/schema";
+import { userLocationIds } from "./user-memberships";
+import { isClientUser, mayAccessDepot } from "./depot-access";
 import { eq, inArray, and, lt } from "drizzle-orm";
 import { Resend } from "resend";
 import { buildBrandedEmail } from "./email";
@@ -90,6 +92,7 @@ export type JobRef = {
 };
 
 export type NotificationPayload = {
+  jobId?: number;
   type: string;
   title: string;
   body: string;
@@ -104,9 +107,20 @@ export async function dispatchNotification(
   userId: number,
   payload: NotificationPayload
 ): Promise<void> {
+  const [recipient] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!recipient?.isActive) return;
+  // Resolve legacy callers' exact job reference; never guess a depot from text.
+  const reference = `${payload.title} ${payload.body}`.match(/\bJOB-\d{4}-\d{5}\b/)?.[0];
+  const linkedId = payload.jobId ?? Number(payload.link?.match(/^\/jobs\/(\d+)/)?.[1]);
+  const [job] = linkedId || reference ? await db.select().from(jobsTable)
+    .where(linkedId ? eq(jobsTable.id, linkedId) : eq(jobsTable.reference, reference!)) : [];
+  if (isClientUser(recipient) && (!job || !mayAccessDepot({
+    ...recipient, permittedLocationIds: await userLocationIds(recipient.id, recipient.clientId),
+  }, job))) return;
   try {
     await db.insert(notificationsTable).values({
       userId,
+      jobId: job?.id ?? null,
       type: payload.type,
       title: payload.title,
       body: payload.body,
@@ -162,8 +176,18 @@ async function deliverRequiredDocument(
   const result: DocumentDeliveryResult = { sent: [], failed: [] };
   for (const recipient of recipients) {
     try {
+      const [user] = await db.select().from(usersTable).where(eq(usersTable.id, recipient.id));
+      if (!user?.isActive) throw new Error("Recipient account is inactive");
+      const ref = `${payload.title} ${payload.body}`.match(/\bJOB-\d{4}-\d{5}\b/)?.[0];
+      const id = payload.jobId ?? Number(payload.link?.match(/^\/jobs\/(\d+)/)?.[1]);
+      const [job] = id || ref ? await db.select().from(jobsTable)
+        .where(id ? eq(jobsTable.id, id) : eq(jobsTable.reference, ref!)) : [];
+      if (isClientUser(user) && (!job || !mayAccessDepot({ ...user,
+        permittedLocationIds: await userLocationIds(user.id, user.clientId),
+      }, job))) throw new Error("Recipient no longer has access to this job");
       await db.insert(notificationsTable).values({
         userId: recipient.id,
+        jobId: job?.id ?? null,
         type: payload.type,
         title: payload.title,
         body: payload.body,
@@ -279,25 +303,24 @@ export async function recipientsForJob(job: JobRef): Promise<RecipientsForJob> {
   const submitterAndTeamLeaderIds = new Set<number>();
   if (job.submittedById) {
     submitterAndTeamLeaderIds.add(job.submittedById);
-    const submitter = await db
-      .select({ clientId: usersTable.clientId })
-      .from(usersTable)
-      .where(eq(usersTable.id, job.submittedById))
-      .then((rows) => rows[0] ?? null);
-    if (submitter?.clientId) {
+  }
+  const [ownedJob] = await db.select({ clientId: jobsTable.clientId, locationId: jobsTable.locationId })
+    .from(jobsTable).where(eq(jobsTable.id, job.id));
+    if (ownedJob?.clientId && ownedJob.locationId) {
       const teamLeaders = await db
         .select({ id: usersTable.id })
         .from(usersTable)
+        .innerJoin(userLocationsTable, eq(userLocationsTable.userId, usersTable.id))
         .where(
           and(
-            eq(usersTable.clientId, submitter.clientId),
+            eq(usersTable.clientId, ownedJob.clientId),
+            eq(userLocationsTable.locationId, ownedJob.locationId),
             eq(usersTable.role, "team_leader"),
             eq(usersTable.isActive, true)
           )
         );
       for (const tl of teamLeaders) submitterAndTeamLeaderIds.add(tl.id);
     }
-  }
 
   return {
     adminIds,

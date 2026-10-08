@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 
 interface UserData {
+  permittedLocationIds: number[];
   id: number;
   email: string;
   fullName: string;
@@ -98,6 +99,8 @@ function getInitials(name: string) {
 const USERS_PER_PAGE = 10;
 
 export default function UserManagementPage() {
+  const [newPermittedIds, setNewPermittedIds] = useState<number[]>([]);
+  const [editPermittedIds, setEditPermittedIds] = useState<number[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [users, setUsers] = useState<UserData[]>([]);
@@ -252,6 +255,7 @@ export default function UserManagementPage() {
   }, [isTeamLeader, currentUser?.clientId]);
 
   async function handleNewUserClientChange(clientIdStr: string) {
+    setNewPermittedIds([]);
     setNewUser((prev) => ({ ...prev, clientId: clientIdStr, locationId: "" }));
     if (clientIdStr) {
       const locs = await fetchLocationsForClient(parseInt(clientIdStr));
@@ -270,7 +274,6 @@ export default function UserManagementPage() {
 
     const role = newUser.role;
     const needsClient = role === "depot_user" || role === "team_leader";
-    const needsLocation = role === "depot_user";
 
     let clientId: number | null = null;
     let locationId: number | null = null;
@@ -285,10 +288,6 @@ export default function UserManagementPage() {
 
     if (needsClient && !clientId) {
       setFormError("Client is required for this role");
-      return;
-    }
-    if (needsLocation && !locationId) {
-      setFormError("Location is required for Depot User role");
       return;
     }
     if (role === "collection_company" && !newUser.collectionCompanyId) {
@@ -308,6 +307,7 @@ export default function UserManagementPage() {
           role: newUser.role,
           clientId,
           locationId,
+          permittedLocationIds: needsClient ? newPermittedIds : [],
           collectionCompanyId: newUser.collectionCompanyId ? parseInt(newUser.collectionCompanyId) : null,
         }),
       });
@@ -315,6 +315,7 @@ export default function UserManagementPage() {
         const data = await res.json();
         setCreatedTempPassword(data.tempPassword || null);
         setNewUser({ fullName: "", email: "", role: "", clientId: "", locationId: "", collectionCompanyId: "" });
+        setNewPermittedIds([]);
         fetchUsers();
         fetchStats();
       } else {
@@ -393,6 +394,7 @@ export default function UserManagementPage() {
   }
 
   async function openEditModal(user: UserData) {
+    setEditPermittedIds(user.permittedLocationIds ?? []);
     setEditingUser(user);
     const clientIdStr = user.clientId ? String(user.clientId) : "";
     const locationIdStr = user.locationId ? String(user.locationId) : "";
@@ -408,6 +410,7 @@ export default function UserManagementPage() {
   }
 
   async function handleEditClientChange(clientIdStr: string) {
+    setEditPermittedIds([]);
     setEditForm((prev) => ({ ...prev, clientId: clientIdStr, locationId: "" }));
     if (clientIdStr) {
       const locs = await fetchLocationsForClient(parseInt(clientIdStr));
@@ -436,7 +439,7 @@ export default function UserManagementPage() {
 
     setSaving(true);
     try {
-      const body: Record<string, unknown> = { fullName: editForm.fullName };
+      const body: Record<string, unknown> = { fullName: editForm.fullName, permittedLocationIds: ["team_leader", "depot_user"].includes(editForm.role) ? editPermittedIds : [] };
 
       if (isAdmin) {
         body.role = editForm.role;
@@ -645,7 +648,7 @@ export default function UserManagementPage() {
                         <td className="px-6 py-4 text-slate-600">{user.clientName || "Head Office"}</td>
                       )}
                       {showLocationColumn && (
-                        <td className="px-6 py-4 text-slate-600">{user.locationName || user.depot || "-"}</td>
+                        <td className="px-6 py-4 text-slate-600">{user.locationName || "No default"}<div className="text-xs">{user.permittedLocationIds?.length || 0} permitted locations</div></td>
                       )}
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1.5">
@@ -882,8 +885,17 @@ export default function UserManagementPage() {
 
                     {needsLocationForNewUser && (
                       <div className="grid gap-2">
+                        <label className="text-sm font-medium">Permitted locations</label>
+                        <select multiple aria-label="Permitted locations" className="border rounded p-2" value={newPermittedIds.map(String)} onChange={e => {
+                          const ids = Array.from(e.target.selectedOptions, option => Number(option.value));
+                          setNewPermittedIds(ids);
+                          if (!ids.includes(Number(newUser.locationId))) setNewUser(prev => ({ ...prev, locationId: "" }));
+                        }}>
+                          {locationOptions.filter(l => l.clientId === Number(isTeamLeader ? currentUser?.clientId : newUser.clientId)).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                        </select>
+                        <p className="text-xs text-slate-500">Select one or more sites (Ctrl/Cmd-click). No sites means no depot data access.</p>
                         <label className="text-sm font-medium text-slate-700">
-                          Default location {newUser.role === "depot_user" && <span className="text-red-500">*</span>}
+                          Default location (optional)
                         </label>
                         <div className="relative">
                           <select
@@ -892,7 +904,7 @@ export default function UserManagementPage() {
                             onChange={(e) => setNewUser({ ...newUser, locationId: e.target.value })}
                           >
                             <option value="">Select a location...</option>
-                            {locationOptions.filter(l => l.clientId === Number(isTeamLeader ? currentUser?.clientId : newUser.clientId)).map((l) => (
+                            {locationOptions.filter(l => newPermittedIds.includes(l.id) && l.clientId === Number(isTeamLeader ? currentUser?.clientId : newUser.clientId)).map((l) => (
                               <option key={l.id} value={l.id}>{l.name}</option>
                             ))}
                           </select>
@@ -931,6 +943,19 @@ export default function UserManagementPage() {
             <div className="p-6 space-y-5">
               {editError && (
                 <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">{editError}</div>
+              )}
+              {["depot_user", "team_leader"].includes(editForm.role) && (
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Permitted locations</label>
+                  <select multiple aria-label="Permitted locations" className="border rounded p-2" value={editPermittedIds.map(String)} onChange={e => {
+                    const ids = Array.from(e.target.selectedOptions, option => Number(option.value));
+                    setEditPermittedIds(ids);
+                    if (!ids.includes(Number(editForm.locationId))) setEditForm(prev => ({ ...prev, locationId: "" }));
+                  }}>
+                    {editLocationOptions.filter(l => l.clientId === Number(editForm.clientId)).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                  <p className="text-xs text-slate-500">Select one or more sites (Ctrl/Cmd-click). No sites means no depot data access.</p>
+                </div>
               )}
 
               <div className="space-y-4">
@@ -1000,7 +1025,7 @@ export default function UserManagementPage() {
                             onChange={(e) => setEditForm({ ...editForm, locationId: e.target.value })}
                           >
                             <option value="">Select a location...</option>
-                            {editLocationOptions.filter(l => l.clientId === Number(editForm.clientId)).map((l) => (
+                            {editLocationOptions.filter(l => editPermittedIds.includes(l.id) && l.clientId === Number(editForm.clientId)).map((l) => (
                               <option key={l.id} value={l.id}>{l.name}</option>
                             ))}
                           </select>
@@ -1021,7 +1046,7 @@ export default function UserManagementPage() {
                         onChange={(e) => setEditForm({ ...editForm, locationId: e.target.value })}
                       >
                         <option value="">Select a location...</option>
-                        {locationOptions.map((l) => (
+                        {locationOptions.filter(l => editPermittedIds.includes(l.id)).map((l) => (
                           <option key={l.id} value={l.id}>{l.name}</option>
                         ))}
                       </select>

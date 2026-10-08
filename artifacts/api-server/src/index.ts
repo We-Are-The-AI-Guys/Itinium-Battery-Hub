@@ -6,6 +6,30 @@ import bcrypt from "bcrypt";
 import { CELL_MODEL_DATA } from "@workspace/db/data/cell-models";
 
 async function bootstrap() {
+  // Security migration must succeed before the server starts. The marker
+  // prevents a later restart from re-granting a deliberately revoked site.
+  await db.transaction(async tx => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('depot_membership_migration'))`);
+    await tx.execute(sql`CREATE TABLE IF NOT EXISTS access_migrations (name text PRIMARY KEY)`);
+    await tx.execute(sql`CREATE TABLE IF NOT EXISTS user_locations (
+      user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      location_id integer NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+      PRIMARY KEY (user_id, location_id)
+    )`);
+    await tx.execute(sql`INSERT INTO user_locations (user_id, location_id)
+      SELECT u.id, l.id FROM users u JOIN locations l ON l.id=u.location_id AND l.client_id=u.client_id
+      WHERE u.role IN ('depot_user','team_leader')
+        AND NOT EXISTS (SELECT 1 FROM access_migrations WHERE name='explicit_depot_memberships')
+      ON CONFLICT DO NOTHING`);
+    await tx.execute(sql`INSERT INTO access_migrations(name) VALUES ('explicit_depot_memberships') ON CONFLICT DO NOTHING`);
+    await tx.execute(sql`UPDATE users u SET location_id=NULL, depot=NULL
+      WHERE u.role IN ('depot_user','team_leader') AND u.location_id IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM user_locations ul JOIN locations l ON l.id=ul.location_id
+        WHERE ul.user_id=u.id AND ul.location_id=u.location_id AND l.client_id=u.client_id)`);
+    await tx.execute(sql`ALTER TABLE notifications ADD COLUMN IF NOT EXISTS job_id integer`);
+    await tx.execute(sql`ALTER TABLE stillage_movements ADD COLUMN IF NOT EXISTS client_id integer`);
+    await tx.execute(sql`ALTER TABLE stillage_movements ADD COLUMN IF NOT EXISTS location_id integer`);
+  });
   try {
     await db.execute(sql`CREATE SEQUENCE IF NOT EXISTS pallet_number_seq START WITH 1 INCREMENT BY 1`);
   } catch (err) {

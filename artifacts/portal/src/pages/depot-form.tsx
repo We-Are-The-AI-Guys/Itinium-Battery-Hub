@@ -1790,6 +1790,7 @@ export default function DepotFormPage() {
                 <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
               <p className="text-xs text-slate-500">Choose a location for this collection. This does not change your saved default.</p>
+              {clientLocations.length === 0 && <p role="alert" className="text-sm text-amber-700">No permitted locations are available. Ask your administrator to assign your account a location.</p>}
             </div>
           )}
 

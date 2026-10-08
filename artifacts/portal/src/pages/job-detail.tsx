@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { JobOwnership } from "@/components/job-ownership";
 import {
   rankCellTypeSuggestions,
   manufacturerMatches,
@@ -1503,6 +1504,7 @@ export default function JobDetailPage() {
   return (
     <SidebarLayout title={job.reference} subtitle={`${job.clientName} — ${job.depot}`}>
       <div className="space-y-6">
+        {userRole === "head_office_admin" && <JobOwnership jobId={job.id} />}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
             <button

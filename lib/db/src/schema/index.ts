@@ -1,6 +1,7 @@
 export * from "./clients";
 export * from "./locations";
 export * from "./users";
+export * from "./user-locations";
 export * from "./jobs";
 export * from "./lme-prices";
 export * from "./stillages";

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { clientsTable, locationsTable, usersTable } from "@workspace/db/schema";
-import { eq, sql, ilike, or, and } from "drizzle-orm";
+import { eq, sql, ilike, or, and, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { z } from "zod";
 
@@ -84,7 +84,8 @@ router.get(
       const locations = await db
         .select()
         .from(locationsTable)
-        .where(eq(locationsTable.clientId, clientId))
+        .where(and(eq(locationsTable.clientId, clientId), req.user!.role === "head_office_admin" ? undefined :
+          req.user!.permittedLocationIds?.length ? inArray(locationsTable.id, req.user!.permittedLocationIds) : sql`false`))
         .orderBy(locationsTable.name);
 
       const teamLeaders = await db
@@ -96,7 +97,7 @@ router.get(
         .from(usersTable)
         .where(and(eq(usersTable.clientId, clientId), eq(usersTable.role, "team_leader")));
 
-      res.json({ client, locations, teamLeaders });
+      res.json({ client, locations, teamLeaders: req.user!.role === "head_office_admin" ? teamLeaders : [] });
     } catch (error) {
       console.error("Client detail error:", error);
       res.status(500).json({ message: "Internal server error" });

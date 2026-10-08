@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import { collectionReleaseSummary } from "../lib/collection-release";
 import { jobListSummary } from "../lib/job-list-summary";
+import { jobScope, mayAccessDepot, isClientUser } from "../lib/depot-access";
+import { userLocationIds } from "../lib/user-memberships";
 import { db } from "@workspace/db";
 import { jobsTable, jobBatteriesTable, cellModelsTable, batteryWeightReferenceTable, lmePricesTable, locationsTable, clientsTable, usersTable, jobDraftsTable, scheduleRescheduleLogTable, correctionAuditLogTable, collectionCompaniesTable } from "@workspace/db/schema";
 import { eq, sql, and, count, ilike, or, inArray, desc, asc, getTableColumns, type SQL } from "drizzle-orm";
@@ -379,6 +381,26 @@ async function getEffectiveLmeRateForJob(cblLmeValue: string | null): Promise<nu
 
 const router: IRouter = Router();
 
+router.patch("/jobs/:id/ownership", requireAuth, requireRole("head_office_admin"),
+  async (req: AuthenticatedRequest, res) => {
+    const jobId = Number(req.params.id);
+    const locationId = Number(req.body.locationId);
+    if (!Number.isSafeInteger(jobId) || !Number.isSafeInteger(locationId) || locationId <= 0) {
+      res.status(400).json({ message: "Choose a verified location" }); return;
+    }
+    try {
+      const [location] = await db.select().from(locationsTable).where(eq(locationsTable.id, locationId));
+      if (!location) { res.status(400).json({ message: "Location not found" }); return; }
+      const [job] = await db.update(jobsTable).set({ clientId: location.clientId, locationId })
+        .where(eq(jobsTable.id, jobId)).returning();
+      if (!job) { res.status(404).json({ message: "Job not found" }); return; }
+      res.json({ job });
+    } catch (error) {
+      console.error("Ownership correction failed:", error);
+      res.status(500).json({ message: "Could not save ownership" });
+    }
+  });
+
 function buildJobsWhere(query: Record<string, unknown>) {
   const { status, invoiceStatus, paymentStatus, search, manufacturer, collectionPoint } = query as Record<string, string | undefined>;
   const conditions = [];
@@ -468,7 +490,7 @@ router.get(
   requireRole("accounts", "head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
-      const whereClause = buildJobsWhere(req.query as Record<string, unknown>);
+      const whereClause = and(buildJobsWhere(req.query as Record<string, unknown>), jobScope(req.user!));
       const jobs = await db
         .select()
         .from(jobsTable)
@@ -673,7 +695,7 @@ router.get(
       const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10) || 10));
       const offsetNum = Math.max(0, parseInt(offset as string, 10) || 0);
 
-      const whereClause = buildJobsWhere(req.query as Record<string, unknown>);
+      const whereClause = and(buildJobsWhere(req.query as Record<string, unknown>), jobScope(req.user!));
 
       const [jobs, [totalResult]] = await Promise.all([
         db
@@ -1112,6 +1134,15 @@ router.post(
       let resolvedClientId = req.user!.clientId || null;
       let resolvedLocationId = req.body.locationId === undefined ? req.user!.locationId || null : null;
       const clientUser = ["depot_user", "team_leader"].includes(req.user!.role);
+      if (!clientUser && !internalRequest) {
+        res.status(403).json({ message: "Access denied" }); return;
+      }
+      if (draftId && clientUser) {
+        const [draft] = await db.select().from(jobDraftsTable).where(eq(jobDraftsTable.id, Number(draftId)));
+        if (!draft || !mayAccessDepot(req.user!, draft)) {
+          res.status(403).json({ message: "Draft is not assigned to your locations" }); return;
+        }
+      }
       if (clientUser && !resolvedClientId) {
         res.status(403).json({ message: "Your account is not linked to a client" });
         return;
@@ -1127,6 +1158,10 @@ router.post(
       }
       if (clientUser && !resolvedLocationId) {
         res.status(400).json({ message: "Select a location belonging to your client" });
+        return;
+      }
+      if (clientUser && !mayAccessDepot(req.user!, { clientId: resolvedClientId, locationId: resolvedLocationId })) {
+        res.status(403).json({ message: "This location is not assigned to your account" });
         return;
       }
 
@@ -1518,12 +1553,7 @@ router.post(
           const submitter = req.user!;
           const [draftRow] = await db.select().from(jobDraftsTable).where(eq(jobDraftsTable.id, draftIdNum));
           if (draftRow) {
-            const role = submitter.role;
-            const canDelete =
-              role === "head_office_admin" ||
-              role === "accounts" ||
-              (role === "team_leader" && draftRow.clientId === submitter.clientId) ||
-              (role === "depot_user" && draftRow.depot === submitter.depot && draftRow.clientId === submitter.clientId);
+            const canDelete = mayAccessDepot(submitter, draftRow);
             if (canDelete) {
               await db.delete(jobDraftsTable).where(eq(jobDraftsTable.id, draftIdNum));
             }
@@ -2101,7 +2131,9 @@ async function resolveReceiptDeliveryRecipients(job: typeof jobsTable.$inferSele
       eq(usersTable.isActive, true)
     ));
 
-  const selected = selectClientReceiptRecipients(teamLeaders, job.locationId, job.depot);
+  const allowed = await Promise.all(teamLeaders.map(async user =>
+    job.locationId && (await userLocationIds(user.id, job.clientId)).includes(job.locationId) ? user : null));
+  const selected = allowed.filter((user): user is NonNullable<typeof user> => user !== null);
   return {
     clientRecipients: selected.map(({ id, email, fullName }) => ({ id, email, fullName })),
     accountsRecipients,
@@ -2832,21 +2864,21 @@ router.get(
       const [pendingResult] = await db
         .select({ count: count() })
         .from(jobsTable)
-        .where(eq(jobsTable.status, "request"));
+        .where(and(jobScope(_req.user!), eq(jobsTable.status, "request")));
 
       const [tonnageResult] = await db
         .select({
           total: sql<string>`COALESCE(SUM(${jobsTable.tonnage}), 0)`,
         })
         .from(jobsTable)
-        .where(sql`${jobsTable.submittedAt} >= ${startOfMonth}`);
+        .where(and(jobScope(_req.user!), sql`${jobsTable.submittedAt} >= ${startOfMonth}`));
 
       const [invoiceThisMonth] = await db
         .select({
           total: sql<string>`COALESCE(SUM(${jobsTable.calculatedValue}), 0)`,
         })
         .from(jobsTable)
-        .where(sql`${jobsTable.submittedAt} >= ${startOfMonth}`);
+        .where(and(jobScope(_req.user!), sql`${jobsTable.submittedAt} >= ${startOfMonth}`));
 
       const [invoiceLastMonth] = await db
         .select({
@@ -2856,6 +2888,7 @@ router.get(
         .where(
           and(
             sql`${jobsTable.submittedAt} >= ${startOfLastMonth}`,
+            jobScope(_req.user!),
             sql`${jobsTable.submittedAt} < ${startOfMonth}`,
           )
         );
@@ -2864,7 +2897,7 @@ router.get(
         .select({
           total: sql<string>`COALESCE(SUM(${jobsTable.calculatedValue}), 0)`,
         })
-        .from(jobsTable);
+        .from(jobsTable).where(jobScope(_req.user!));
 
       const thisMonthVal = parseFloat(invoiceThisMonth?.total || "0");
       const lastMonthVal = parseFloat(invoiceLastMonth?.total || "0");
@@ -2877,7 +2910,7 @@ router.get(
           avg: sql<string>`COALESCE(AVG(${jobsTable.cblLmePercent}), 0)`,
         })
         .from(jobsTable)
-        .where(sql`${jobsTable.cblLmePercent} IS NOT NULL`);
+        .where(and(jobScope(_req.user!), sql`${jobsTable.cblLmePercent} IS NOT NULL`));
 
       const [completedInvoiceResult] = await db
         .select({
@@ -2885,10 +2918,10 @@ router.get(
         })
         .from(jobsTable)
         .where(
-          or(
+          and(jobScope(_req.user!), or(
             eq(jobsTable.status, "completed"),
             sql`${jobsTable.invoiceStatus} IN ('invoiced', 'paid')`,
-          )
+          ))
         );
 
       const [grossProfitResult] = await db
@@ -2899,6 +2932,7 @@ router.get(
         .where(
           and(
             sql`${jobsTable.grossProfit} IS NOT NULL`,
+            jobScope(_req.user!),
             or(
               eq(jobsTable.status, "completed"),
               sql`${jobsTable.invoiceStatus} IN ('invoiced', 'paid')`,
@@ -2913,6 +2947,7 @@ router.get(
           and(
             eq(jobsTable.status, "request"),
             sql`${jobsTable.submittedAt} >= NOW() - INTERVAL '7 days'`,
+            jobScope(_req.user!),
           )
         );
 
@@ -2921,12 +2956,12 @@ router.get(
           avg: sql<string>`COALESCE(AVG(${jobsTable.daysToPay}), 0)`,
         })
         .from(jobsTable)
-        .where(sql`${jobsTable.daysToPay} IS NOT NULL`);
+        .where(and(jobScope(_req.user!), sql`${jobsTable.daysToPay} IS NOT NULL`));
 
       const [overdueResult] = await db
         .select({ count: count() })
         .from(jobsTable)
-        .where(sql`${jobsTable.dueDate} IS NOT NULL AND ${jobsTable.dueDate} < CURRENT_DATE AND ${jobsTable.datePaid} IS NULL`);
+        .where(and(jobScope(_req.user!), sql`${jobsTable.dueDate} IS NOT NULL AND ${jobsTable.dueDate} < CURRENT_DATE AND ${jobsTable.datePaid} IS NULL`));
 
       res.json({
         pendingJobs: pendingResult?.count || 0,

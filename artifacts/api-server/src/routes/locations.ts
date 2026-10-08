@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { locationsTable, clientsTable } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { z } from "zod";
 
@@ -43,7 +43,9 @@ router.get(
       const locations = await db
         .select()
         .from(locationsTable)
-        .where(eq(locationsTable.clientId, clientId))
+        .where(and(eq(locationsTable.clientId, clientId),
+          req.user!.role === "head_office_admin" ? undefined :
+          req.user!.permittedLocationIds?.length ? inArray(locationsTable.id, req.user!.permittedLocationIds) : sql`false`))
         .orderBy(locationsTable.name);
 
       res.json({ locations });
@@ -160,6 +162,9 @@ router.patch(
       if (!canAccessClient(req, clientId)) {
         res.status(403).json({ message: "Access denied" });
         return;
+      }
+      if (req.user!.role !== "head_office_admin" && !req.user!.permittedLocationIds?.includes(locationId)) {
+        res.status(403).json({ message: "Location is not assigned to your account" }); return;
       }
 
       const parsed = updateLocationSchema.safeParse(req.body);

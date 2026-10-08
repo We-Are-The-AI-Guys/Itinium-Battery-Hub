@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { collectionPointsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { collectionPointsTable, locationsTable } from "@workspace/db/schema";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -11,6 +11,12 @@ router.get(
   requireAuth,
   async (_req: AuthenticatedRequest, res) => {
     try {
+      if (["depot_user", "team_leader"].includes(_req.user!.role)) {
+        const points = await db.select({ id: locationsTable.id, name: locationsTable.name, address: locationsTable.address }).from(locationsTable)
+          .where(and(eq(locationsTable.clientId, _req.user!.clientId ?? -1),
+            _req.user!.permittedLocationIds?.length ? inArray(locationsTable.id, _req.user!.permittedLocationIds) : sql`false`));
+        res.json({ collectionPoints: points }); return;
+      }
       const points = await db
         .select()
         .from(collectionPointsTable)

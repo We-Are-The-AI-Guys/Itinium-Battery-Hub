@@ -6,6 +6,7 @@ export const notificationsTable = pgTable(
   {
     id: serial("id").primaryKey(),
     userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+    jobId: integer("job_id"),
     type: varchar("type", { length: 50 }).notNull(),
     title: varchar("title", { length: 255 }).notNull(),
     body: text("body").notNull(),

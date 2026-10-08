@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { userLocationIds } from "../lib/user-memberships";
 import { db } from "@workspace/db";
 import { usersTable, sessionsTable, clientsTable, locationsTable, passwordResetTokensTable } from "@workspace/db/schema";
 import { eq, lt, and, isNull, gt } from "drizzle-orm";
@@ -99,6 +100,7 @@ router.post("/auth/login", loginRateLimiter, async (req, res) => {
         role: user.role,
         depot: user.depot,
         clientId: user.clientId,
+        permittedLocationIds: await userLocationIds(user.id, user.clientId),
         locationId: user.locationId,
         collectionCompanyId: user.collectionCompanyId,
         clientName,
@@ -163,6 +165,7 @@ router.get("/auth/me", async (req, res) => {
         role: user.role,
         depot: user.depot,
         clientId: user.clientId,
+        permittedLocationIds: await userLocationIds(user.id, user.clientId),
         locationId: user.locationId,
         collectionCompanyId: user.collectionCompanyId,
         clientName,

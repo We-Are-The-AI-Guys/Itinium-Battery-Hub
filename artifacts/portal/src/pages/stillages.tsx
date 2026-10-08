@@ -42,17 +42,6 @@ interface AuthUser {
 
 const ADMIN_ROLES = ["team_leader", "accounts", "head_office_admin"];
 
-const DEPOTS = [
-  "Birmingham Central",
-  "Manchester North",
-  "Leeds Hub",
-  "Bristol South",
-  "Reading Central",
-  "London Depot",
-  "Sheffield East",
-  "Coventry West",
-];
-
 function formatDate(dateStr: string) {
   return new Date(dateStr + "T00:00:00").toLocaleDateString("en-GB", {
     day: "numeric",
@@ -64,13 +53,16 @@ function formatDate(dateStr: string) {
 export default function StillagesPage() {
   const { toast } = useToast();
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [locations, setLocations] = useState<{ id: number; clientId: number; name: string; clientName: string }[]>([]);
+  const [locationError, setLocationError] = useState("");
+  const [locationsLoading, setLocationsLoading] = useState(true);
   const [summary, setSummary] = useState<DepotSummary[]>([]);
   const [totalInCirculation, setTotalInCirculation] = useState(0);
   const [movements, setMovements] = useState<StillageMovement[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [selectedDepotFilter, setSelectedDepotFilter] = useState<string>("all");
   const [formData, setFormData] = useState({
-    depot: "",
+    locationId: "",
     movementDate: new Date().toISOString().split("T")[0],
     collected: "",
     droppedOff: "",
@@ -86,13 +78,20 @@ export default function StillagesPage() {
       .then((data) => {
         if (data?.user) {
           setUser(data.user);
-          if (data.user.depot && !ADMIN_ROLES.includes(data.user.role)) {
-            setSelectedDepotFilter(data.user.depot);
-            setFormData((f) => ({ ...f, depot: data.user.depot }));
-          }
+          fetch("/api/stillages/locations", { credentials: "include" }).then(async res => {
+            if (!res.ok) throw new Error("Could not load permitted locations. Please reload to retry.");
+            const { locations: available } = await res.json();
+            setLocations(available);
+            if (available.some((location: { id: number }) => location.id === data.user.locationId)) {
+              setFormData(f => ({ ...f, locationId: String(data.user.locationId) }));
+            }
+          }).catch(error => setLocationError(error.message)).finally(() => setLocationsLoading(false));
+        } else {
+          setLocationError("Sign in to load permitted locations.");
+          setLocationsLoading(false);
         }
       })
-      .catch(() => {});
+      .catch(() => { setLocationError("Could not load your account. Please reload to retry."); setLocationsLoading(false); });
   }, []);
 
   function loadData() {
@@ -140,7 +139,7 @@ export default function StillagesPage() {
           description: "Stillage movement has been recorded successfully.",
         });
         setFormData({
-          depot: user?.depot || "",
+          locationId: formData.locationId,
           movementDate: new Date().toISOString().split("T")[0],
           collected: "",
           droppedOff: "",
@@ -181,6 +180,8 @@ export default function StillagesPage() {
         </Button>
       }
     >
+      {locationError && <p role="alert" className="mb-4 text-red-700">{locationError}</p>}
+      {!locationsLoading && !locationError && !locations.length && <p role="alert" className="mb-4 text-amber-700">No permitted locations are available. Ask your administrator to assign the sites you need before logging a movement.</p>}
       {showForm && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
           <h3 className="text-lg font-bold text-[#0f2744] mb-4">
@@ -189,31 +190,25 @@ export default function StillagesPage() {
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                Depot
+                Client / location
               </label>
-              {isAdmin ? (
                 <select
-                  value={formData.depot}
+                  aria-label="Stillage location"
+                  value={formData.locationId}
                   onChange={(e) =>
-                    setFormData({ ...formData, depot: e.target.value })
+                    setFormData({ ...formData, locationId: e.target.value })
                   }
                   className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
                   required
+                  disabled={locationsLoading || !locations.length}
                 >
-                  <option value="">Select depot...</option>
-                  {DEPOTS.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
+                  <option value="">{locationsLoading ? "Loading locations..." : "Select location..."}</option>
+                  {locations.map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.clientName} — {location.name}
                     </option>
                   ))}
                 </select>
-              ) : (
-                <Input
-                  value={formData.depot}
-                  disabled
-                  className="bg-slate-50"
-                />
-              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -271,7 +266,7 @@ export default function StillagesPage() {
             <div className="flex items-end gap-2">
               <Button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || locationsLoading || !formData.locationId}
                 className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
               >
                 {submitting ? "Saving..." : "Save Movement"}
@@ -431,7 +426,7 @@ export default function StillagesPage() {
               className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
             >
               <option value="all">All Depots</option>
-              {DEPOTS.map((d) => (
+              {[...new Set([...locations.map(location => location.name), ...summary.map(row => row.depot)])].sort().map((d) => (
                 <option key={d} value={d}>
                   {d}
                 </option>

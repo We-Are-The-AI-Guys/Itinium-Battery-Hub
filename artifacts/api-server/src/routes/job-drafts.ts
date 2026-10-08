@@ -1,35 +1,12 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { jobDraftsTable, usersTable, locationsTable } from "@workspace/db/schema";
-import { eq, and, or, desc, isNull, inArray } from "drizzle-orm";
+import { eq, and, or, desc, inArray } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/auth";
+import { mayAccessDepot, isClientUser } from "../lib/depot-access";
+import { sql } from "drizzle-orm";
 
 const router: IRouter = Router();
-
-// A draft belongs to a team leader's client if it is tagged with that client
-// directly, or — for legacy/unscoped drafts with no client — if the user who
-// saved it, or the location it references, belongs to that client.
-function teamLeaderDraftCondition(clientId: number) {
-  const clientSaverIds = db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(eq(usersTable.clientId, clientId));
-  const clientLocationIds = db
-    .select({ id: locationsTable.id })
-    .from(locationsTable)
-    .where(eq(locationsTable.clientId, clientId));
-
-  return or(
-    eq(jobDraftsTable.clientId, clientId),
-    and(
-      isNull(jobDraftsTable.clientId),
-      or(
-        inArray(jobDraftsTable.savedById, clientSaverIds),
-        inArray(jobDraftsTable.locationId, clientLocationIds)
-      )
-    )
-  );
-}
 
 router.get(
   "/job-drafts",
@@ -38,6 +15,9 @@ router.get(
     try {
       const user = req.user!;
       const role = user.role;
+      if (!["head_office_admin", "accounts", "team_leader", "depot_user"].includes(role)) {
+        res.status(403).json({ message: "Access denied" }); return;
+      }
 
       let drafts;
 
@@ -51,7 +31,7 @@ router.get(
           .from(jobDraftsTable)
           .where(
             and(
-              eq(jobDraftsTable.depot, user.depot || ""),
+              user.permittedLocationIds?.length ? inArray(jobDraftsTable.locationId, user.permittedLocationIds) : sql`false`,
               eq(jobDraftsTable.clientId, user.clientId)
             )
           )
@@ -64,7 +44,8 @@ router.get(
         drafts = await db
           .select()
           .from(jobDraftsTable)
-          .where(teamLeaderDraftCondition(user.clientId))
+          .where(and(eq(jobDraftsTable.clientId, user.clientId),
+            user.permittedLocationIds?.length ? inArray(jobDraftsTable.locationId, user.permittedLocationIds) : sql`false`))
           .orderBy(desc(jobDraftsTable.updatedAt));
       } else {
         drafts = await db
@@ -110,6 +91,15 @@ router.post(
       }
 
       const formDataJson = typeof formData === "string" ? JSON.parse(formData) : formData;
+      if (!["head_office_admin", "accounts", "team_leader", "depot_user"].includes(user.role)) {
+        res.status(403).json({ message: "Access denied" }); return;
+      }
+      const selectedId = Number(formDataJson.selectedLocationId) || null;
+      const [selected] = selectedId ? await db.select().from(locationsTable).where(eq(locationsTable.id, selectedId)) : [];
+      if (isClientUser(user) && (!selected || !mayAccessDepot(user, { clientId: selected.clientId, locationId: selected.id }))) {
+        res.status(403).json({ message: "Select a location assigned to your account before saving" }); return;
+      }
+      const ownership = { clientId: selected?.clientId ?? null, locationId: selected?.id ?? null, depot: selected?.name ?? "" };
       const cpValue = collectionPoint || null;
       const bcValue = typeof batteryCount === "number" ? batteryCount : parseInt(String(batteryCount || "0"), 10) || 0;
 
@@ -125,6 +115,7 @@ router.post(
             .update(jobDraftsTable)
             .set({
               formData: formDataJson,
+              ...ownership,
               collectionPoint: cpValue,
               batteryCount: bcValue,
               updatedAt: new Date(),
@@ -140,9 +131,7 @@ router.post(
         .insert(jobDraftsTable)
         .values({
           savedById: user.id,
-          depot: user.depot || "",
-          clientId: user.clientId || null,
-          locationId: user.locationId || null,
+          ...ownership,
           formData: formDataJson,
           collectionPoint: cpValue,
           batteryCount: bcValue,
@@ -201,32 +190,7 @@ async function canUserAccessDraft(
     .from(jobDraftsTable)
     .where(eq(jobDraftsTable.id, draftId));
   if (!draft) return false;
-
-  const role = user.role;
-  if (role === "head_office_admin" || role === "accounts") return true;
-  if (role === "team_leader") {
-    if (!user.clientId) return false;
-    if (draft.clientId === user.clientId) return true;
-    if (draft.clientId !== null) return false;
-    // Legacy/unscoped draft: fall back to the saver's client or the draft's location.
-    const [saver] = await db
-      .select({ clientId: usersTable.clientId })
-      .from(usersTable)
-      .where(eq(usersTable.id, draft.savedById));
-    if (saver?.clientId === user.clientId) return true;
-    if (draft.locationId !== null) {
-      const [loc] = await db
-        .select({ clientId: locationsTable.clientId })
-        .from(locationsTable)
-        .where(eq(locationsTable.id, draft.locationId));
-      if (loc?.clientId === user.clientId) return true;
-    }
-    return false;
-  }
-  if (role === "depot_user") {
-    return draft.depot === user.depot && draft.clientId === user.clientId;
-  }
-  return false;
+  return mayAccessDepot(user, draft);
 }
 
 export default router;

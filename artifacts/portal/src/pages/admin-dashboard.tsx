@@ -131,6 +131,14 @@ function formatRelativeDate(dateStr: string) {
 }
 
 export default function AdminDashboardPage() {
+  const [noLocations, setNoLocations] = useState(false);
+  useEffect(() => {
+    fetch("/api/auth/me", { credentials: "include" }).then(async res => {
+      if (!res.ok) return;
+      const { user } = await res.json();
+      setNoLocations(["depot_user", "team_leader"].includes(user.role) && !user.permittedLocationIds?.length);
+    }).catch(() => {});
+  }, []);
   const [, setLocation] = useLocation();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -213,6 +221,7 @@ export default function AdminDashboardPage() {
       subtitle="Overview of all operations"
       showSearch
     >
+      {noLocations && <p role="alert" className="mb-6 rounded border border-amber-200 bg-amber-50 p-4 text-amber-900">Your account has no permitted locations. Ask your administrator to assign the sites you need. No depot jobs are available until then.</p>}
       <div className="flex bg-slate-100 p-1 rounded-lg mb-6 w-fit">
         {([
           { key: "operational", label: "Operational" },

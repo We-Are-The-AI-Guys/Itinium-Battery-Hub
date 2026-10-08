@@ -1,14 +1,15 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { stillageMovementsTable } from "@workspace/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { stillageMovementsTable, locationsTable, clientsTable } from "@workspace/db/schema";
+import { mayAccessDepot } from "../lib/depot-access";
+import { eq, desc, sql, and, inArray, type SQL } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/auth";
 
-const ADMIN_ROLES = ["team_leader", "accounts", "head_office_admin"];
+const ADMIN_ROLES = ["accounts", "head_office_admin"];
 
 const createMovementSchema = z.object({
-  depot: z.string().min(1, "Depot is required"),
+  locationId: z.coerce.number().int().positive("Select a location"),
   movementDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format"),
   collected: z.coerce.number().int().min(0, "Collected must be >= 0").default(0),
   droppedOff: z.coerce.number().int().min(0, "Dropped off must be >= 0").default(0),
@@ -19,18 +20,42 @@ const createMovementSchema = z.object({
 
 const router: IRouter = Router();
 
+router.get("/stillages/locations", requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (resolveDepotScope(req).forbidden) { res.status(403).json({ message: "Access denied" }); return; }
+    const internal = ADMIN_ROLES.includes(req.user!.role);
+    const locations = await db.select({
+      id: locationsTable.id, clientId: locationsTable.clientId,
+      name: locationsTable.name, clientName: clientsTable.name,
+    }).from(locationsTable).innerJoin(clientsTable, eq(clientsTable.id, locationsTable.clientId))
+      .where(internal ? undefined : and(eq(locationsTable.clientId, req.user!.clientId ?? -1),
+        req.user!.permittedLocationIds?.length ? inArray(locationsTable.id, req.user!.permittedLocationIds) : sql`false`))
+      .orderBy(clientsTable.name, locationsTable.name);
+    res.json({ locations });
+  } catch (error) {
+    console.error("Stillage locations error:", error);
+    res.status(500).json({ message: "Could not load locations" });
+  }
+});
+
 function resolveDepotScope(req: AuthenticatedRequest): { depot: string | null; forbidden: boolean } {
   const isAdmin = ADMIN_ROLES.includes(req.user?.role || "");
   if (isAdmin) {
     return { depot: null, forbidden: false };
   }
-  if (!req.user?.depot) {
+  if (!["team_leader", "depot_user"].includes(req.user?.role || "")) {
     return { depot: null, forbidden: true };
   }
-  return { depot: req.user.depot, forbidden: false };
+  return { depot: null, forbidden: false };
 }
 
-async function buildSummary(depotFilter?: string) {
+function movementScope(req: AuthenticatedRequest): SQL {
+  if (ADMIN_ROLES.includes(req.user!.role)) return sql`true`;
+  if (!req.user!.clientId || !req.user!.permittedLocationIds?.length) return sql`false`;
+  return and(eq(stillageMovementsTable.clientId, req.user!.clientId), inArray(stillageMovementsTable.locationId, req.user!.permittedLocationIds))!;
+}
+
+async function buildSummary(depotFilter: string | undefined, scope: SQL) {
   let baseQuery = db
     .select({
       depot: stillageMovementsTable.depot,
@@ -41,9 +66,7 @@ async function buildSummary(depotFilter?: string) {
     .groupBy(stillageMovementsTable.depot)
     .orderBy(stillageMovementsTable.depot);
 
-  if (depotFilter) {
-    baseQuery = baseQuery.where(eq(stillageMovementsTable.depot, depotFilter)) as typeof baseQuery;
-  }
+  baseQuery = baseQuery.where(and(scope, depotFilter ? eq(stillageMovementsTable.depot, depotFilter) : undefined)) as typeof baseQuery;
 
   const summaryRows = await baseQuery;
 
@@ -70,29 +93,18 @@ router.get(
         return;
       }
 
-      const isAdmin = ADMIN_ROLES.includes(req.user?.role || "");
       const { depot } = req.query;
-
-      let filterDepot: string | undefined;
-      if (isAdmin) {
-        if (depot && typeof depot === "string") {
-          filterDepot = depot;
-        }
-      } else {
-        filterDepot = scope.depot!;
-      }
+      const filterDepot = typeof depot === "string" ? depot : undefined;
 
       let query = db
         .select()
         .from(stillageMovementsTable)
         .orderBy(desc(stillageMovementsTable.movementDate), desc(stillageMovementsTable.createdAt));
 
-      if (filterDepot) {
-        query = query.where(eq(stillageMovementsTable.depot, filterDepot)) as typeof query;
-      }
+      query = query.where(and(movementScope(req), filterDepot ? eq(stillageMovementsTable.depot, filterDepot) : undefined)) as typeof query;
 
       const movements = await query;
-      const { summary, totalInCirculation } = await buildSummary(filterDepot);
+      const { summary, totalInCirculation } = await buildSummary(filterDepot, movementScope(req));
 
       res.json({ movements, summary, totalInCirculation });
     } catch (error) {
@@ -113,7 +125,7 @@ router.get(
         return;
       }
 
-      const { summary, totalInCirculation } = await buildSummary(scope.depot || undefined);
+      const { summary, totalInCirculation } = await buildSummary(scope.depot || undefined, movementScope(req));
 
       res.json({ summary, totalInCirculation });
     } catch (error) {
@@ -134,25 +146,18 @@ router.post(
         return;
       }
 
-      const { depot, movementDate, collected, droppedOff, notes } = parsed.data;
-      const isAdmin = ADMIN_ROLES.includes(req.user?.role || "");
-
-      if (!isAdmin && !req.user?.depot) {
-        res.status(403).json({ message: "No depot assigned to your account" });
-        return;
-      }
-
-      const effectiveDepot = isAdmin ? depot : req.user?.depot;
-
-      if (!isAdmin && depot !== req.user?.depot) {
-        res.status(403).json({ message: "You can only log movements for your own depot" });
-        return;
+      const { locationId, movementDate, collected, droppedOff, notes } = parsed.data;
+      const [location] = await db.select().from(locationsTable).where(eq(locationsTable.id, locationId));
+      if (!location || !mayAccessDepot(req.user!, { clientId: location.clientId, locationId: location.id })) {
+        res.status(403).json({ message: "Select a permitted depot" }); return;
       }
 
       const [movement] = await db
         .insert(stillageMovementsTable)
         .values({
-          depot: effectiveDepot!,
+          depot: location.name,
+          clientId: location.clientId,
+          locationId: location.id,
           movementDate,
           collected,
           droppedOff,

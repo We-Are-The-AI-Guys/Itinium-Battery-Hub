@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { notificationsTable } from "@workspace/db/schema";
-import { eq, and, desc, asc } from "drizzle-orm";
+import { notificationsTable, jobsTable } from "@workspace/db/schema";
+import { eq, and, desc, asc, inArray } from "drizzle-orm";
+import { isClientUser, jobScope } from "../lib/depot-access";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -15,7 +16,8 @@ router.get(
       const rows = await db
         .select()
         .from(notificationsTable)
-        .where(eq(notificationsTable.userId, userId))
+        .where(and(eq(notificationsTable.userId, userId),
+          isClientUser(req.user!) ? inArray(notificationsTable.jobId, db.select({ id: jobsTable.id }).from(jobsTable).where(jobScope(req.user!))) : undefined))
         .orderBy(asc(notificationsTable.isRead), desc(notificationsTable.createdAt))
         .limit(50);
       res.json({ notifications: rows });
