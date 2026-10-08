@@ -20,10 +20,10 @@ description: Source-of-truth conventions for battery weight, safe-load factor an
 - **Why:** the user explicitly requested accepting unknown manufacturers as-is with TAB weights rather than requiring Itinium review. Depots routinely cannot identify manufacturers.
 - **How to apply:** keep CSV import, manual entry, submission, corrections and existing-job review consistent. Preserve submitted model identity and manual weight overrides. This exception does not approve genuinely unrecognised named manufacturers or resolve unrelated flags.
 
-## Missing-weight token (September 23, 2026)
-- Customer submissions with missing battery details or no derivable weight must use a 500 kg raw-weight token, remain submittable, and be flagged for Itinium review.
-- **Why:** incomplete depot data must not block a collection request; Itinium will correct the row during review.
-- **How to apply:** include the token in displayed and stored load calculations using the normal ×1.4 gross-load factor. Preserve any existing review reason rather than replacing it.
+## Missing-weight safety (October 8, 2026)
+- Customer requests with unresolved weights may be saved as drafts but must not be submitted as verified loads. Keep a clearly labelled 500 kg provisional allowance, including the normal ×1.4 gross-load factor, rather than counting unknown weights as zero. Internal review remains available.
+- **Why:** updated development feedback explicitly requires safe handling of unknown weights without allowing an unverified excess load. This supersedes the previous rule allowing customers to submit token-weight rows.
+- **How to apply:** provide simple guidance to complete battery details or contact Itinium; never expose a customer per-battery manual estimated-weight input. Preserve existing records and stored manual weights. Over-limit requests must be reduced to at most 26 tonnes, with additional tonnage requested as a separate job.
 
 ## Pb derivation (fixed July 2026)
 - Total Pb = Pb-per-cell × actual cell count. Actual cell count = voltage/2 for full batteries (each cell 2V), loose-cells quantity for loose rows. Never use the number embedded in the model name (e.g. the 5 in 5PzS575).

@@ -257,7 +257,7 @@ describe("submitting with a hand-typed 'unknown' manufacturer", () => {
 });
 
 describe("rows that contribute no weight", () => {
-  it("includes a 500kg token weight and flags the row for review", async () => {
+  it("includes a provisional allowance but blocks an unverified customer load", async () => {
     renderPage();
     await screen.findByTestId("button-upload-csv");
 
@@ -273,16 +273,13 @@ describe("rows that contribute no weight", () => {
       expect(screen.getByDisplayValue("SER-ZW1")).toBeInTheDocument();
     });
 
-    expect(screen.queryByTestId("text-zero-weight-warning")).not.toBeInTheDocument();
+    expect(screen.getByTestId("text-zero-weight-warning")).toHaveTextContent("cannot submit");
     expect(screen.queryByText("Needs Review")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("button-submit-collection"));
-    await waitFor(() => expect(jobPostBodies).toHaveLength(1));
-    const body = jobPostBodies[0] as {
-      batteries: Array<{ estimatedWeightKg: string | null; cellModelFlagReason: string | null }>;
-    };
-    expect(body.batteries[0].estimatedWeightKg).toBe("500");
-    expect(body.batteries[0].cellModelFlagReason).toBeTruthy();
+    expect(screen.getByTestId("button-submit-collection")).toBeDisabled();
+    expect(screen.getByTestId("button-save-draft")).not.toBeDisabled();
+    expect(jobPostBodies).toHaveLength(0);
   });
 
   it("does not warn for a fully empty template row", async () => {
@@ -301,7 +298,7 @@ describe("CSV review feedback by role", () => {
   ].join("\n");
 
   it.each(["depot_user", "team_leader"])(
-    "lets %s import and submit without review messages while retaining all review flags",
+    "lets %s import without catalogue review prompts but blocks unverified weights",
     async (role) => {
       userRole = role;
       renderPage();
@@ -312,34 +309,17 @@ describe("CSV review feedback by role", () => {
 
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(screen.queryByText(/Needs Review|flagged for Itinium review|Missing from CSV|Unrecognised value/i)).not.toBeInTheDocument();
-      expect(screen.queryByTestId("text-zero-weight-warning")).not.toBeInTheDocument();
+      expect(screen.getByTestId("text-zero-weight-warning")).toHaveTextContent("not a verified weight");
       expect(screen.getByTestId("battery-row-2").className).not.toContain("border-l-amber");
       expect(screen.getByDisplayValue("Unlisted maker")).toBeInTheDocument();
       expect(screen.getByText("Unlisted model")).toBeInTheDocument();
       await waitFor(() => expect(screen.getAllByText(/1\.734t/).length).toBeGreaterThan(0));
 
       fireEvent.click(screen.getByTestId("button-submit-collection"));
-      await waitFor(() => expect(jobPostBodies).toHaveLength(1));
-      const body = jobPostBodies[0] as {
-        batteries: Array<{
-          manufacturerFlagReason: string | null;
-          cellModelFlagReason: string | null;
-          voltageFlagReason: string | null;
-          estimatedWeightKg: string | null;
-          cellType: string | null;
-        }>;
-      };
-      expect(body.batteries).toHaveLength(3);
-      expect(body.batteries[0].manufacturerFlagReason).toBeNull();
-      expect(body.batteries[0].cellModelFlagReason).toBeNull();
-      expect(body.batteries[1].manufacturerFlagReason).toBeNull();
-      expect(body.batteries[1].voltageFlagReason).toBeTruthy();
-      expect(body.batteries[1].cellModelFlagReason).toMatch(/500kg/);
-      expect(body.batteries[2].manufacturerFlagReason).toBeTruthy();
-      expect(body.batteries[2].cellModelFlagReason).toBeTruthy();
-      expect(body.batteries[2].voltageFlagReason).toBeTruthy();
-      expect(body.batteries[2].cellType).toBe("Unlisted model");
-      expect(body.batteries[2].estimatedWeightKg).toBe("500");
+      expect(screen.getByTestId("button-submit-collection")).toBeDisabled();
+      expect(jobPostBodies).toHaveLength(0);
+      expect(screen.queryByTestId("input-estimated-weight-0")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("section-tonnage-override")).not.toBeInTheDocument();
       expect(screen.queryByText("Unrecognised fields must be resolved")).not.toBeInTheDocument();
     },
   );
@@ -383,7 +363,9 @@ describe("CSV review feedback by role", () => {
     await screen.findByText("CSV imported");
     expect(screen.queryByText(/Manual\/token weight/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("button-submit-collection"));
-    expect(await screen.findByText("Exceeds maximum tonnage")).toBeInTheDocument();
+    expect(screen.getByTestId("button-submit-collection")).toBeDisabled();
+    expect(screen.getByTestId("load-guidance")).toHaveTextContent("separate new collection job");
+    expect(screen.getByTestId("load-guidance")).toHaveTextContent("Contact Itinium directly");
     expect(jobPostBodies).toHaveLength(0);
   });
 });

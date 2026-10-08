@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { jobsTable, jobBatteriesTable, cellModelsTable, lmePricesTable, locationsTable, clientsTable, usersTable, jobDraftsTable, scheduleRescheduleLogTable, correctionAuditLogTable, collectionCompaniesTable } from "@workspace/db/schema";
+import { jobsTable, jobBatteriesTable, cellModelsTable, batteryWeightReferenceTable, lmePricesTable, locationsTable, clientsTable, usersTable, jobDraftsTable, scheduleRescheduleLogTable, correctionAuditLogTable, collectionCompaniesTable } from "@workspace/db/schema";
 import { eq, sql, and, count, ilike, or, inArray, desc, asc, getTableColumns, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { MANUFACTURERS } from "./manufacturers";
@@ -1130,6 +1130,8 @@ router.post(
         specialInstructions,
       } = req.body;
       let { depot } = req.body;
+      const internalRequest = ["accounts", "head_office_admin"].includes(req.user!.role);
+      const allowTonnageOverride = internalRequest && tonnageManualOverride;
 
       let resolvedClientId = req.user!.clientId || null;
       let resolvedLocationId = req.user!.locationId || null;
@@ -1308,7 +1310,34 @@ router.post(
               voltage: b.voltage,
             })
           );
-          if (derived !== null) b.estimatedWeightKg = derived;
+          if (derived !== null) {
+            b.estimatedWeightKg = derived;
+            if (b.cellModelFlagReason === TOKEN_WEIGHT_FLAG_REASON) b.cellModelFlagReason = null;
+          } else if (!internalRequest) {
+            // Never accept a stale/token client auto-weight as a verified
+            // load. Preserve supported legacy family/Blocs reference lookup.
+            const refs = await db.select().from(batteryWeightReferenceTable)
+              .where(eq(batteryWeightReferenceTable.cellType, b.cellType || ""));
+            const unitType = b.cellType === "Blocs" || b.cellType === "Other";
+            const lookupVoltage = unitType ? null : b.isLooseCells ? "12V" : b.voltage;
+            const ref = refs.find((r) => r.voltage === lookupVoltage);
+            const qty = Number(b.looseCellsQty);
+            const multiplier = b.isLooseCells
+              ? (unitType ? qty : qty / 6)
+              : b.cellType === "Blocs" ? qty : 1;
+            const raw = ref ? Number(ref.weightKg) * multiplier : NaN;
+            b.estimatedWeightKg = Number.isFinite(raw) && raw > 0 ? raw.toFixed(3) : null;
+            if (b.estimatedWeightKg && b.cellModelFlagReason === TOKEN_WEIGHT_FLAG_REASON) {
+              b.cellModelFlagReason = null;
+            }
+          }
+        }
+        if (!internalRequest && (
+          parsePositiveWeightKg(b.estimatedWeightKg) === null ||
+          b.cellModelFlagReason === TOKEN_WEIGHT_FLAG_REASON
+        )) {
+          res.status(400).json({ message: "Battery weights need confirmation. Complete the battery details or save your draft and contact Itinium before submitting." });
+          return;
         }
         applyTokenWeightFallback(b);
       }
@@ -1323,7 +1352,7 @@ router.post(
       }
       const autoTonnageStr = (autoTonnage / 1000).toFixed(3);
       const parsedTonnage = tonnage ? parseFloat(String(tonnage)) : NaN;
-      const finalTonnage = (tonnageManualOverride && !isNaN(parsedTonnage) && isFinite(parsedTonnage) && parsedTonnage >= 0)
+      const finalTonnage = (allowTonnageOverride && !isNaN(parsedTonnage) && isFinite(parsedTonnage) && parsedTonnage >= 0)
         ? String(parsedTonnage)
         : autoTonnageStr;
 
@@ -1332,11 +1361,11 @@ router.post(
       // The 26t truck capacity applies to the gross load (lead x 1.4) — the
       // same figure shown to depot users (client-confirmed 30 July 2026).
       const MAX_TONNAGE = 26.0;
-      const effectiveLoadT = (tonnageManualOverride && isFinite(parsedTonnage) && parsedTonnage >= 0)
-        ? parsedTonnage
+      const effectiveLoadT = (allowTonnageOverride && isFinite(parsedTonnage) && parsedTonnage >= 0)
+        ? Math.max(parsedTonnage, autoTonnage / 1000)
         : autoTonnage / 1000;
       if (isFinite(effectiveLoadT) && effectiveLoadT > MAX_TONNAGE) {
-        res.status(400).json({ message: `Maximum collection weight is ${MAX_TONNAGE}t. Current load is ${effectiveLoadT.toFixed(3)}t.` });
+        res.status(400).json({ message: `Reduce this collection request to at most ${MAX_TONNAGE} tonnes before submitting. Request additional tonnage through a separate new collection job. Contact Itinium directly for assistance.` });
         return;
       }
 
@@ -1380,7 +1409,7 @@ router.post(
             collectionPoint: collectionPoint || null,
             collectionDate: collectionDate || null,
             tonnage: finalTonnage,
-            tonnageManualOverride: !!(tonnageManualOverride && !isNaN(parsedTonnage) && isFinite(parsedTonnage) && parsedTonnage >= 0),
+            tonnageManualOverride: !!(allowTonnageOverride && !isNaN(parsedTonnage) && isFinite(parsedTonnage) && parsedTonnage >= 0),
             status: "request",
             notes: notes || null,
             submittedById: req.user!.id,

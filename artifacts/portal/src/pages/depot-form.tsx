@@ -1255,6 +1255,14 @@ export default function DepotFormPage() {
   }
 
   async function onSubmit() {
+    if (!showReviewFeedback && tokenWeightRows.length > 0) {
+      toast({
+        title: "Battery weights need confirmation",
+        description: "We cannot verify the total load yet. Complete the battery details or save this draft and contact Itinium for assistance before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
     const hasAtLeastOneIdentifier = batteries.some(
       (b) => b.batterySerial.trim() || b.assetNumber.trim()
     );
@@ -1296,8 +1304,8 @@ export default function DepotFormPage() {
       };
     });
 
-    const submissionLoad = tonnageManual && tonnageOverride
-      ? parseFloat(tonnageOverride) || 0
+    const submissionLoad = showReviewFeedback && tonnageManual && tonnageOverride
+      ? Math.max(autoTonnage, parseFloat(tonnageOverride) || 0)
       : batteriesWithWeightFallback.reduce(
           (sum, b) => sum + (parsePositiveWeightInput(b.estimatedWeightKg) || 0),
           0
@@ -1305,7 +1313,7 @@ export default function DepotFormPage() {
     if (submissionLoad > maxCapacity) {
       toast({
         title: "Exceeds maximum tonnage",
-        description: `Maximum collection weight is ${maxCapacity}t. Current load is ${submissionLoad.toFixed(3)}t. Please reduce the load.`,
+        description: `Reduce this collection request to at most ${maxCapacity} tonnes before submitting. Request any additional tonnage through a separate new collection job. Contact Itinium directly for assistance.`,
         variant: "destructive",
       });
       return;
@@ -1392,7 +1400,7 @@ export default function DepotFormPage() {
           specialInstructions: specialInstructions || null,
           collectionDate: null,
           tonnage: submissionLoad > 0 ? submissionLoad.toFixed(3) : "0.000",
-          tonnageManualOverride: tonnageManual,
+          tonnageManualOverride: showReviewFeedback && tonnageManual,
           notes: jobNotes || null,
           draftId: currentDraftId || undefined,
           batteries: validatedBatteries.map((b) => ({
@@ -1530,9 +1538,9 @@ export default function DepotFormPage() {
     .map((b, i) => ({ b, i }))
     .filter(({ b }) => {
       const hasData = b.batterySerial.trim() || b.assetNumber.trim() || b.cellType.trim() || b.cellModel.trim();
-      return hasData && parsePositiveWeightInput(b.estimatedWeightKg) === null;
+      return hasData && (parsePositiveWeightInput(b.estimatedWeightKg) === null || b.cellModelFlagReason === TOKEN_WEIGHT_FLAG_REASON);
     });
-  const currentLoad = tonnageManual && tonnageOverride ? parseFloat(tonnageOverride) || 0 : autoTonnage;
+  const currentLoad = showReviewFeedback && tonnageManual && tonnageOverride ? Math.max(autoTonnage, parseFloat(tonnageOverride) || 0) : autoTonnage;
   const minTonnage = 9.5;
   const maxCapacity = 26.0;
   const targetMin = 10.0;
@@ -1572,9 +1580,21 @@ export default function DepotFormPage() {
         </div>
       </header>
 
-      <main className="w-full max-w-4xl px-4 sm:px-6 py-6 space-y-6 flex-1 flex flex-col">
+      <main
+        className="w-full max-w-4xl px-4 sm:px-6 py-6 space-y-6 flex-1 flex flex-col"
+        onFocusCapture={(event) => {
+          // Keep keyboard/mobile focus below the fixed header and sticky
+          // summary, including when a browser restores a scrolled draft.
+          const target = event.target as HTMLElement;
+          const summary = event.currentTarget.querySelector('[data-testid="section-tonnage-progress"]');
+          if (!summary || summary.contains(target)) return;
+          const top = target.getBoundingClientRect().top;
+          const visibleTop = summary.getBoundingClientRect().bottom + 12;
+          if (top < visibleTop) window.scrollBy({ top: top - visibleTop, behavior: "instant" });
+        }}
+      >
         <section
-          className={`rounded-xl p-4 sm:p-5 border shadow-sm relative overflow-hidden ${
+          className={`sticky top-16 z-40 shrink-0 rounded-xl p-3 sm:p-4 border shadow-sm ${
             isRed ? "bg-red-50 border-red-200" : isAmber ? "bg-amber-50 border-amber-200" : isGreen ? "bg-emerald-50 border-emerald-200" : "bg-sky-50 border-sky-100"
           }`}
           data-testid="section-tonnage-progress"
@@ -1590,6 +1610,7 @@ export default function DepotFormPage() {
                   / {maxCapacity}t max
                 </span>
               </h3>
+              {tokenWeightRows.length > 0 && <p className="text-xs text-amber-800">Provisional — weights need confirmation</p>}
             </div>
             <div className="text-right flex flex-col items-end gap-1">
               <span className={`text-xs font-medium px-2 py-1 rounded ${
@@ -1599,6 +1620,8 @@ export default function DepotFormPage() {
               </span>
             </div>
           </div>
+        </section>
+        <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="load-guidance">
           {loadState === "red-low" && (
             <p className="text-xs font-medium text-red-700 mb-2">
               This load is currently under 10 tonnes, so a transportation charge will apply. For clarification or assistance please contact the Itinium team.
@@ -1606,7 +1629,9 @@ export default function DepotFormPage() {
           )}
           {loadState === "red-high" && (
             <p className="text-xs font-medium text-red-700 mb-2">
-              Exceeds maximum {maxCapacity}t truck capacity. Remove batteries to submit.
+              This collection request exceeds the {maxCapacity}-tonne maximum and cannot be submitted.
+              Reduce it to at most {maxCapacity} tonnes, then request any additional tonnage through a
+              separate new collection job. Contact Itinium directly for assistance.
             </p>
           )}
           {loadState === "amber-low" && (
@@ -1624,10 +1649,12 @@ export default function DepotFormPage() {
               Load is within the optimal range.
             </p>
           )}
-          {showReviewFeedback && tokenWeightRows.length > 0 && (
+          {tokenWeightRows.length > 0 && (
             <p className="text-xs font-medium text-amber-700 mb-2" data-testid="text-zero-weight-warning">
-              A 500kg token weight is included for row{tokenWeightRows.length > 1 ? "s" : ""}{" "}
-              {tokenWeightRows.map(({ i }) => i + 1).join(", ")}. The job will be flagged for Itinium to review.
+              Weight is not confirmed for {tokenWeightRows.length} battery row{tokenWeightRows.length > 1 ? "s" : ""}.
+              A provisional 500kg allowance per unresolved row, plus the loading factor, is included in the total;
+              it is not a verified weight. Complete the battery details or save your draft and contact Itinium
+              for assistance. {showReviewFeedback ? "These rows require Itinium review." : "You cannot submit until these weights are confirmed."}
             </p>
           )}
           <div className="relative h-3 w-full bg-slate-200 rounded-full overflow-hidden mt-3">
@@ -1651,7 +1678,7 @@ export default function DepotFormPage() {
               Max: {maxCapacity}t
             </p>
           </div>
-        </section>
+        </div>
 
         <section
           className="bg-white rounded-xl p-5 border border-slate-200 shadow-[0_2px_10px_rgb(0,0,0,0.02)]"
@@ -2443,7 +2470,7 @@ export default function DepotFormPage() {
                     </div>
                   )}
 
-                  <div className="space-y-1.5">
+                  {showReviewFeedback && <div className="space-y-1.5">
                     <label className="text-xs font-medium text-slate-600">
                       Estimated Weight (kg)
                     </label>
@@ -2477,7 +2504,7 @@ export default function DepotFormPage() {
                           : "Entered manually."
                         : "Calculated automatically when catalogue details are available."}
                     </p>
-                  </div>
+                  </div>}
 
                   <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
                     <label className="text-xs font-medium text-slate-600">
@@ -2570,7 +2597,7 @@ export default function DepotFormPage() {
           </div>
         </section>
 
-        <section
+        {showReviewFeedback && <section
           className="bg-white rounded-xl p-5 border border-slate-200 shadow-[0_2px_10px_rgb(0,0,0,0.02)]"
           data-testid="section-tonnage-override"
         >
@@ -2622,7 +2649,7 @@ export default function DepotFormPage() {
               <span className="text-sm text-emerald-600">Auto-calculated from battery weights</span>
             </div>
           )}
-        </section>
+        </section>}
 
         <section
           className="bg-white rounded-xl border border-slate-200 shadow-[0_2px_10px_rgb(0,0,0,0.02)] overflow-hidden"
@@ -2671,7 +2698,7 @@ export default function DepotFormPage() {
             type="button"
             className="flex-1 sm:w-auto h-12 bg-[#0f2744] hover:bg-[#132744] text-white font-medium px-8 shadow-md"
             onClick={onSubmit}
-            disabled={submitting}
+            disabled={submitting || currentLoad > maxCapacity || (!showReviewFeedback && tokenWeightRows.length > 0)}
             data-testid="button-submit-collection"
           >
             <Send className="w-4 h-4 mr-2" />
