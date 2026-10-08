@@ -16,3 +16,11 @@ A model suggestion badge is an explicit one-click save action. It must not merel
 **Why:** the user reported that people missed or forgot the additional Save button after choosing a suggested model.
 
 **How to apply:** commit only the selected model through the normal correction process, show pending/failure feedback, and prevent overlapping saves or overwriting unsaved receipt edits.
+
+## Live receipt-weight previews
+
+Typing a known receipt model or voltage should immediately preview Pb weight and its calculated value, but must not autosave the correction. Preserve explicitly edited Pb/value fields.
+
+**Why:** The user compared an unsaved corrected row with an identical saved model and reasonably interpreted the unchanged empty-weight placeholder as a failed catalogue lookup.
+
+**How to apply:** Label the unsaved preview, use the same manufacturer/TAB and cell-count rules as the server, and keep preview-only values out of explicit save patches so server recalculation remains authoritative. Preview totals must not silently commit invoice changes.

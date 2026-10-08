@@ -81,7 +81,10 @@ beforeEach(() => {
     }
     if (url.startsWith("/api/cell-models")) return Promise.resolve(json({ models: [{
       id: 1, manufacturer: "TAB", modelName: "5 PzS 775", cellFamily: "PzS",
-      cellsCount: 5, weightPerCellKg: "32.9",
+      cellsCount: 5, weightPerCellKg: "32.9", pbContentKgPerCell: "32.9",
+    }, {
+      id: 2, manufacturer: "TAB", modelName: "3PzS375", cellFamily: "PzS",
+      cellsCount: 3, weightPerCellKg: "16.2", pbContentKgPerCell: "16.2",
     }] }));
     if (url.startsWith("/api/manufacturers")) return Promise.resolve(json({ manufacturers: [], aliases: {} }));
     return Promise.resolve(json({}));
@@ -98,6 +101,37 @@ describe("job-page model badge saving", () => {
       serialFlagReason: null, manufacturerFlagReason: null, voltageFlagReason: null,
       cellModelFlagReason: "Unrecognised value",
     }];
+  });
+
+  it("previews a typed model and voltage without saving, then sends only edited inputs", async () => {
+    batteries[0] = { ...batteries[0], cellType: null, pbContentKg: null, manufacture: "Unknown" };
+    render(<JobDetailPage />);
+    const model = await screen.findByLabelText("Type for receipt row 1");
+    fireEvent.change(model, { target: { value: "3PzS375" } });
+    await waitFor(() => expect(screen.getByLabelText("Pb content for receipt row 1")).toHaveValue(194.4));
+    expect(screen.getByText("Preview — save table to apply")).toBeInTheDocument();
+    expect(saves).toEqual([]);
+    fireEvent.change(screen.getByLabelText("Voltage for receipt row 1"), { target: { value: "48V" } });
+    expect(screen.getByLabelText("Pb content for receipt row 1")).toHaveValue(388.8);
+    fireEvent.click(screen.getByRole("button", { name: "Save table (1)", exact: true }));
+    await waitFor(() => expect(saves).toEqual([{ cellType: "3PzS375", voltage: "48V" }]));
+    await waitFor(() => expect(screen.queryByText("Preview — save table to apply")).not.toBeInTheDocument());
+    expect(screen.getByLabelText("Pb content for receipt row 1")).toHaveValue(394.8);
+  });
+
+  it("preserves manual Pb and value edits across model changes and a failed save", async () => {
+    render(<JobDetailPage />);
+    fireEvent.change(await screen.findByLabelText("Pb content for receipt row 1"), { target: { value: "123" } });
+    fireEvent.change(screen.getByLabelText("Value for receipt row 1"), { target: { value: "456" } });
+    fireEvent.change(screen.getByLabelText("Type for receipt row 1"), { target: { value: "3PzS375" } });
+    expect(screen.getByLabelText("Pb content for receipt row 1")).toHaveValue(123);
+    expect(screen.getByLabelText("Value for receipt row 1")).toHaveValue(456);
+    modelSaveFails = true;
+    fireEvent.click(screen.getByRole("button", { name: "Save table (1)", exact: true }));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: "Some rows could not be saved" })));
+    expect(saves).toEqual([{ pbContentKg: "123", valueGbp: "456", cellType: "3PzS375" }]);
+    expect(screen.getByLabelText("Pb content for receipt row 1")).toHaveValue(123);
+    expect(screen.getByRole("button", { name: "Save table (1)", exact: true })).not.toBeDisabled();
   });
 
   it("sends one model-only update and refreshes both job tables with the saved response", async () => {

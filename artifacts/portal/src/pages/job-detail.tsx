@@ -5,6 +5,7 @@ import {
   type CellModelLite,
 } from "@/lib/cell-type-suggestions";
 import { rankManufacturerSuggestions } from "@/lib/manufacturer-suggestions";
+import { previewReceiptWeight, type ReceiptCatalogueModel } from "@/lib/receipt-weight-preview";
 import {
   calculateCblLmeValue,
   calculateCustomerFinanceMasterValues,
@@ -384,7 +385,7 @@ export default function JobDetailPage() {
   const [receiptDelivery, setReceiptDelivery] = useState<ReceiptDeliveryInfo | null>(null);
   const [loadingReceiptDelivery, setLoadingReceiptDelivery] = useState(false);
   const [sendingReceiptDelivery, setSendingReceiptDelivery] = useState(false);
-  const [cellModels, setCellModels] = useState<CellModelLite[]>([]);
+  const [cellModels, setCellModels] = useState<ReceiptCatalogueModel[]>([]);
   const [manufacturerList, setManufacturerList] = useState<{
     manufacturers: string[];
     aliases: Record<string, string>;
@@ -468,6 +469,24 @@ export default function JobDetailPage() {
       };
     })
   ), [batteries, receiptDrafts, dirtyReceiptFields]);
+
+  const receiptPreviews = Object.fromEntries(batteries.map((battery) => [
+    battery.id,
+    previewReceiptWeight(
+      receiptDrafts[battery.id] || receiptDraftFromBattery(battery),
+      battery,
+      dirtyReceiptFields[battery.id] || new Set(),
+      cellModels,
+      getEffectiveLmeRate(),
+      resolveCustomerLmePercent(financials.customerTractionPercent, financials.customerLmePercent),
+    ),
+  ]));
+  // Keep display previews separate from persisted financial calculations.
+  const previewTotals = calculateReceivedReceiptTotals(batteries.map((battery) => ({
+    ...battery,
+    ...receiptPreviews[battery.id],
+    receiptReviewed: dirtyReceiptFields[battery.id]?.has("receiptConfirmed") ? true : battery.receiptReviewed,
+  })));
 
   const hasFlaggedCellTypes = batteries.some((b) => b.cellModelFlagReason);
   const hasFlaggedManufacturers = batteries.some((b) => b.manufacturerFlagReason);
@@ -1888,7 +1907,8 @@ export default function JobDetailPage() {
                         key={b.id}
                         battery={b}
                         index={i}
-                        draft={receiptDrafts[b.id] || receiptDraftFromBattery(b)}
+                        draft={receiptPreviews[b.id]}
+                        previewing={!!(dirtyReceiptFields[b.id]?.has("cellType") || dirtyReceiptFields[b.id]?.has("voltage"))}
                         onChange={updateReceiptDraft}
                         disabled={!canEditReceipt || savingBatteryAdmin || savingReceiptRows}
                         onRemove={canEditResolved ? removeBattery : undefined}
@@ -1906,10 +1926,10 @@ export default function JobDetailPage() {
                         Totals
                       </td>
                       <td className="px-3 py-2.5 font-bold text-[#0f2744]">
-                        {receivedTotals.pbKg.toFixed(3)} kg
+                        {previewTotals.pbKg.toFixed(3)} kg
                       </td>
                       <td className="px-3 py-2.5 font-bold text-[#0f2744]">
-                        £{receivedTotals.valueGbp.toFixed(2)}
+                        £{previewTotals.valueGbp.toFixed(2)}
                       </td>
                       <td colSpan={2}></td>
                     </tr>
@@ -2726,6 +2746,7 @@ function BatteryAdminRow({
   battery,
   index,
   draft,
+  previewing,
   onChange,
   disabled,
   onRemove,
@@ -2735,6 +2756,7 @@ function BatteryAdminRow({
   battery: BatteryData;
   index: number;
   draft: ReceiptDraft;
+  previewing: boolean;
   onChange: (id: number, updates: Partial<ReceiptDraft>) => void;
   disabled: boolean;
   onRemove?: (battery: BatteryData) => void;
@@ -2744,7 +2766,7 @@ function BatteryAdminRow({
   const [isAutoCalced, setIsAutoCalced] = useState(false);
 
   useEffect(() => {
-    if (disabled || lmeGbpRate === null) return;
+    if (disabled || previewing || lmeGbpRate === null) return;
     const pbNum = battery.pbContentKg ? parseFloat(battery.pbContentKg) : null;
     if (pbNum !== null && isFinite(pbNum) && !battery.valueGbp) {
       const valNum = calculateReceiptValueGbp(pbNum, lmeGbpRate, customerLmePercent);
@@ -2753,7 +2775,7 @@ function BatteryAdminRow({
         setIsAutoCalced(true);
       }
     }
-  }, [battery.id, battery.pbContentKg, battery.valueGbp, disabled, lmeGbpRate, customerLmePercent]);
+  }, [battery.id, battery.pbContentKg, battery.valueGbp, disabled, previewing, lmeGbpRate, customerLmePercent]);
 
   function handleRecalculate() {
     const pbNum = draft.pbContentKg ? parseFloat(draft.pbContentKg) : null;
@@ -2827,8 +2849,14 @@ function BatteryAdminRow({
           placeholder="0.000"
           className={`h-8 w-24 text-sm ${isAutoCalced && draft.pbContentKg ? "bg-sky-50 border-sky-200" : "bg-slate-50"}`}
           value={draft.pbContentKg}
+          aria-label={`Pb content for receipt row ${index + 1}`}
           onChange={(e) => { onChange(battery.id, { pbContentKg: e.target.value }); setIsAutoCalced(false); }}
         />
+        {previewing && (
+          <p className="mt-1 text-[10px] text-slate-500" role="status">
+            {draft.pbContentKg ? "Preview — save table to apply" : "Weight unavailable — check model and voltage"}
+          </p>
+        )}
       </td>
       <td className="px-3 py-2.5">
         <Input
@@ -2838,6 +2866,7 @@ function BatteryAdminRow({
           placeholder="0.00"
           className={`h-8 w-24 text-sm ${isAutoCalced && draft.valueGbp ? "bg-sky-50 border-sky-200" : "bg-slate-50"}`}
           value={draft.valueGbp}
+          aria-label={`Value for receipt row ${index + 1}`}
           onChange={(e) => { onChange(battery.id, { valueGbp: e.target.value }); setIsAutoCalced(false); }}
         />
       </td>
