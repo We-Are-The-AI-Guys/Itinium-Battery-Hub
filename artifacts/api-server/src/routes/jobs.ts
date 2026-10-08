@@ -791,42 +791,8 @@ router.get(
       doc.fontSize(9).fillColor("#475569").font("Helvetica").text(generatedStr, 40);
       doc.moveDown(0.8);
 
-      const topY = doc.y;
-
-      // Supplier block with explicit line positions (fixes uneven spacing).
-      const leftLines: Array<[string, boolean]> = [["Supplier:", true], [job.clientName, false], [job.depot, false]];
-      if (job.collectionPoint) leftLines.push([job.collectionPoint, false]);
-      leftLines.push(["Buyer:", true], ["Itinium Partnership Ltd", false]);
-      let ly = topY;
-      for (const [line, bold] of leftLines) {
-        doc.fontSize(10)
-          .fillColor(bold ? NAVY : "#334155")
-          .font(bold ? "Helvetica-Bold" : "Helvetica")
-          .text(line, 40, ly, { width: pageW / 2 - 60, lineBreak: false });
-        ly += bold && line !== "Supplier:" ? 15 : 14;
-        if (bold && line === "Buyer:") ly -= 0;
-      }
-
-      const rightColX = pageW / 2 + 10;
-      const labelW = 120;
-      const valueX = rightColX + labelW;
-      const valueW = pageW - valueX - 40;
-
-      function infoRow(label: string, value: string, yPos: number) {
-        doc.fontSize(9).fillColor("#64748b").font("Helvetica-Bold")
-          .text(label, rightColX, yPos, { width: labelW, lineBreak: false });
-        doc.fontSize(9).fillColor("#1e293b").font("Helvetica")
-          .text(value, valueX, yPos, { width: valueW, lineBreak: false });
-      }
-
-      infoRow("Job Reference:", job.reference, topY);
-      infoRow("Collection Date:", collectionLabel, topY + 16);
-      infoRow("Customer Invoice No:", job.customerInvoiceNo || "—", topY + 32);
-
-      doc.y = Math.max(ly, topY + 60);
-      doc.moveDown(1.2);
-
-      doc.moveTo(40, doc.y).lineTo(pageW - 40, doc.y).strokeColor("#e2e8f0").lineWidth(0.5).stroke();
+      doc.fontSize(10).fillColor(NAVY).font("Helvetica-Bold")
+        .text(`Collection Date: ${collectionLabel}`, 40, doc.y, { width: contentW });
       doc.moveDown(0.8);
 
       const siteAddress = job.collectionPoint || locationAddress || job.depot;

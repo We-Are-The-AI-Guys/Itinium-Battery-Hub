@@ -178,6 +178,20 @@ async function saveCorrection(updates: Record<string, unknown>) {
 }
 
 describe("both collection PDF downloads use saved corrections", () => {
+  it("omits the supplier/buyer block while retaining the collection and site details", async () => {
+    saved.job.collectionPoint = "Long site address, Building 12, Loading Entrance, Industrial Estate, Example Town, AB12 3CD";
+    saved.job.siteContacts = "Site contact one\nSite contact two";
+    const result = await download("invoice.pdf");
+    for (const label of ["Supplier:", "Buyer:", "Customer Invoice No:"]) {
+      expect(result.text).not.toContain(label);
+    }
+    for (const value of ["PDF-TEST-901", "Collection Date:", "5 October 2026",
+      saved.job.collectionPoint, "Site contact one", "Site contact two",
+      "09:00", "Test Driver", "TEST-901", "Corrected loading instructions"]) {
+      expect(result.text).toContain(value);
+    }
+  });
+
   it("accepts legacy Unknown manufacturers without requiring review and uses TAB on save", async () => {
     saved.batteries[0].manufacture = "Unknown";
     saved.batteries[0].manufacturerFlagReason = "Missing from CSV";
