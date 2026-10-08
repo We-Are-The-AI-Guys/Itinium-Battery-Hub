@@ -18,6 +18,7 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       submittedAt: "2026-10-08", tonnage: "9.876", status: "request",
       customerTractionTonnage: traction, customerBlocsTonnage: blocs,
       wasteTractionTonnage: "7.000", wasteBlocsTonnage: "2.000", pbContentKgSum: "8000",
+      palletCount: 4, calculatedValue: "1250", grossProfit: "250",
     }], pagination: { limit: 8, offset: Number(new URL(url, "http://test").searchParams.get("offset")), total: 16, totalPages: 2 } }
     : url === "/api/job-drafts" ? { drafts: [] }
     : url === "/api/stillages/summary" ? { totalInCirculation: 0 } : null;
@@ -42,9 +43,17 @@ describe("Customer Pb dashboard weight", () => {
     await screen.findByText("9.9t");
     const table = within(screen.getByRole("table"));
     expect(table.getByRole("columnheader", { name: "Tonnage" })).toBeTruthy();
+    expect(table.getByRole("columnheader", { name: "Pallets" })).toBeTruthy();
+    expect(table.getByRole("cell", { name: "4", exact: true })).toBeTruthy();
+    expect(table.queryByRole("columnheader", { name: "Value", exact: true })).toBeNull();
+    expect(table.queryByRole("columnheader", { name: "Gross Profit" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Financial", exact: true }));
     expect(table.getByRole("columnheader", { name: "Customer Pb weight (t)" })).toBeTruthy();
     expect(table.getByText("1.240t")).toBeTruthy();
+    expect(table.getByRole("columnheader", { name: "Value", exact: true })).toBeTruthy();
+    expect(table.getByRole("columnheader", { name: "Gross Profit" })).toBeTruthy();
+    expect(table.getByText("£1,250")).toBeTruthy();
+    expect(table.getByText("£250")).toBeTruthy();
     expect(table.queryByText("9.9t")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Request", exact: true }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/jobs?status=request&limit=8&offset=0", expect.anything()));
@@ -53,6 +62,8 @@ describe("Customer Pb dashboard weight", () => {
     expect(table.getByText("1.240t")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Operational", exact: true }));
     expect(table.getByText("9.9t")).toBeTruthy();
+    expect(table.queryByRole("columnheader", { name: "Value", exact: true })).toBeNull();
+    expect(table.queryByRole("columnheader", { name: "Gross Profit" })).toBeNull();
     view.unmount();
     traction = "2.000"; blocs = "0.005";
     render(<AdminDashboardPage />);

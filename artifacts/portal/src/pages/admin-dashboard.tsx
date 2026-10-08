@@ -51,6 +51,7 @@ interface Job {
   calculatedValue: string | null;
   invoiceStatus: string | null;
   grossProfit: string | null;
+  palletCount: number;
 }
 
 interface Pagination {
@@ -461,6 +462,14 @@ export default function AdminDashboardPage() {
                 <th className="px-6 py-4 font-semibold">
                   {dashboardTab === "financial" ? "Customer Pb weight (t)" : "Tonnage"}
                 </th>
+                {dashboardTab === "operational" ? (
+                  <th className="px-6 py-4 font-semibold">Pallets</th>
+                ) : (
+                  <>
+                    <th className="px-6 py-4 font-semibold">Value</th>
+                    <th className="px-6 py-4 font-semibold">Gross Profit</th>
+                  </>
+                )}
                 <th className="px-6 py-4 font-semibold">Status</th>
                 <th className="px-6 py-4 font-semibold">Invoice</th>
                 <th className="px-6 py-4 font-semibold text-right">Actions</th>
@@ -487,6 +496,18 @@ export default function AdminDashboardPage() {
                       ? formatCustomerPbWeight(job.customerTractionTonnage, job.customerBlocsTonnage)
                       : `${parseFloat(job.tonnage).toFixed(1)}t`}
                   </td>
+                  {dashboardTab === "operational" ? (
+                    <td className="px-6 py-4 text-slate-700">{job.palletCount ?? "—"}</td>
+                  ) : (
+                    <>
+                      <td className="px-6 py-4 font-medium text-slate-700">
+                        {job.calculatedValue != null && job.calculatedValue !== "" ? formatCurrency(Number(job.calculatedValue)) : "—"}
+                      </td>
+                      <td className="px-6 py-4 font-medium text-slate-700">
+                        {job.grossProfit != null && job.grossProfit !== "" ? formatCurrency(Number(job.grossProfit)) : "—"}
+                      </td>
+                    </>
+                  )}
                   <td className="px-6 py-4">
                     <Badge
                       variant="outline"
@@ -527,7 +548,7 @@ export default function AdminDashboardPage() {
               {jobs.length === 0 && (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={dashboardTab === "financial" ? 10 : 9}
                     className="px-6 py-12 text-center text-slate-500"
                   >
                     No jobs found
