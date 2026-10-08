@@ -10,3 +10,11 @@ The rule: the API server derives battery row weights from the cell-model catalog
 **How to apply:**
 - Any path that writes battery weights must group equivalent Pz model variants, resolve combined-name aliases, and select requested manufacturer → TAB → no automatic rate. Never use an unrelated manufacturer's rate; stored weights are gross (×1.4 safe-load).
 - Never overwrite a row flagged as manual weight, and never re-sync tonnage on a job flagged as manually overridden. For legacy rows predating the flags, treat tonnage as auto-derived only if it equals the sum of row weights.
+
+## Collection tonnage is independent of receipt confirmation
+
+Collection/dashboard tonnage must reflect all collection rows, including provisional load allowances, regardless of receipt toggles. Keep confirmed receipt/payment totals separate.
+
+**Why:** The user explicitly reported that collection tonnage must be visible before any row is marked received; receipt synchronization had incorrectly replaced it with the confirmed-only weight.
+
+**How to apply:** Preserve manual tonnage overrides, but derive automatic collection tonnage from the full collection table, never the confirmed-only receipt subtotal.
