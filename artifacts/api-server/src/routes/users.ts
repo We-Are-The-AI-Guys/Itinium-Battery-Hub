@@ -198,6 +198,10 @@ router.post(
         return;
       }
 
+      if (locationId && !clientId) {
+        res.status(400).json({ message: "Cannot assign a location without a client" });
+        return;
+      }
       if (locationId && clientId) {
         const [loc] = await db
           .select({ clientId: locationsTable.clientId })
@@ -390,6 +394,11 @@ router.patch(
         const effectiveClientId = updates.clientId !== undefined
           ? (updates.clientId as number | null)
           : existingUser.clientId;
+        // A changed client cannot retain a default from the previous client.
+        if (effectiveClientId !== existingUser.clientId && parsed.data.locationId === undefined) {
+          updates.locationId = null;
+          updates.depot = null;
+        }
         const effectiveLocationId = updates.locationId !== undefined
           ? (updates.locationId as number | null)
           : existingUser.locationId;
@@ -410,6 +419,8 @@ router.patch(
           if (parsed.data.locationId !== undefined) {
             updates.depot = loc.name;
           }
+        } else if (updates.locationId === null) {
+          updates.depot = null;
         }
       }
 

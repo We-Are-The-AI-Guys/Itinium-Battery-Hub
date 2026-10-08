@@ -428,13 +428,8 @@ export default function UserManagementPage() {
     if (isAdmin) {
       const role = editForm.role;
       const needsClient = role === "depot_user" || role === "team_leader";
-      const needsLocation = role === "depot_user";
       if (needsClient && !editForm.clientId) {
         setEditError("Client is required for this role");
-        return;
-      }
-      if (needsLocation && !editForm.locationId) {
-        setEditError("Location is required for Depot User role");
         return;
       }
     }
@@ -501,7 +496,7 @@ export default function UserManagementPage() {
       ];
 
   const needsClientForNewUser = newUser.role === "depot_user" || newUser.role === "team_leader";
-  const needsLocationForNewUser = newUser.role === "depot_user";
+  const needsLocationForNewUser = ["depot_user", "team_leader"].includes(newUser.role);
 
   return (
     <SidebarLayout
@@ -888,7 +883,7 @@ export default function UserManagementPage() {
                     {needsLocationForNewUser && (
                       <div className="grid gap-2">
                         <label className="text-sm font-medium text-slate-700">
-                          Location <span className="text-red-500">*</span>
+                          Default location {newUser.role === "depot_user" && <span className="text-red-500">*</span>}
                         </label>
                         <div className="relative">
                           <select
@@ -897,7 +892,7 @@ export default function UserManagementPage() {
                             onChange={(e) => setNewUser({ ...newUser, locationId: e.target.value })}
                           >
                             <option value="">Select a location...</option>
-                            {locationOptions.map((l) => (
+                            {locationOptions.filter(l => l.clientId === Number(isTeamLeader ? currentUser?.clientId : newUser.clientId)).map((l) => (
                               <option key={l.id} value={l.id}>{l.name}</option>
                             ))}
                           </select>
@@ -995,9 +990,9 @@ export default function UserManagementPage() {
                       </div>
                     )}
 
-                    {editForm.role === "depot_user" && editForm.clientId && (
+                    {["depot_user", "team_leader"].includes(editForm.role) && editForm.clientId && (
                       <div className="grid gap-2">
-                        <label className="text-sm font-medium text-slate-700">Location</label>
+                        <label className="text-sm font-medium text-slate-700">Default location</label>
                         <div className="relative">
                           <select
                             className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
@@ -1005,7 +1000,7 @@ export default function UserManagementPage() {
                             onChange={(e) => setEditForm({ ...editForm, locationId: e.target.value })}
                           >
                             <option value="">Select a location...</option>
-                            {editLocationOptions.map((l) => (
+                            {editLocationOptions.filter(l => l.clientId === Number(editForm.clientId)).map((l) => (
                               <option key={l.id} value={l.id}>{l.name}</option>
                             ))}
                           </select>
@@ -1018,7 +1013,7 @@ export default function UserManagementPage() {
 
                 {isTeamLeader && (
                   <div className="grid gap-2">
-                    <label className="text-sm font-medium text-slate-700">Location</label>
+                    <label className="text-sm font-medium text-slate-700">Default location</label>
                     <div className="relative">
                       <select
                         className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"

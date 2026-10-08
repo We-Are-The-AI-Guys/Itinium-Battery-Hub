@@ -1110,7 +1110,12 @@ router.post(
       const allowTonnageOverride = internalRequest && tonnageManualOverride;
 
       let resolvedClientId = req.user!.clientId || null;
-      let resolvedLocationId = req.user!.locationId || null;
+      let resolvedLocationId = req.body.locationId === undefined ? req.user!.locationId || null : null;
+      const clientUser = ["depot_user", "team_leader"].includes(req.user!.role);
+      if (clientUser && !resolvedClientId) {
+        res.status(403).json({ message: "Your account is not linked to a client" });
+        return;
+      }
       let clientName = "Unknown";
       if (req.body.locationId !== undefined && req.body.locationId !== null && req.body.locationId !== "") {
         const requestedLocationId = Number(req.body.locationId);
@@ -1118,11 +1123,11 @@ router.post(
           res.status(400).json({ message: "Invalid location" });
           return;
         }
-        if (req.user!.role === "depot_user" && req.user!.locationId !== requestedLocationId) {
-          res.status(403).json({ message: "You can only submit jobs for your assigned location" });
-          return;
-        }
         resolvedLocationId = requestedLocationId;
+      }
+      if (clientUser && !resolvedLocationId) {
+        res.status(400).json({ message: "Select a location belonging to your client" });
+        return;
       }
 
       if (resolvedClientId) {
@@ -1138,10 +1143,12 @@ router.post(
       let locationSiteContacts: string | null = null;
       let locationSiteHours: string | null = null;
       let locationSpecialInstructions: string | null = null;
+      let locationAddress: string | null = null;
       if (resolvedLocationId) {
         const [location] = await db
           .select({
             name: locationsTable.name,
+            address: locationsTable.address,
             clientId: locationsTable.clientId,
             siteContacts: locationsTable.siteContacts,
             siteContactName: locationsTable.siteContactName,
@@ -1155,12 +1162,17 @@ router.post(
           })
           .from(locationsTable)
           .where(eq(locationsTable.id, resolvedLocationId));
+        if (!location) {
+          res.status(400).json({ message: "Selected location no longer exists" });
+          return;
+        }
         if (location) {
           if (resolvedClientId && location.clientId !== resolvedClientId) {
             res.status(403).json({ message: "Location does not belong to your client" });
             return;
           }
           depot = location.name;
+          locationAddress = location.address;
           if (!resolvedClientId) resolvedClientId = location.clientId;
           const structuredContacts = [
             [location.siteContactName, location.siteContactPhone],
@@ -1382,7 +1394,7 @@ router.post(
             depot,
             clientId: resolvedClientId,
             locationId: resolvedLocationId,
-            collectionPoint: collectionPoint || null,
+            collectionPoint: collectionPoint || locationAddress || null,
             collectionDate: collectionDate || null,
             tonnage: finalTonnage,
             tonnageManualOverride: !!(allowTonnageOverride && !isNaN(parsedTonnage) && isFinite(parsedTonnage) && parsedTonnage >= 0),

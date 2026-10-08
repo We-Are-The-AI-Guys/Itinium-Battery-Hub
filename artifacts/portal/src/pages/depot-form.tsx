@@ -1295,6 +1295,11 @@ export default function DepotFormPage() {
   }
 
   async function onSubmit() {
+    if (user && ["team_leader", "depot_user"].includes(user.role) &&
+      !clientLocations.some(location => String(location.id) === selectedLocationId)) {
+      toast({ title: "Select a location", description: "Choose a location belonging to your client before submitting.", variant: "destructive" });
+      return;
+    }
     if (!showReviewFeedback && tokenWeightRows.length > 0) {
       toast({
         title: "Battery weights need confirmation",
@@ -1750,7 +1755,7 @@ export default function DepotFormPage() {
             </span>
           </div>
 
-          {user?.role === "team_leader" && clientLocations.length > 0 && (
+          {user && ["team_leader", "depot_user"].includes(user.role) && (
             <div className="space-y-1.5 max-w-xl">
               <label className="text-sm font-medium text-[#1e293b] flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-slate-400" />
@@ -1769,6 +1774,11 @@ export default function DepotFormPage() {
                       setSiteContacts(locationContacts(location));
                       setSiteHours(location.siteHours || "");
                       setSpecialInstructions(location.specialInstructions || "");
+                    } else {
+                      setCollectionPoint("");
+                      setSiteContacts("");
+                      setSiteHours("");
+                      setSpecialInstructions("");
                     }
                   }}
                 >
@@ -1779,6 +1789,7 @@ export default function DepotFormPage() {
                 </select>
                 <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
+              <p className="text-xs text-slate-500">Choose a location for this collection. This does not change your saved default.</p>
             </div>
           )}
 

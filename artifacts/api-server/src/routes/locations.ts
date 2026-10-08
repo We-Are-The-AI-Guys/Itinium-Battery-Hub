@@ -29,10 +29,6 @@ router.get(
         res.status(403).json({ message: "Access denied" });
         return;
       }
-      if (req.user!.role === "depot_user" && !req.user!.locationId) {
-        res.status(403).json({ message: "Your account is not linked to a location" });
-        return;
-      }
 
       const [client] = await db
         .select({ id: clientsTable.id })
@@ -47,14 +43,7 @@ router.get(
       const locations = await db
         .select()
         .from(locationsTable)
-        .where(
-          req.user!.role === "depot_user"
-            ? and(
-                eq(locationsTable.clientId, clientId),
-                eq(locationsTable.id, req.user!.locationId!)
-              )
-            : eq(locationsTable.clientId, clientId)
-        )
+        .where(eq(locationsTable.clientId, clientId))
         .orderBy(locationsTable.name);
 
       res.json({ locations });
