@@ -630,23 +630,24 @@ export default function DepotFormPage() {
       }
     } else if (battery.cellType === "Other") {
       weight = await fetchWeightFromApi("Other", null);
-    } else if (battery.cellModel && battery.voltage) {
+    } else if ((battery.cellModel || battery.cellType) && battery.voltage) {
       const rawEffMfr = battery.manufacture === "Other" ? battery.manufactureCustom : battery.manufacture;
       // "Unknown" manufacturers default to TAB weights (client convention).
       const effMfr = rawEffMfr.trim().toLowerCase() === "unknown" ? "" : rawEffMfr;
       const matchedModel = selectPreferredCatalogueModel(
         cellModels,
         effMfr,
-        battery.cellModel
+        battery.cellModel || battery.cellType
       );
-      const voltageNum = parseInt(String(battery.voltage).replace(/[^0-9]/g, ""), 10);
+      const effectiveVoltage = battery.voltage === "Other" ? battery.customVoltage : battery.voltage;
+      const voltageMatch = String(effectiveVoltage).trim().match(/^(\d+)\s*V?$/i);
+      const voltageNum = voltageMatch ? Number(voltageMatch[1]) : NaN;
       if (matchedModel && !isNaN(voltageNum) && voltageNum > 0 && voltageNum % 2 === 0) {
         const numCells = voltageNum / 2;
         weight = (parseFloat(matchedModel.weightPerCellKg) * numCells).toFixed(3);
-      }
-    } else if (battery.cellType && battery.voltage) {
-      const effectiveVoltage = battery.voltage === "Other" ? battery.customVoltage : battery.voltage;
-      if (effectiveVoltage) {
+      } else if (!matchedModel && !battery.cellModel && effectiveVoltage) {
+        // Legacy family-only references remain supported. A full designation
+        // in cellType must first use the catalogue, including restored drafts.
         weight = await fetchWeightFromApi(battery.cellType, effectiveVoltage);
       }
     }

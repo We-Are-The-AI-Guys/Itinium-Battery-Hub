@@ -130,6 +130,25 @@ afterEach(() => {
 });
 
 describe("weight parity: submit payload weightManual flag", () => {
+  it("calculates a model kept in cellType without replacing its submitted identity", async () => {
+    renderPage();
+    await screen.findByTestId("button-upload-csv");
+    await uploadCsvViaButton([
+      "Pallet Number,Asset No,Battery Serial,Manufacturer,Cell Type,Voltage",
+      "P1,ASSET-1,SER-1,Exide / GNB,5PzS775,48",
+    ].join("\n"));
+    await screen.findByText("CSV imported");
+    await waitFor(() => expect(screen.getAllByText(/1\.105t/).length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByTestId("button-submit-collection"));
+    await waitFor(() => expect(jobPostBodies).toHaveLength(1));
+    const body = jobPostBodies[0] as { batteries: Array<Record<string, unknown>> };
+    expect(body.batteries[0]).toMatchObject({
+      cellType: "5PzS775",
+      estimatedWeightKg: "789.600",
+      weightManual: false,
+    });
+  });
+
   it("sends weightManual=false for auto-computed weights so the server re-derives them", async () => {
     renderPage();
     await screen.findByTestId("button-upload-csv");
