@@ -63,6 +63,13 @@ const request = (path: string, body: unknown, method = "PATCH") =>
   fetch(`${origin}${path}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 describe("default location assignment", () => {
+  it.each([undefined, []])("admin default selection grants access without a separate permitted selection (%s)", async permittedLocationIds => {
+    state.reads = [[{ clientId: 10, locationId: null }], [], [{ clientId: 10 }], [{ clientId: 10, locationId: null }], [{ clientId: 10, name: "Site B" }]];
+    const res = await request("/users/2", { locationId: 12, permittedLocationIds });
+    expect(res.status).toBe(200);
+    expect(state.updates).toMatchObject({ locationId: 12, depot: "Site B" });
+    expect(state.inserts).toContainEqual({ userId: 2, locationId: 12 });
+  });
   it("assigns a same-client default", async () => {
     state.reads = [[{ clientId: 10, locationId: null }], [], [{ clientId: 10 }], [{ clientId: 10, locationId: null }], [{ clientId: 10, name: "Site B" }]];
     expect((await request("/users/2", { locationId: 12, permittedLocationIds: [12] })).status).toBe(200);

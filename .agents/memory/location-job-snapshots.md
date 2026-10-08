@@ -17,6 +17,14 @@ A client's user may have multiple explicitly permitted locations. Their default 
 
 **How to apply:** Enforce both client and explicit location membership server-side across reads and writes. Missing location assignments must not grant broad access. Never infer a default or legacy job ownership. Preserve internal staff and collector permissions separately and keep historical snapshots unchanged.
 
+## Administrator default selection
+
+An administrator explicitly choosing a user's default site also grants permission to that site, within the user's client; a separate permission-selection step is not required.
+
+**Why:** On 2026-10-08 the user clarified that admin-selected defaults should attach Team Leaders to the chosen site, rather than failing because it was not separately marked permitted.
+
+**How to apply:** Treat only an explicit admin default selection as a grant. Preserve same-client validation, delegated-manager limits, and the ability to revoke sites and clear defaults.
+
 ## Ambiguous related records
 
 Legacy stillage records without canonical client/location ownership remain internal-only, rather than being matched to a client by their depot label.

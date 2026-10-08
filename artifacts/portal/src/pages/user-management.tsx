@@ -901,10 +901,13 @@ export default function UserManagementPage() {
                           <select
                             className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
                             value={newUser.locationId}
-                            onChange={(e) => setNewUser({ ...newUser, locationId: e.target.value })}
+                            onChange={(e) => {
+                              setNewUser({ ...newUser, locationId: e.target.value });
+                              if (isAdmin && e.target.value) setNewPermittedIds(ids => [...new Set([...ids, Number(e.target.value)])]);
+                            }}
                           >
                             <option value="">Select a location...</option>
-                            {locationOptions.filter(l => newPermittedIds.includes(l.id) && l.clientId === Number(isTeamLeader ? currentUser?.clientId : newUser.clientId)).map((l) => (
+                            {locationOptions.filter(l => (isAdmin || newPermittedIds.includes(l.id)) && l.clientId === Number(isTeamLeader ? currentUser?.clientId : newUser.clientId)).map((l) => (
                               <option key={l.id} value={l.id}>{l.name}</option>
                             ))}
                           </select>
@@ -1022,10 +1025,13 @@ export default function UserManagementPage() {
                           <select
                             className="w-full appearance-none h-9 rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#0ea5e9] pr-8"
                             value={editForm.locationId}
-                            onChange={(e) => setEditForm({ ...editForm, locationId: e.target.value })}
+                            onChange={(e) => {
+                              setEditForm({ ...editForm, locationId: e.target.value });
+                              if (e.target.value) setEditPermittedIds(ids => [...new Set([...ids, Number(e.target.value)])]);
+                            }}
                           >
                             <option value="">Select a location...</option>
-                            {editLocationOptions.filter(l => editPermittedIds.includes(l.id) && l.clientId === Number(editForm.clientId)).map((l) => (
+                            {editLocationOptions.filter(l => l.clientId === Number(editForm.clientId)).map((l) => (
                               <option key={l.id} value={l.id}>{l.name}</option>
                             ))}
                           </select>
