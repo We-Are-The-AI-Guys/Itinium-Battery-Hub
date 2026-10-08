@@ -18,6 +18,9 @@ let job: Record<string, unknown>;
 let missingPrice: boolean;
 let requests: string[];
 let saves: Record<string, unknown>[];
+let batteries: Record<string, unknown>[];
+let modelSaveFails: boolean;
+let modelSaveWait: Promise<void> | null;
 
 function json(body: unknown) {
   return { ok: true, status: 200, json: async () => body } as Response;
@@ -33,6 +36,9 @@ beforeEach(() => {
   requests = [];
   saves = [];
   missingPrice = false;
+  batteries = [];
+  modelSaveFails = false;
+  modelSaveWait = null;
   toast.mockClear();
   job = {
     id: 901, reference: "LME-TEST", clientName: "Test company", depot: "Test depot",
@@ -49,7 +55,21 @@ beforeEach(() => {
       Object.assign(job, payload);
       return Promise.resolve(json({ job: { ...job }, batteries: [] }));
     }
-    if (url === "/api/jobs/901") return Promise.resolve(json({ job: { ...job }, batteries: [] }));
+    if (url === "/api/jobs/901") return Promise.resolve(json({ job: { ...job }, batteries }));
+    if (url === "/api/jobs/901/batteries/11/admin" && init?.method === "PATCH") {
+      const payload = JSON.parse(String(init.body)) as Record<string, unknown>;
+      saves.push(payload);
+      if (modelSaveFails) return Promise.resolve({
+        ok: false, status: 500, json: async () => ({ message: "Model update failed" }),
+      } as Response);
+      const battery = {
+        ...batteries[0], ...payload, cellModelFlagReason: null,
+        estimatedWeightKg: "552.720", pbContentKg: "394.800", valueGbp: "675.11",
+      };
+      batteries = [battery];
+      const response = json({ battery, job: { ...job } });
+      return modelSaveWait ? modelSaveWait.then(() => response) : Promise.resolve(response);
+    }
     if (url === "/api/auth/me") return Promise.resolve(json({ user: { role: "accounts" } }));
     if (url.startsWith("/api/lme/current")) {
       const date = new URL(url, "https://example.test").searchParams.get("effectiveDate");
@@ -59,10 +79,72 @@ beforeEach(() => {
       };
       return Promise.resolve(json({ price, effectivePrice: date && !missingPrice ? price : null }));
     }
-    if (url.startsWith("/api/cell-models")) return Promise.resolve(json({ models: [] }));
+    if (url.startsWith("/api/cell-models")) return Promise.resolve(json({ models: [{
+      id: 1, manufacturer: "TAB", modelName: "5 PzS 775", cellFamily: "PzS",
+      cellsCount: 5, weightPerCellKg: "32.9",
+    }] }));
     if (url.startsWith("/api/manufacturers")) return Promise.resolve(json({ manufacturers: [], aliases: {} }));
     return Promise.resolve(json({}));
   }));
+});
+
+describe("job-page model badge saving", () => {
+  beforeEach(() => {
+    batteries = [{
+      id: 11, jobId: 901, manufacture: "TAB", cellType: "5 EPzS 775",
+      voltage: "24", batterySerial: "TEST-11", palletNumber: "P1", assetNumber: "A1",
+      isLooseCells: false, looseCellsQty: null, estimatedWeightKg: "500",
+      pbContentKg: "0", valueGbp: "0", receiptConfirmed: false, receiptReviewed: false,
+      serialFlagReason: null, manufacturerFlagReason: null, voltageFlagReason: null,
+      cellModelFlagReason: "Unrecognised value",
+    }];
+  });
+
+  it("sends one model-only update and refreshes both job tables with the saved response", async () => {
+    render(<JobDetailPage />);
+    const badge = await screen.findByRole("button", { name: /5 PzS 775.*TAB/ });
+    fireEvent.click(badge);
+    await waitFor(() => expect(screen.getByTitle("Edit cell model")).toHaveTextContent("5 PzS 775"));
+    expect(saves).toEqual([{ cellType: "5 PzS 775" }]);
+    expect(screen.getByDisplayValue("5 PzS 775")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("394.800")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save", exact: true })).not.toBeInTheDocument();
+    expect(toast).toHaveBeenCalledWith({ title: "Saved", description: "Battery details updated." });
+  });
+
+  it("keeps the original saved model and reports a failed badge update", async () => {
+    modelSaveFails = true;
+    render(<JobDetailPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /5 PzS 775.*TAB/ }));
+    await screen.findByText("Suggestion not saved. Please retry.");
+    expect(screen.getByDisplayValue("5 EPzS 775")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Cell model")).toHaveValue("5 PzS 775");
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Error", description: "Model update failed",
+    }));
+    modelSaveFails = false;
+    fireEvent.click(screen.getByRole("button", { name: /5 PzS 775.*TAB/ }));
+    await waitFor(() => expect(screen.getByTitle("Edit cell model")).toHaveTextContent("5 PzS 775"));
+    expect(saves).toHaveLength(2);
+  });
+
+  it("locks both tables until the model update completes and ignores repeated badge clicks", async () => {
+    let finish!: () => void;
+    modelSaveWait = new Promise<void>((resolve) => { finish = resolve; });
+    render(<JobDetailPage />);
+    const badge = await screen.findByRole("button", { name: /5 PzS 775.*TAB/ });
+    fireEvent.click(badge);
+    expect(badge).toBeDisabled();
+    expect(screen.getByText("Saving…")).toHaveAttribute("role", "status");
+    expect(screen.getByTitle("Edit notes")).toBeDisabled();
+    expect(screen.getByDisplayValue("5 EPzS 775")).toBeDisabled();
+    fireEvent.click(badge);
+    expect(saves).toEqual([{ cellType: "5 PzS 775" }]);
+    finish();
+    await waitFor(() => expect(screen.getByTitle("Edit cell model")).toHaveTextContent("5 PzS 775"));
+    expect(screen.getByTitle("Edit notes")).not.toBeDisabled();
+    expect(screen.getByDisplayValue("5 PzS 775")).not.toBeDisabled();
+  });
 });
 
 afterEach(() => {

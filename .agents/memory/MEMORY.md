@@ -7,7 +7,7 @@
 - [Receipt table shared saves](receipt-table-shared-saves.md) — shared row saves must lock every competing table mutation and retain failed drafts.
 - [Waste Collector blocs pricing](waste-collector-blocs-pricing.md) — Itinium currently excludes Spot Blocs from Waste Collector pricing; keep Customer LME Blocs independent.
 - [Collection-sheet audit wording](collection-sheet-audit-wording.md) — blank special/loading instructions must print as “None,” never as an empty field.
-- [Job-page unsaved edits](job-page-unsaved-edits.md) — use leave-page warnings until revision-safe autosave prevents overlapping saves from overwriting newer work.
+- [Job-page unsaved edits](job-page-unsaved-edits.md) — manual edits retain save/leave warnings; model suggestion badges are explicit one-click commits, not general autosave.
 - [Location details on jobs](location-job-snapshots.md) — copy location contacts, hours, and instructions onto each job so later master-data edits do not rewrite history.
 - [Shareable portal address](shareable-portal-address.md) — use the verified branded published portal domain for external sign-in links, not preview or the deployment's unrelated primary hostname.
 - [Cell designation identity](cell-designation-identity.md) — preserve the submitted model name; catalogue equivalence supports calculations and suggestions, not silent identity changes.

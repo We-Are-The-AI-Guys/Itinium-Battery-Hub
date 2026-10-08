@@ -359,6 +359,8 @@ export default function JobDetailPage() {
   const [dirtyReceiptIds, setDirtyReceiptIds] = useState<Set<number>>(new Set());
   const [dirtyReceiptFields, setDirtyReceiptFields] = useState<Record<number, Set<ReceiptDraftField>>>({});
   const [savingReceiptRows, setSavingReceiptRows] = useState(false);
+  const [savingBatteryAdmin, setSavingBatteryAdmin] = useState(false);
+  const batteryAdminSaveRef = useRef(false);
 
   const [siteDetails, setSiteDetails] = useState({
     siteContacts: "",
@@ -793,6 +795,9 @@ export default function JobDetailPage() {
   }
 
   async function recalculateAll() {
+    if (batteryAdminSaveRef.current || savingReceiptRows || autoConfirming || autofillingReview) return;
+    batteryAdminSaveRef.current = true;
+    setSavingBatteryAdmin(true);
     const rate = getEffectiveLmeRate();
     try {
       const res = await fetch(`/api/jobs/${params.id}/recalculate-pb`, {
@@ -834,10 +839,14 @@ export default function JobDetailPage() {
       }
     } catch {
       toast({ title: "Error", description: "Failed to recalculate.", variant: "destructive" });
+    } finally {
+      batteryAdminSaveRef.current = false;
+      setSavingBatteryAdmin(false);
     }
   }
 
   async function autoConfirmAll() {
+    if (batteryAdminSaveRef.current) return;
     const pendingCount = batteries.filter((battery) => battery.receiptConfirmed !== true).length;
     if (pendingCount === 0) return;
     if (!window.confirm(`All ${pendingCount} unconfirmed manufacturers will be confirmed with TAB weights — continue?`)) return;
@@ -882,6 +891,7 @@ export default function JobDetailPage() {
   }
 
   async function autofillReviewFields() {
+    if (batteryAdminSaveRef.current) return;
     const flagged = batteries.filter(hasBatteryReviewFlags);
     if (flagged.length === 0) return;
     if (!window.confirm(`Accept the existing values for all ${flagged.length} items under review?`)) return;
@@ -1114,6 +1124,7 @@ export default function JobDetailPage() {
   }
 
   function updateReceiptDraft(batteryId: number, updates: Partial<ReceiptDraft>) {
+    if (batteryAdminSaveRef.current) return;
     setReceiptDrafts((current) => ({
       ...current,
       [batteryId]: {
@@ -1134,6 +1145,7 @@ export default function JobDetailPage() {
   }
 
   async function saveReceiptRows() {
+    if (batteryAdminSaveRef.current) return;
     const ids = Array.from(dirtyReceiptIds);
     if (ids.length === 0) return;
     setSavingReceiptRows(true);
@@ -1228,14 +1240,20 @@ export default function JobDetailPage() {
     batteryId: number,
     updates: Record<string, string | boolean | null>
   ) {
+    if (batteryAdminSaveRef.current || savingReceiptRows || autoConfirming || autofillingReview) {
+      toast({ title: "Save in progress", description: "Wait for the current battery update to finish." });
+      return false;
+    }
     if (dirtyReceiptIds.has(batteryId)) {
       toast({
         title: "Save receipt changes first",
         description: "This battery has unsaved receipt-table changes. Save them before editing the collection row.",
         variant: "destructive",
       });
-      return;
+      return false;
     }
+    batteryAdminSaveRef.current = true;
+    setSavingBatteryAdmin(true);
     try {
       const res = await fetch(`/api/jobs/${params.id}/batteries/${batteryId}/admin`, {
         method: "PATCH",
@@ -1262,16 +1280,22 @@ export default function JobDetailPage() {
       if (data.job) setJob(data.job);
       setReceiptDelivery(null);
       toast({ title: "Saved", description: "Battery details updated." });
+      return true;
     } catch (error) {
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to update battery.",
         variant: "destructive",
       });
+      return false;
+    } finally {
+      batteryAdminSaveRef.current = false;
+      setSavingBatteryAdmin(false);
     }
   }
 
   async function addReplacementBattery() {
+    if (batteryAdminSaveRef.current) return;
     const cellType = window.prompt("Cell type for the replacement row:");
     if (cellType === null) return;
     const voltage = window.prompt("Voltage (optional):") ?? "";
@@ -1298,6 +1322,7 @@ export default function JobDetailPage() {
   }
 
   async function removeBattery(battery: BatteryData) {
+    if (batteryAdminSaveRef.current) return;
     const label = battery.batterySerial || battery.assetNumber || battery.palletNumber || `item ${battery.id}`;
     if (!window.confirm(`Remove ${label} from this job? This cannot be undone.`)) return;
     try {
@@ -1661,7 +1686,7 @@ export default function JobDetailPage() {
                     size="sm"
                     variant="outline"
                     onClick={autofillReviewFields}
-                    disabled={autofillingReview || !batteries.some((battery) =>
+                    disabled={savingBatteryAdmin || savingReceiptRows || autoConfirming || autofillingReview || !batteries.some((battery) =>
                       battery.serialFlagReason
                       || battery.manufacturerFlagReason
                       || battery.cellModelFlagReason
@@ -1768,6 +1793,7 @@ export default function JobDetailPage() {
                         cellModels={cellModels}
                         manufacturerList={manufacturerList}
                         canEdit={canEditResolved}
+                        disabled={savingBatteryAdmin || savingReceiptRows || autoConfirming || autofillingReview}
                       />
                     ))}
                   </tbody>
@@ -1797,7 +1823,7 @@ export default function JobDetailPage() {
                       size="sm"
                       className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700"
                       onClick={saveReceiptRows}
-                      disabled={savingReceiptRows || dirtyReceiptIds.size === 0}
+                      disabled={savingBatteryAdmin || savingReceiptRows || dirtyReceiptIds.size === 0}
                     >
                       <Save className="w-3 h-3" />
                       {savingReceiptRows ? "Saving…" : `Save table${dirtyReceiptIds.size ? ` (${dirtyReceiptIds.size})` : ""}`}
@@ -1808,7 +1834,7 @@ export default function JobDetailPage() {
                         size="sm"
                         className="h-7 text-xs gap-1"
                         onClick={addReplacementBattery}
-                        disabled={savingReceiptRows}
+                        disabled={savingBatteryAdmin || savingReceiptRows}
                       >
                         <Plus className="w-3 h-3" />
                         Add row
@@ -1820,7 +1846,7 @@ export default function JobDetailPage() {
                       className="h-7 text-xs gap-1 border-green-300 text-green-700 hover:bg-green-50"
                       onClick={autoConfirmAll}
                       disabled={
-                        savingReceiptRows
+                        savingBatteryAdmin || savingReceiptRows
                         || autoConfirming
                         || !batteries.some((battery) => battery.receiptConfirmed !== true)
                       }
@@ -1833,7 +1859,7 @@ export default function JobDetailPage() {
                     size="sm"
                     className="h-7 text-xs gap-1"
                     onClick={recalculateAll}
-                    disabled={savingReceiptRows || getEffectiveLmeRate() === null}
+                    disabled={savingBatteryAdmin || savingReceiptRows || getEffectiveLmeRate() === null}
                   >
                     <RefreshCw className="w-3 h-3" />
                     Recalculate All
@@ -1864,7 +1890,7 @@ export default function JobDetailPage() {
                         index={i}
                         draft={receiptDrafts[b.id] || receiptDraftFromBattery(b)}
                         onChange={updateReceiptDraft}
-                        disabled={!canEditReceipt || savingReceiptRows}
+                        disabled={!canEditReceipt || savingBatteryAdmin || savingReceiptRows}
                         onRemove={canEditResolved ? removeBattery : undefined}
                         lmeGbpRate={getEffectiveLmeRate()}
                         customerLmePercent={resolveCustomerLmePercent(
@@ -1895,7 +1921,7 @@ export default function JobDetailPage() {
                   size="sm"
                   className="gap-1.5 bg-green-600 hover:bg-green-700"
                   onClick={saveReceiptRows}
-                  disabled={savingReceiptRows || dirtyReceiptIds.size === 0}
+                  disabled={savingBatteryAdmin || savingReceiptRows || dirtyReceiptIds.size === 0}
                 >
                   <Save className="w-3.5 h-3.5" />
                   {savingReceiptRows ? "Saving receipt table…" : `Save receipt table${dirtyReceiptIds.size ? ` (${dirtyReceiptIds.size})` : ""}`}
@@ -2225,13 +2251,15 @@ function CollectionBatteryRow({
   cellModels,
   manufacturerList,
   canEdit,
+  disabled,
 }: {
   battery: BatteryData;
   index: number;
-  onSaveField: (id: number, updates: Record<string, string | boolean | null>) => void;
+  onSaveField: (id: number, updates: Record<string, string | boolean | null>) => Promise<boolean>;
   cellModels: CellModelLite[];
   manufacturerList: { manufacturers: string[]; aliases: Record<string, string> } | null;
   canEdit: boolean;
+  disabled: boolean;
 }) {
   const cellTypeSuggestions = useMemo(() => {
     if ((!battery.cellModelFlagReason && !canEdit) || cellModels.length === 0) return [];
@@ -2351,16 +2379,17 @@ function CollectionBatteryRow({
     <tr className={`${hasAnyFlag ? "bg-amber-50/60 border-l-4 border-l-amber-400" : (index % 2 === 0 ? "bg-white" : "bg-slate-50/30")}`}>
       <td className="px-3 py-2.5 text-slate-500">{index + 1}</td>
       <td className="px-3 py-2.5 text-slate-700">
-        {canEdit ? <InlineFlagEdit initialValue={battery.palletNumber} placeholder="Pallet" onSave={(v) => onSaveField(battery.id, { palletNumber: v })} subtle allowEmpty /> : battery.palletNumber || "—"}
+        {canEdit ? <InlineFlagEdit disabled={disabled} initialValue={battery.palletNumber} placeholder="Pallet" onSave={(v) => onSaveField(battery.id, { palletNumber: v })} subtle allowEmpty /> : battery.palletNumber || "—"}
       </td>
       <td className="px-3 py-2.5 text-slate-700">
-        {canEdit ? <InlineFlagEdit initialValue={battery.assetNumber} placeholder="Asset" onSave={(v) => onSaveField(battery.id, { assetNumber: v })} subtle allowEmpty /> : battery.assetNumber || "—"}
+        {canEdit ? <InlineFlagEdit disabled={disabled} initialValue={battery.assetNumber} placeholder="Asset" onSave={(v) => onSaveField(battery.id, { assetNumber: v })} subtle allowEmpty /> : battery.assetNumber || "—"}
       </td>
       <td className="px-3 py-2.5 font-medium text-[#0f2744]">
         {battery.serialFlagReason ? (
           <InlineFlagEdit
             initialValue={battery.batterySerial}
             placeholder="Serial"
+            disabled={disabled}
             onSave={(v) => onSaveField(battery.id, { batterySerial: v })}
             extraAction={{
               label: "No serial fitted",
@@ -2368,7 +2397,7 @@ function CollectionBatteryRow({
             }}
           />
         ) : canEdit ? (
-          <InlineFlagEdit initialValue={battery.batterySerial} placeholder="Serial" onSave={(v) => onSaveField(battery.id, { batterySerial: v })} subtle allowEmpty />
+          <InlineFlagEdit disabled={disabled} initialValue={battery.batterySerial} placeholder="Serial" onSave={(v) => onSaveField(battery.id, { batterySerial: v })} subtle allowEmpty />
         ) : (
           battery.batterySerial || "—"
         )}
@@ -2378,6 +2407,7 @@ function CollectionBatteryRow({
           <InlineFlagEdit
             initialValue={battery.manufacture}
             placeholder="Manufacturer"
+            disabled={disabled}
             onSave={(v) => onSaveField(battery.id, { manufacture: v })}
             suggestions={manufacturerChips}
           />
@@ -2385,6 +2415,7 @@ function CollectionBatteryRow({
           <InlineFlagEdit
             initialValue={battery.manufacture}
             placeholder="Manufacturer"
+            disabled={disabled}
             onSave={(v) => onSaveField(battery.id, { manufacture: v })}
             suggestions={manufacturerChips}
             subtle
@@ -2399,6 +2430,8 @@ function CollectionBatteryRow({
             <InlineFlagEdit
               initialValue={battery.cellType}
               placeholder="Cell model"
+              disabled={disabled}
+              saveSuggestionsImmediately
               onSave={(v) => onSaveField(battery.id, { cellType: v })}
               suggestions={suggestionChips}
             />
@@ -2411,6 +2444,8 @@ function CollectionBatteryRow({
             <InlineFlagEdit
               initialValue={battery.cellType}
               placeholder="Cell model"
+              disabled={disabled}
+              saveSuggestionsImmediately
               onSave={(v) => onSaveField(battery.id, { cellType: v })}
               suggestions={suggestionChips}
               subtle
@@ -2433,10 +2468,11 @@ function CollectionBatteryRow({
           <InlineFlagEdit
             initialValue={battery.voltage}
             placeholder="Voltage"
+            disabled={disabled}
             onSave={(v) => onSaveField(battery.id, { voltage: v })}
           />
         ) : canEdit ? (
-          <InlineFlagEdit initialValue={battery.voltage} placeholder="Voltage" onSave={(v) => onSaveField(battery.id, { voltage: v })} subtle allowEmpty />
+          <InlineFlagEdit disabled={disabled} initialValue={battery.voltage} placeholder="Voltage" onSave={(v) => onSaveField(battery.id, { voltage: v })} subtle allowEmpty />
         ) : (
           battery.voltage || "—"
         )}
@@ -2446,6 +2482,7 @@ function CollectionBatteryRow({
           <InlineFlagEdit
             initialValue={battery.looseCellsQty == null ? null : String(battery.looseCellsQty)}
             placeholder="Loose qty"
+            disabled={disabled}
             onSave={(v) => onSaveField(battery.id, { looseCellsQty: v })}
             subtle
             allowEmpty
@@ -2486,7 +2523,7 @@ function CollectionBatteryRow({
       <td className="px-3 py-2.5 text-slate-500 max-w-[240px]">
         <div className="flex flex-col gap-0.5">
           {canEdit ? (
-            <InlineFlagEdit initialValue={battery.notes} placeholder="Notes" onSave={(v) => onSaveField(battery.id, { notes: v })} subtle allowEmpty />
+            <InlineFlagEdit disabled={disabled} initialValue={battery.notes} placeholder="Notes" onSave={(v) => onSaveField(battery.id, { notes: v })} subtle allowEmpty />
           ) : (
             <span className="truncate">{battery.notes || "—"}</span>
           )}
@@ -2501,7 +2538,7 @@ function CollectionBatteryRow({
   );
 }
 
-function InlineFlagEdit({
+export function InlineFlagEdit({
   initialValue,
   placeholder,
   onSave,
@@ -2510,18 +2547,52 @@ function InlineFlagEdit({
   subtle,
   allowEmpty = false,
   inputType = "text",
+  saveSuggestionsImmediately = false,
+  disabled = false,
 }: {
   initialValue: string | null;
   placeholder: string;
-  onSave: (value: string) => void;
+  onSave: (value: string) => void | Promise<boolean>;
   extraAction?: { label: string; onClick: () => void };
   suggestions?: { label: string; hint?: string }[];
   subtle?: boolean;
   allowEmpty?: boolean;
   inputType?: "text" | "number";
+  saveSuggestionsImmediately?: boolean;
+  disabled?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(initialValue || "");
+  const [savingSuggestion, setSavingSuggestion] = useState(false);
+  const [suggestionError, setSuggestionError] = useState("");
+  const suggestionSaveRef = useRef(false);
+
+  async function chooseSuggestion(label: string) {
+    if (disabled || suggestionSaveRef.current) return;
+    setValue(label);
+    if (!saveSuggestionsImmediately) {
+      setEditing(true);
+      return;
+    }
+    suggestionSaveRef.current = true;
+    setSavingSuggestion(true);
+    setSuggestionError("");
+    try {
+      const saved = await onSave(label.trim());
+      if (saved === false) {
+        setEditing(true);
+        setSuggestionError("Suggestion not saved. Please retry.");
+      } else {
+        setEditing(false);
+      }
+    } catch {
+      setEditing(true);
+      setSuggestionError("Suggestion not saved. Please retry.");
+    } finally {
+      suggestionSaveRef.current = false;
+      setSavingSuggestion(false);
+    }
+  }
 
   useEffect(() => {
     setValue(initialValue || "");
@@ -2535,10 +2606,8 @@ function InlineFlagEdit({
           <button
             key={`${s.label}|${s.hint || ""}`}
             type="button"
-            onClick={() => {
-              setValue(s.label);
-              setEditing(true);
-            }}
+            onClick={() => void chooseSuggestion(s.label)}
+            disabled={disabled || savingSuggestion}
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-sky-200 bg-sky-50 text-[10px] text-sky-800 hover:bg-sky-100"
             title={s.hint ? `From ${s.hint}` : undefined}
           >
@@ -2546,6 +2615,8 @@ function InlineFlagEdit({
             {s.hint && <span className="text-sky-500">· {s.hint}</span>}
           </button>
         ))}
+        {savingSuggestion && <span role="status" className="text-[10px] text-slate-500">Saving…</span>}
+        {suggestionError && <span role="alert" className="text-[10px] text-red-600">{suggestionError}</span>}
       </div>
     ) : null;
 
@@ -2554,6 +2625,7 @@ function InlineFlagEdit({
       return (
         <button
           type="button"
+          disabled={disabled || savingSuggestion}
           onClick={() => setEditing(true)}
           className="group inline-flex items-center gap-1.5 rounded px-1 py-0.5 -mx-1 hover:bg-slate-100"
           title={`Edit ${placeholder.toLowerCase()}`}
@@ -2567,6 +2639,7 @@ function InlineFlagEdit({
       <div className="flex flex-col gap-1 items-start">
         <button
           type="button"
+          disabled={disabled || savingSuggestion}
           onClick={() => setEditing(true)}
           className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-dashed border-amber-300 bg-white text-[11px] text-amber-800 hover:bg-amber-50"
           title={`Click to set ${placeholder.toLowerCase()}`}
@@ -2582,12 +2655,14 @@ function InlineFlagEdit({
     <div className="flex items-center gap-1 flex-wrap">
       <Input
         autoFocus
+        disabled={disabled || savingSuggestion}
         type={inputType}
         min={inputType === "number" ? 0 : undefined}
         step={inputType === "number" ? 1 : undefined}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {
+          if (disabled || savingSuggestion) return;
           if (e.key === "Enter" && (allowEmpty || value.trim())) {
             onSave(value.trim());
             setEditing(false);
@@ -2604,7 +2679,7 @@ function InlineFlagEdit({
         variant="outline"
         size="sm"
         className="h-7 px-2 text-[11px]"
-        disabled={!allowEmpty && !value.trim()}
+        disabled={disabled || savingSuggestion || (!allowEmpty && !value.trim())}
         onClick={() => {
           if (!allowEmpty && !value.trim()) return;
           onSave(value.trim());
@@ -2624,6 +2699,7 @@ function InlineFlagEdit({
             setEditing(false);
           }}
           title="Mark as verified with no serial"
+          disabled={disabled || savingSuggestion}
         >
           {extraAction.label}
         </Button>
@@ -2633,6 +2709,7 @@ function InlineFlagEdit({
         variant="ghost"
         size="sm"
         className="h-7 px-2 text-[11px] text-slate-500"
+        disabled={disabled || savingSuggestion}
         onClick={() => {
           setValue(initialValue || "");
           setEditing(false);
