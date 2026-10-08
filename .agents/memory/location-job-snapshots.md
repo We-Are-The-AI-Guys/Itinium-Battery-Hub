@@ -11,8 +11,8 @@ Treat saved locations as reusable defaults, but copy the selected contacts, site
 
 ## User defaults versus per-job selections
 
-A client user's assigned location is the default for new collections, not a restriction to that one collection site. Both depot users and team leaders may choose another location belonging to their own client for a particular job.
+A client's user may have multiple explicitly permitted locations. Their default is only the preselected site for new collections; it must be one of those permitted locations. Both depot users and team leaders must be restricted to their permitted sites, not automatically every site in the client.
 
-**Why:** The user explicitly requires default preselection plus an editable same-client dropdown, without changing the saved user default or existing job history.
+**Why:** On 2026-10-08 the user clarified that depot data must be siloed and accounts can be assigned multiple locations. This supersedes the earlier unrestricted same-client selection rule.
 
-**How to apply:** Never infer a default for users without one. Clear an obsolete default on client reassignment unless a valid replacement is supplied. Keep other role permissions unchanged and enforce client membership on the server.
+**How to apply:** Enforce both client and explicit location membership server-side across reads and writes. Missing location assignments must not grant broad access. Never infer a default or legacy job ownership. Preserve internal staff and collector permissions separately and keep historical snapshots unchanged. This is the required policy, not a claim that existing code already enforces it.
