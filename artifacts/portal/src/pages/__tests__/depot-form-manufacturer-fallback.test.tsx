@@ -51,6 +51,7 @@ let createdInputs: HTMLInputElement[];
 let originalCreateElement: typeof document.createElement;
 let jobPostBodies: unknown[];
 let userRole: string;
+let savedDraftForm: Record<string, unknown> | null;
 
 function installFetchMock() {
   jobPostBodies = [];
@@ -58,6 +59,15 @@ function installFetchMock() {
     "fetch",
     vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.includes("/api/job-drafts")) {
+        if (init?.method === "POST") {
+          savedDraftForm = JSON.parse(String(init.body)).formData;
+          return Promise.resolve(jsonResponse(200, { draft: { id: 42 } }));
+        }
+        return Promise.resolve(jsonResponse(200, {
+          drafts: savedDraftForm ? [{ id: 42, formData: savedDraftForm }] : [],
+        }));
+      }
       if (url.includes("/api/cell-models")) {
         return Promise.resolve(jsonResponse(200, { models: CELL_MODELS }));
       }
@@ -107,7 +117,7 @@ async function uploadCsvViaButton(csvContent: string) {
   expect(fileInput, "dynamically created file input").toBeTruthy();
 
   const file = new File([csvContent], "batteries.csv", { type: "text/csv" });
-  Object.defineProperty(fileInput!, "files", { value: [file] });
+  Object.defineProperty(fileInput!, "files", { value: [file], configurable: true });
   await act(async () => {
     fileInput!.onchange?.({ target: fileInput } as unknown as Event);
   });
@@ -123,12 +133,15 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  window.history.replaceState({}, "", "/collection/new");
+  savedDraftForm = null;
   userRole = "depot_user";
   installFetchMock();
   trackDynamicInputs();
 });
 
 afterEach(() => {
+  window.history.replaceState({}, "", "/collection/new");
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -143,6 +156,96 @@ describe("isUnknownManufacturerValue", () => {
     for (const v of ["Hoppecke", "TAB", "EnerSys / Hawker", "Natrium"]) {
       expect(isUnknownManufacturerValue(v), v).toBe(false);
     }
+  });
+});
+
+describe("one CSV upload per collection request", () => {
+  const csv = [
+    "Pallet Number,Asset No,Battery Serial,Manufacturer,Cell Type,Voltage",
+    "P1,ASSET-CSV,SER-CSV,Hawker,4PzS460,24",
+  ].join("\n");
+
+  it("ignores repeat file callbacks after a successful import", async () => {
+    renderPage();
+    await screen.findByTestId("button-upload-csv");
+    await uploadCsvViaButton(csv);
+    await screen.findByText("CSV imported");
+    expect(screen.getByTestId("button-upload-csv")).toBeDisabled();
+    // Reuse the original file input to exercise the handler guard, not just
+    // the disabled button.
+    await uploadCsvViaButton(csv);
+    expect(screen.getAllByDisplayValue("SER-CSV")).toHaveLength(1);
+    expect(screen.getByText(/Only one CSV upload/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("button-submit-collection")).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId("button-submit-collection"));
+    await screen.findByText("Collection submitted");
+    expect(jobPostBodies).toHaveLength(1);
+    expect(screen.getByTestId("button-upload-csv")).not.toBeDisabled();
+  });
+
+  it("allows retry after an invalid CSV and after cancelling internal review", async () => {
+    userRole = "head_office_admin";
+    renderPage();
+    await screen.findByTestId("button-upload-csv");
+    await uploadCsvViaButton("");
+    await screen.findByText("Empty CSV");
+    expect(screen.getByTestId("button-upload-csv")).not.toBeDisabled();
+    await uploadCsvViaButton("Asset No,Battery Serial\nA,B");
+    await screen.findByTestId("button-csv-validation-cancel");
+    fireEvent.click(screen.getByTestId("button-csv-validation-cancel"));
+    expect(screen.getByTestId("button-upload-csv")).not.toBeDisabled();
+    await uploadCsvViaButton(csv);
+    await screen.findByText("CSV imported");
+    expect(screen.getByTestId("button-upload-csv")).toBeDisabled();
+  });
+
+  it("persists the upload lock when saving and reopening a draft", async () => {
+    const page = renderPage();
+    await screen.findByTestId("button-upload-csv");
+    await uploadCsvViaButton(csv);
+    await screen.findByText("CSV imported");
+    await screen.findByDisplayValue("SER-CSV");
+    await waitFor(() => expect(screen.getByTestId("button-save-draft")).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId("button-save-draft"));
+    await waitFor(() => expect(savedDraftForm?.csvImported).toBe(true));
+    expect(savedDraftForm?.csvImported).toBe(true);
+    page.unmount();
+    window.history.replaceState({}, "", "/collection/new?draft=42");
+    renderPage();
+    await screen.findByDisplayValue("SER-CSV");
+    expect(screen.getByTestId("button-upload-csv")).toBeDisabled();
+  });
+
+  it("allows the first upload on a saved manual-only draft", async () => {
+    const page = renderPage();
+    await screen.findByTestId("button-upload-csv");
+    fireEvent.click(screen.getByTestId("button-save-draft"));
+    await waitFor(() => expect(savedDraftForm?.csvImported).toBe(false));
+    expect(savedDraftForm?.csvImported).toBe(false);
+    page.unmount();
+    window.history.replaceState({}, "", "/collection/new?draft=42");
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("button-upload-csv")).not.toBeDisabled());
+    await uploadCsvViaButton(csv);
+    await screen.findByText("CSV imported");
+    expect(screen.getByTestId("button-upload-csv")).toBeDisabled();
+  });
+
+  it("protects populated legacy drafts whose import history is unknown", async () => {
+    const page = renderPage();
+    await screen.findByTestId("button-upload-csv");
+    await uploadCsvViaButton(csv);
+    await screen.findByText("CSV imported");
+    await screen.findByDisplayValue("SER-CSV");
+    await waitFor(() => expect(screen.getByTestId("button-save-draft")).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId("button-save-draft"));
+    await waitFor(() => expect(savedDraftForm?.csvImported).toBe(true));
+    delete savedDraftForm!.csvImported;
+    page.unmount();
+    window.history.replaceState({}, "", "/collection/new?draft=42");
+    renderPage();
+    await screen.findByDisplayValue("SER-CSV");
+    expect(screen.getByTestId("button-upload-csv")).toBeDisabled();
   });
 });
 

@@ -15,3 +15,10 @@ The per-battery Estimated Weight input must be absent from the collection reques
 **Why:** The user corrected a role-only removal on October 8, 2026: the request form itself should not show the input.
 
 **How to apply:** Do not retain an admin-only version on the request form. This does not remove weight correction tools from the separate internal job-detail workflow.
+
+## One CSV per collection request
+Allow only one successfully committed CSV import per request, including after saving and reopening a draft. Failed imports and cancelled review attempts do not consume the allowance; manual row edits remain available.
+
+**Why:** The user reported an incident where the same CSV was accidentally uploaded twice and explicitly requested a one-file-per-job restriction.
+
+**How to apply:** Keep the import lock with the draft, guard against concurrent file reads and repeated callbacks, and reset only for a new request. Conservatively lock older populated drafts with no import history, because allowing another import could duplicate existing rows.

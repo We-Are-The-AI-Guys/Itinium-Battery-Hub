@@ -401,6 +401,11 @@ export default function DepotFormPage() {
   const [jobNotes, setJobNotes] = useState("");
   const [batteries, setBatteries] = useState<BatteryRow[]>([createEmptyBattery()]);
   const [currentDraftId, setCurrentDraftId] = useState<number | null>(null);
+  // A draft starts locked until its saved import history has been restored.
+  const [csvImported, setCsvImported] = useState(() => new URLSearchParams(searchStr).has("draft"));
+  const csvImportedRef = useRef(csvImported);
+  const [csvReading, setCsvReading] = useState(false);
+  const csvReadingRef = useRef(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [pendingCsvImport, setPendingCsvImport] = useState<{
     rows: BatteryRow[];
@@ -488,6 +493,14 @@ export default function DepotFormPage() {
           if (!draft) return;
           try {
             const fd = typeof draft.formData === "string" ? JSON.parse(draft.formData) : draft.formData;
+            // Older populated drafts have no reliable import provenance.
+            // Lock their upload rather than risk duplicating existing rows.
+            const alreadyImported = typeof fd.csvImported === "boolean"
+              ? fd.csvImported
+              : Array.isArray(fd.batteries) && fd.batteries.some((b: BatteryRow) =>
+                  b.assetNumber || b.batterySerial || b.cellType || b.cellModel || b.palletNumber);
+            csvImportedRef.current = alreadyImported;
+            setCsvImported(alreadyImported);
             if (fd.collectionPoint !== undefined) setCollectionPoint(fd.collectionPoint || "");
             if (fd.jobNotes !== undefined) setJobNotes(fd.jobNotes || "");
             if (fd.tonnageOverride !== undefined) setTonnageOverride(fd.tonnageOverride || "");
@@ -748,6 +761,9 @@ export default function DepotFormPage() {
   }
 
   function handleCsvImport(file: File) {
+    if (csvImportedRef.current || csvReadingRef.current || pendingCsvImport) return;
+    csvReadingRef.current = true;
+    setCsvReading(true);
     if (cellModelsStatus === "loading" || manufacturersStatus === "loading") {
       setQueuedCsvFile(file);
       toast({
@@ -804,6 +820,10 @@ export default function DepotFormPage() {
         }
 
         const dataRows = rows.slice(1).filter((row) => row.some((cell) => cell && cell.trim()));
+        if (dataRows.length === 0) {
+          toast({ title: "Empty CSV", description: "The CSV file contains no data rows.", variant: "destructive" });
+          return;
+        }
         const knownMfrs = manufacturers.filter((m) => m.toLowerCase() !== "other");
         const mfrByNorm = new Map(knownMfrs.map((m) => [normalizeForMatch(m), m] as const));
         for (const [alias, canonical] of Object.entries(manufacturerAliases)) {
@@ -957,9 +977,23 @@ export default function DepotFormPage() {
         commitCsvImport(expanded, !showReviewFeedback);
       } catch {
         toast({ title: "CSV import failed", description: "Could not parse the CSV file. Please check the format.", variant: "destructive" });
+      } finally {
+        csvReadingRef.current = false;
+        setCsvReading(false);
       }
     };
-    reader.readAsText(file);
+    const readFailed = () => {
+      csvReadingRef.current = false;
+      setCsvReading(false);
+      toast({ title: "CSV import failed", description: "Could not read the file. Please try again.", variant: "destructive" });
+    };
+    reader.onerror = readFailed;
+    reader.onabort = readFailed;
+    try {
+      reader.readAsText(file);
+    } catch {
+      readFailed();
+    }
   }
 
   useEffect(() => {
@@ -968,9 +1002,12 @@ export default function DepotFormPage() {
     if (cellModelsStatus === "ready" && manufacturersStatus === "ready") {
       const file = queuedCsvFile;
       setQueuedCsvFile(null);
+      csvReadingRef.current = false;
       handleCsvImport(file);
     } else {
       setQueuedCsvFile(null);
+      csvReadingRef.current = false;
+      setCsvReading(false);
       const failed =
         cellModelsStatus === "error" && manufacturersStatus === "error"
           ? "The cell model catalogue and manufacturer list"
@@ -1072,6 +1109,7 @@ export default function DepotFormPage() {
   }
 
   function commitCsvImport(rows: BatteryRow[], applyFlags = false) {
+    if (csvImportedRef.current || rows.length === 0) return;
     const knownManufacturers = new Set(
       manufacturers.filter((m) => m.toLowerCase() !== "other").map((m) => m.toLowerCase())
     );
@@ -1109,6 +1147,8 @@ export default function DepotFormPage() {
           };
         })
       : rows;
+    csvImportedRef.current = true;
+    setCsvImported(true);
     setBatteries((prev) => {
       const hasOnlyEmpty = prev.length === 1 && !prev[0].assetNumber && !prev[0].batterySerial && !prev[0].palletNumber;
       return hasOnlyEmpty ? finalRows : [...prev, ...finalRows];
@@ -1451,6 +1491,8 @@ export default function DepotFormPage() {
         setTonnageManual(false);
         setTonnageOverride("");
         setCurrentDraftId(null);
+        csvImportedRef.current = false;
+        setCsvImported(false);
         navigate("/");
       } else {
         const err = await res.json().catch(() => ({}));
@@ -1475,6 +1517,7 @@ export default function DepotFormPage() {
     setSavingDraft(true);
     try {
       const formData = {
+        csvImported: csvImportedRef.current,
         collectionPoint,
         jobNotes,
         tonnageOverride,
@@ -1844,6 +1887,7 @@ export default function DepotFormPage() {
             <button
               type="button"
               onClick={() => {
+                if (csvImportedRef.current || csvReadingRef.current || pendingCsvImport) return;
                 const input = document.createElement("input");
                 input.type = "file";
                 input.accept = ".csv,text/csv";
@@ -1853,17 +1897,20 @@ export default function DepotFormPage() {
                 };
                 input.click();
               }}
-              className="w-full flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 hover:bg-slate-100 hover:border-[#0ea5e9] transition-all group outline-none focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-2"
+              disabled={csvImported || csvReading || !!pendingCsvImport}
+              className="w-full flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 enabled:hover:bg-slate-100 enabled:hover:border-[#0ea5e9] disabled:cursor-not-allowed transition-all group outline-none focus-visible:ring-2 focus-visible:ring-[#0ea5e9] focus-visible:ring-offset-2"
               data-testid="button-upload-csv"
             >
               <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-sm mb-4 group-hover:scale-110 transition-transform">
                 <Upload className="w-6 h-6 text-[#0ea5e9]" />
               </div>
               <p className="text-[#0f2744] font-bold text-lg mb-1">
-                Upload CSV File
+                {csvImported ? "CSV upload locked" : csvReading ? "Preparing CSV import…" : "Upload CSV File"}
               </p>
               <p className="text-slate-500 text-sm mb-1">
-                Import battery items from a spreadsheet
+                {csvImported
+                  ? "Only one CSV upload is allowed per collection request. You can still edit or add rows manually."
+                  : "Import battery items from one spreadsheet — one successful upload per collection request."}
               </p>
               <p className="text-slate-400 text-xs">
                 Download the template above for the correct format
@@ -2652,7 +2699,7 @@ export default function DepotFormPage() {
             variant="outline"
             className="flex-1 sm:flex-none border-slate-300 text-slate-600 hover:bg-slate-50 h-12 font-medium"
             onClick={onSaveDraft}
-            disabled={savingDraft}
+            disabled={savingDraft || csvReading || !!pendingCsvImport}
             data-testid="button-save-draft"
           >
             <Save className="w-4 h-4 mr-2" />
@@ -2662,7 +2709,7 @@ export default function DepotFormPage() {
             type="button"
             className="flex-1 sm:w-auto h-12 bg-[#0f2744] hover:bg-[#132744] text-white font-medium px-8 shadow-md"
             onClick={onSubmit}
-            disabled={submitting || currentLoad > maxCapacity || (!showReviewFeedback && tokenWeightRows.length > 0)}
+            disabled={submitting || csvReading || !!pendingCsvImport || currentLoad > maxCapacity || (!showReviewFeedback && tokenWeightRows.length > 0)}
             data-testid="button-submit-collection"
           >
             <Send className="w-4 h-4 mr-2" />
