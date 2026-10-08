@@ -34,6 +34,8 @@ interface Job {
   collectionDate: string | null;
   submittedAt: string;
   pbContentKgSum: string | null;
+  weightConfirmed: boolean;
+  palletCount: number;
   status: string;
   invoiceStatus: string;
   totalInvoiceValue: string | null;
@@ -79,17 +81,6 @@ function formatDate(dateStr: string | null) {
 function isOverdue(job: Job): boolean {
   if (!job.dueDate || job.datePaid) return false;
   return new Date(job.dueDate) < new Date(new Date().toISOString().split("T")[0]);
-}
-
-function formatCurrency(value: string | null) {
-  if (!value) return "—";
-  const num = parseFloat(value);
-  if (isNaN(num)) return "—";
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "GBP",
-    maximumFractionDigits: 2,
-  }).format(num);
 }
 
 interface CollectionPointOption {
@@ -317,7 +308,7 @@ export default function JobListPage() {
                 <th className="px-6 py-3.5 font-semibold">Collection Point</th>
                 <th className="px-6 py-3.5 font-semibold">Pb (kg)</th>
                 <th className="px-6 py-3.5 font-semibold">Status</th>
-                <th className="px-6 py-3.5 font-semibold">Total Value</th>
+                <th className="px-6 py-3.5 font-semibold">Total Pallets</th>
                 <th className="px-6 py-3.5 font-semibold text-right">Actions</th>
               </tr>
             </thead>
@@ -350,6 +341,11 @@ export default function JobListPage() {
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">
                     {formatPbKg(job.pbContentKgSum)}
+                    {job.pbContentKgSum !== null && (
+                      <span className="block text-xs font-normal text-slate-500">
+                        {job.weightConfirmed ? "Confirmed" : "Estimated"}
+                      </span>
+                    )}
                   </td>
                   <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                     {canEditStatus ? (
@@ -384,13 +380,7 @@ export default function JobListPage() {
                     )}
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">
-                    {job.totalInvoiceValue ? (
-                      formatCurrency(job.totalInvoiceValue)
-                    ) : job.batteryValueSum ? (
-                      <span className="text-slate-500 text-sm" title="Estimated from battery data">
-                        ~{formatCurrency(job.batteryValueSum)}
-                      </span>
-                    ) : "—"}
+                    {job.palletCount}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <Button

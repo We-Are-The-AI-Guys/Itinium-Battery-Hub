@@ -103,15 +103,6 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-function formatCurrencyDecimal(value: number) {
-  return new Intl.NumberFormat("en-GB", {
-    style: "currency",
-    currency: "GBP",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
 interface JobDraft {
   id: number;
   depot: string;
@@ -465,8 +456,6 @@ export default function AdminDashboardPage() {
                 <th className="px-6 py-4 font-semibold">Depot</th>
                 <th className="px-6 py-4 font-semibold">Date Submitted</th>
                 <th className="px-6 py-4 font-semibold">Tonnage</th>
-                <th className="px-6 py-4 font-semibold">Value</th>
-                <th className="px-6 py-4 font-semibold">Gross Profit</th>
                 <th className="px-6 py-4 font-semibold">Status</th>
                 <th className="px-6 py-4 font-semibold">Invoice</th>
                 <th className="px-6 py-4 font-semibold text-right">Actions</th>
@@ -490,20 +479,6 @@ export default function AdminDashboardPage() {
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">
                     {parseFloat(job.tonnage).toFixed(1)}t
-                  </td>
-                  <td className="px-6 py-4 font-medium text-slate-700">
-                    {job.calculatedValue
-                      ? formatCurrencyDecimal(parseFloat(job.calculatedValue))
-                      : "—"}
-                  </td>
-                  <td className="px-6 py-4 font-medium">
-                    {job.grossProfit ? (
-                      <span className={parseFloat(job.grossProfit) >= 0 ? "text-emerald-700" : "text-red-600"}>
-                        {formatCurrencyDecimal(parseFloat(job.grossProfit))}
-                      </span>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
                   </td>
                   <td className="px-6 py-4">
                     <Badge
@@ -545,7 +520,7 @@ export default function AdminDashboardPage() {
               {jobs.length === 0 && (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={8}
                     className="px-6 py-12 text-center text-slate-500"
                   >
                     No jobs found

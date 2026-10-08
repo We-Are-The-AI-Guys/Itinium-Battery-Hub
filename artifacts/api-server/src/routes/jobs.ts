@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { collectionReleaseSummary } from "../lib/collection-release";
+import { jobListSummary } from "../lib/job-list-summary";
 import { db } from "@workspace/db";
 import { jobsTable, jobBatteriesTable, cellModelsTable, batteryWeightReferenceTable, lmePricesTable, locationsTable, clientsTable, usersTable, jobDraftsTable, scheduleRescheduleLogTable, correctionAuditLogTable, collectionCompaniesTable } from "@workspace/db/schema";
 import { eq, sql, and, count, ilike, or, inArray, desc, asc, getTableColumns, type SQL } from "drizzle-orm";
@@ -683,11 +684,6 @@ router.get(
               FROM job_batteries jb
               WHERE jb.job_id = ${jobsTable.id}
             )`,
-            pbContentKgSum: sql<string | null>`(
-              SELECT CAST(SUM(jb.pb_content_kg) AS TEXT)
-              FROM job_batteries jb
-              WHERE jb.job_id = ${jobsTable.id}
-            )`,
           })
           .from(jobsTable)
           .where(whereClause)
@@ -701,9 +697,21 @@ router.get(
       ]);
 
       const total = totalResult?.count || 0;
+      const rows = jobs.length ? await db.select({
+        jobId: jobBatteriesTable.jobId,
+        palletNumber: jobBatteriesTable.palletNumber,
+        pbContentKg: jobBatteriesTable.pbContentKg,
+        estimatedWeightKg: jobBatteriesTable.estimatedWeightKg,
+        receiptReviewed: jobBatteriesTable.receiptReviewed,
+        receiptConfirmed: jobBatteriesTable.receiptConfirmed,
+      }).from(jobBatteriesTable)
+        .where(inArray(jobBatteriesTable.jobId, jobs.map(job => job.id))) : [];
 
       res.json({
-        jobs,
+        jobs: jobs.map(job => ({
+          ...job,
+          ...jobListSummary(rows.filter(row => row.jobId === job.id), job.tonnage),
+        })),
         total,
         pagination: {
           limit: limitNum,
