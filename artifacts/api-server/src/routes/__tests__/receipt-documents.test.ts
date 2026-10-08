@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  calculateCollectionTonnage,
   calculateReceiptValue,
   calculateReceivedReceiptTotals,
   generateAccountsCompletionPdf,
@@ -13,6 +14,21 @@ import {
   selectClientReceiptRecipients,
   type ReceiptItemSnapshot,
 } from "../../lib/receipt-documents";
+
+describe("collection load is independent of receipt totals", () => {
+  it("includes confirmed, pending token, and explicitly not received rows", () => {
+    const rows = [
+      { estimatedWeightKg: "1038.240", receiptConfirmed: true, receiptReviewed: true },
+      { estimatedWeightKg: "700.000", receiptConfirmed: false, receiptReviewed: false },
+      { estimatedWeightKg: "272.160", receiptConfirmed: false, receiptReviewed: true },
+    ];
+    expect(calculateCollectionTonnage(rows)).toBe("2.010");
+    expect(calculateCollectionTonnage(rows.map((r) => ({ ...r, receiptConfirmed: false })))).toBe("2.010");
+  });
+  it("does not allow missing weights to produce NaN", () => {
+    expect(calculateCollectionTonnage([{ estimatedWeightKg: null }, { estimatedWeightKg: "invalid" }])).toBe("0.000");
+  });
+});
 
 const tempDirs: string[] = [];
 

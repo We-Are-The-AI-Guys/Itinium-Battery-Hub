@@ -18,6 +18,7 @@ import {
 } from "../lib/notifications";
 import {
   calculateReceivedReceiptTotals,
+  calculateCollectionTonnage,
   calculateReceiptValue,
   generateAccountsCompletionPdf,
   generateClientReceiptPdf,
@@ -1751,20 +1752,19 @@ router.post(
         };
       });
       const missing = prepared.filter((item) => item.tabWeightKg === null);
-      if (missing.length > 0) {
-        const labels = missing
-          .slice(0, 5)
-          .map(({ battery }) => battery.batterySerial || battery.assetNumber || battery.palletNumber || `item ${battery.id}`);
-        const extra = missing.length > labels.length ? ` and ${missing.length - labels.length} more` : "";
-        res.status(422).json({
-          message: `Cannot auto-confirm because no TAB weight could be found for ${labels.join(", ")}${extra}. Confirm these items individually.`,
-        });
-        return;
-      }
+      const skippedItems = missing.map(({ battery }) => ({
+        id: battery.id,
+        palletNumber: battery.palletNumber,
+        batterySerial: battery.batterySerial,
+        reason: "No matching TAB weight; check cell model and voltage/quantity.",
+      }));
 
       let confirmedCount = 0;
       await db.transaction(async (tx) => {
         for (const { battery, tabWeightKg } of prepared) {
+          // Unresolved/token rows stay untouched and pending; valid rows
+          // must not be blocked by an unrelated missing model.
+          if (tabWeightKg === null) continue;
           const updates: Record<string, string | boolean | number | Date | null> = {
             receiptConfirmed: true,
             receiptReviewed: true,
@@ -1809,7 +1809,7 @@ router.post(
         .where(eq(jobBatteriesTable.jobId, jobId))
         .orderBy(asc(jobBatteriesTable.id));
       const updatedJob = await syncReceivedJobTotals(jobId);
-      res.json({ confirmedCount, batteries, job: updatedJob });
+      res.json({ confirmedCount, skippedCount: skippedItems.length, skippedItems, batteries, job: updatedJob });
     } catch (error) {
       console.error("Auto-confirm batteries error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -2127,7 +2127,7 @@ async function syncReceivedJobTotals(jobId: number) {
     };
 
     if (job.tonnageManualOverride !== true) {
-      updates.tonnage = (totals.weightKg / 1000).toFixed(3);
+      updates.tonnage = calculateCollectionTonnage(batteries);
     }
 
     const tractionRate = Number.parseFloat(job.customerTractionRate || "");

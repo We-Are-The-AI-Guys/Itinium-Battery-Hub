@@ -40,6 +40,16 @@ export function calculateReceiptValue(items: readonly ReceiptItemSnapshot[]): st
   return calculateReceivedReceiptTotals(items).valueGbp.toFixed(2);
 }
 
+export function calculateCollectionTonnage(
+  items: readonly { estimatedWeightKg: string | null }[]
+): string {
+  const kg = items.reduce((total, item) => {
+    const weight = Number(item.estimatedWeightKg);
+    return total + (Number.isFinite(weight) && weight > 0 ? weight : 0);
+  }, 0);
+  return (kg / 1000).toFixed(3);
+}
+
 export function calculateReceivedReceiptTotals(
   items: readonly ReceiptItemSnapshot[]
 ): { weightKg: number; pbKg: number; valueGbp: number } {

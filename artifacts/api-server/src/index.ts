@@ -408,6 +408,32 @@ async function bootstrap() {
   } catch (err) {
     console.error("Bootstrap: failed to refresh collection points:", err);
   }
+
+  // Repair collection totals previously overwritten by receipt-only totals.
+  // Run after schema setup, match the exact old calculation, and never
+  // touch manual/legacy overrides.
+  try {
+    const corrected = await db.execute(sql`
+      WITH totals AS (
+        SELECT job_id,
+          ROUND(COALESCE(SUM(estimated_weight_kg), 0) / 1000, 3) AS collection_tonnes,
+          ROUND(COALESCE(SUM(estimated_weight_kg) FILTER (
+            WHERE receipt_confirmed IS TRUE AND receipt_reviewed IS TRUE
+          ), 0) / 1000, 3) AS received_tonnes
+        FROM job_batteries GROUP BY job_id
+      )
+      UPDATE jobs j SET tonnage = totals.collection_tonnes
+      FROM totals
+      WHERE j.id = totals.job_id
+        AND j.tonnage_manual_override IS FALSE
+        AND j.tonnage = totals.received_tonnes
+        AND j.tonnage IS DISTINCT FROM totals.collection_tonnes
+      RETURNING j.id
+    `);
+    console.log("Bootstrap: repaired receipt-overwritten collection totals:", corrected.rows.length);
+  } catch (err) {
+    console.error("Bootstrap: failed to repair collection tonnage:", err);
+  }
 }
 
 const rawPort = process.env["PORT"];

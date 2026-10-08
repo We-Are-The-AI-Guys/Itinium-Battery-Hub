@@ -865,11 +865,13 @@ export default function JobDetailPage() {
   }
 
   async function autoConfirmAll() {
-    if (batteryAdminSaveRef.current) return;
-    const pendingCount = batteries.filter((battery) => battery.receiptConfirmed !== true).length;
+    if (batteryAdminSaveRef.current || savingReceiptRows || autoConfirming || dirtyReceiptIds.size > 0) return;
+    const pendingCount = batteries.filter((battery) => battery.receiptReviewed !== true).length;
     if (pendingCount === 0) return;
-    if (!window.confirm(`All ${pendingCount} unconfirmed manufacturers will be confirmed with TAB weights — continue?`)) return;
+    if (!window.confirm(`Check ${pendingCount} pending rows and confirm those with valid TAB weights? Rows with missing details or only token weights will remain pending.`)) return;
 
+    batteryAdminSaveRef.current = true;
+    setSavingBatteryAdmin(true);
     setAutoConfirming(true);
     try {
       const res = await fetch(`/api/jobs/${params.id}/batteries/auto-confirm`, {
@@ -895,8 +897,8 @@ export default function JobDetailPage() {
       if (data.job) setJob(data.job);
       setReceiptDelivery(null);
       toast({
-        title: "Manufacturers confirmed",
-        description: `${data.confirmedCount} unconfirmed ${data.confirmedCount === 1 ? "manufacturer was" : "manufacturers were"} confirmed with TAB weights.`,
+        title: data.skippedCount ? "Auto-confirm completed — rows still pending" : "Rows confirmed",
+        description: `${data.confirmedCount} rows confirmed with TAB weights.${data.skippedCount ? ` ${data.skippedCount} left pending: ${(data.skippedItems || []).slice(0, 5).map((item: { id: number; palletNumber: string | null }) => item.palletNumber ? `pallet ${item.palletNumber}` : `item ${item.id}`).join(", ")}. Check their cell model and voltage/quantity; token weights have been retained.` : ""}`,
       });
     } catch {
       toast({
@@ -905,6 +907,8 @@ export default function JobDetailPage() {
         variant: "destructive",
       });
     } finally {
+      batteryAdminSaveRef.current = false;
+      setSavingBatteryAdmin(false);
       setAutoConfirming(false);
     }
   }
@@ -1867,7 +1871,8 @@ export default function JobDetailPage() {
                       disabled={
                         savingBatteryAdmin || savingReceiptRows
                         || autoConfirming
-                        || !batteries.some((battery) => battery.receiptConfirmed !== true)
+                        || dirtyReceiptIds.size > 0
+                        || !batteries.some((battery) => battery.receiptReviewed !== true)
                       }
                     >
                       <CheckCircle2 className="w-3 h-3" />
