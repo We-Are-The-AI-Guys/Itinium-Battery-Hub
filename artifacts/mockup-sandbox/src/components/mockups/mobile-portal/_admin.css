@@ -1,0 +1,81 @@
+.im-admin { --blue:#167f9e; --blue-deep:#116b86; }
+.im-admin .im-admin-metrics{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:17px}
+.im-admin .im-admin-metrics>div{padding:13px 14px;background:#e6f0f1;border:1px solid #d4e3e5;border-radius:12px}
+.im-admin .im-admin-metrics strong{display:block;font:800 24px Manrope,sans-serif;letter-spacing:-.8px}
+.im-admin .im-admin-metrics span{display:block;color:#627b86;font-size:9px;margin-top:2px}
+.im-admin .im-admin-shortcuts{display:grid;gap:7px;margin-top:10px}
+.im-admin .im-admin-shortcuts button{display:flex;align-items:center;gap:9px;min-height:43px;padding:9px 12px;background:#fff;border:1px solid var(--line);border-radius:10px;text-align:left;color:var(--ink);font-size:11px;font-weight:700}
+.im-admin .im-admin-shortcuts button svg{color:var(--blue-deep)}
+.im-admin .im-admin-shortcuts button b{margin-left:auto;color:var(--blue-deep)}
+.im-admin .im-admin-search{height:42px;display:flex;align-items:center;gap:8px;padding:0 11px;background:#fff;border:1px solid var(--line);border-radius:9px;margin-top:14px;color:#80919d}
+.im-admin .im-admin-search input{min-width:0;width:100%;border:0;outline:0;font-size:11px;color:var(--ink);background:transparent}
+.im-admin .im-admin-filter{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:-7px 0 12px}
+.im-admin .im-admin-filter label{font-size:10px;color:var(--muted);font-weight:700}
+.im-admin .im-admin-filter select{max-width:65%;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);font-size:10px;padding:7px}
+.im-admin .im-switch{gap:2px}
+.im-admin .im-switch button{font-size:9px;min-width:0;padding:0 2px}
+.im-admin .im-admin-request{margin-top:9px;padding:13px}
+.im-admin .im-admin-kind{font:700 12px Manrope,sans-serif}
+.im-admin .im-admin-ref{border:0;background:none;padding:0;margin-top:12px;display:flex;align-items:center;color:var(--blue-deep);font:800 16px Manrope,sans-serif}
+.im-admin .im-admin-byline{font-size:9px;color:#718497;line-height:1.45;margin-top:4px}
+.im-admin .im-admin-request-note{font-size:11px;line-height:1.5;color:#3d566b;margin:9px 0}
+.im-admin .im-admin-facts{display:flex;gap:13px;flex-wrap:wrap;border-top:1px solid #edf1f3;padding-top:9px;color:#6d8291;font-size:9px}
+.im-admin .im-admin-facts span{display:flex;align-items:center;gap:4px}
+.im-admin .im-admin-facts svg{color:var(--blue-deep)}
+.im-admin .im-admin-actions{display:grid;grid-template-columns:.72fr 1.28fr;gap:8px;margin-top:12px}
+.im-admin .im-admin-open{width:100%;display:flex;justify-content:space-between;align-items:center;border:0;border-top:1px solid #edf1f3;background:none;color:var(--blue-deep);font-size:10px;font-weight:700;margin-top:11px;padding:10px 0 0}
+.im-admin .im-admin-decision{display:grid;gap:4px;background:#edf4f3;padding:9px;border-radius:8px;margin-top:10px;font-size:10px;line-height:1.45;color:#506c67}
+.im-admin .im-admin-decision b{font-size:9px;text-transform:uppercase;letter-spacing:.4px}
+.im-admin .im-admin-empty{text-align:center;padding:25px 16px;margin-top:14px}
+.im-admin .im-admin-empty svg{color:#6c8792;margin:0 auto 8px}
+.im-admin .im-admin-empty strong{display:block;font:700 13px Manrope,sans-serif}
+.im-admin .im-admin-empty p{font-size:10px;color:var(--muted);margin:6px 0}
+.im-admin .im-admin-jobcard{display:block;margin-top:10px;background:#fff;border:1px solid var(--line);border-radius:13px;padding:13px}
+.im-admin .im-admin-count{font-size:9px;color:var(--muted)}
+.im-admin .im-admin-pallet{padding:12px}
+.im-admin .im-admin-provisional{float:right;font:700 8px 'DM Sans',sans-serif;letter-spacing:.6px;background:#f7efd9;color:#82621d;padding:4px 6px;border-radius:5px}
+.im-admin .im-admin-note{display:flex;gap:5px;color:#82621d;font-size:9px;line-height:1.45;margin:9px 0 0}
+.im-admin .im-admin-receipt{display:grid;gap:6px;padding:13px;margin-top:12px;border:1px solid #d4e3e5;background:#edf4f3;border-radius:11px;font-size:10px;color:#526c73}
+.im-admin .im-admin-receipt b{font:700 11px Manrope,sans-serif;color:var(--ink)}
+.im-admin .im-admin-receipt p{margin:3px 0}
+.im-admin .im-admin-receipt small{line-height:1.4;color:#82621d}
+.im-admin .im-admin-receipt-inputs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.im-admin .im-admin-receipt-inputs label{display:grid;gap:5px;font-size:9px;font-weight:700;color:#627b86}
+.im-admin .im-admin-receipt-inputs input{width:100%;min-width:0;min-height:39px;padding:8px;border:1px solid #d4e0e7;border-radius:8px;background:#fff;color:var(--ink);font-size:11px}
+.im-admin .im-admin-receipt .im-btn:disabled,.im-admin .im-admin-official-edit .im-btn:disabled{opacity:.45}
+.im-admin .im-admin-flow{margin-top:11px}
+.im-admin .im-admin-flow>strong{font:700 12px Manrope,sans-serif}
+.im-admin .im-admin-confirm-step{display:grid;gap:9px;margin-top:12px}
+.im-admin .im-admin-confirm-step>label{display:flex;align-items:flex-start;gap:8px;font-size:10px;line-height:1.45;color:#405a6e}
+.im-admin input[type=checkbox]{accent-color:#167f9e;width:16px;height:16px;flex:none;margin:0}
+.im-admin .im-admin-finance{padding:0;overflow:hidden}
+.im-admin .im-admin-finance>button{width:100%;border:0;background:#fff;display:flex;justify-content:space-between;align-items:center;padding:13px;color:var(--ink);font-size:10px;font-weight:700}
+.im-admin .im-admin-finance>button span:last-child{display:flex;align-items:center;gap:5px;color:var(--blue-deep)}
+.im-admin .im-admin-finance-data{border-top:1px solid var(--line);padding:12px;display:grid;gap:9px}
+.im-admin .im-admin-finance-data>div{display:flex;justify-content:space-between;gap:10px;font-size:10px}
+.im-admin .im-admin-finance-data>div span{color:var(--muted)}
+.im-admin .im-admin-finance-data>small{color:#87949b;font-size:8px}
+.im-admin .im-admin-related{margin-top:8px}
+.im-admin .im-admin-related>b,.im-admin .im-admin-related p{font-size:10px}
+.im-admin .im-admin-related p{line-height:1.45;color:#607487}
+.im-admin .im-admin-related small{font-size:9px;color:#728794}
+.im-admin .im-admin-related .im-btn{margin-top:9px}
+.im-admin .im-admin-official-edit{display:grid;gap:7px;border-top:1px solid var(--line);margin-top:11px;padding-top:11px}
+.im-admin .im-admin-official-edit strong{font:700 11px Manrope,sans-serif}
+.im-admin .im-admin-official-edit p{margin:0;font-size:9px;line-height:1.45;color:#728794}
+.im-admin .im-admin-official-edit label{font-size:9px;color:#607487;font-weight:700}
+.im-admin .im-admin-official-edit textarea{min-height:60px;border:1px solid #d4e0e7;border-radius:8px;padding:8px;font-size:10px;background:#fff;color:var(--ink)}
+.im-admin .im-admin-history{display:flex;align-items:flex-start;gap:8px;margin-top:8px;font-size:10px;line-height:1.45}
+.im-admin .im-admin-history svg{color:#38856c;flex:none}
+.im-admin-modal-backdrop{position:absolute;inset:0;z-index:10;display:flex;align-items:flex-end;justify-content:center;background:rgba(13,35,49,.46);padding:12px}
+.im-admin .im-admin-modal{position:relative;width:100%;max-height:90%;overflow:auto;background:#f8faf9;border:1px solid #d9e4e5;border-radius:17px;padding:19px 16px 14px;box-shadow:0 20px 55px rgba(14,43,57,.24)}
+.im-admin .im-admin-modal h2{font:800 19px/1.2 Manrope,sans-serif;margin:0 28px 13px 0;letter-spacing:-.5px}
+.im-admin .im-admin-modal-close{position:absolute;right:12px;top:12px;width:36px;height:36px;border:1px solid var(--line);border-radius:50%;background:#fff;color:var(--ink);display:grid;place-items:center}
+.im-admin .im-admin-decision-label{display:block;margin-top:14px}
+.im-admin .im-admin-decision-label>span{display:block;font-size:10px;font-weight:700;color:#607487;margin-bottom:6px}
+.im-admin .im-admin-decision-label textarea{min-height:84px}
+.im-admin .im-admin-required{display:block;color:#946e2c;font-size:9px;margin-top:5px}
+.im-admin .im-admin-modal-actions{display:grid;grid-template-columns:.75fr 1.25fr;gap:8px;margin-top:14px}
+.im-admin .im-admin-modal-foot{text-align:center;font-size:8px;color:#84939a;margin:10px 0 0}
+.im-admin .im-admin-modal .im-btn:disabled{opacity:.45}
+@media(max-width:370px){.im-admin .im-admin-facts{gap:8px}.im-admin .im-admin-request-note{font-size:10px}.im-admin .im-admin-modal{padding:17px 13px 12px}}

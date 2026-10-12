@@ -17,3 +17,4 @@
 - [LME pricing date](lme-date-policy.md) — CBL dates supply pricing when no confirmed collection date exists; confirmed dates retain priority, and proposed dates alone do not set prices.
 - [Collector release policy](collector-release-policy.md) — Itinium must explicitly release reviewed collections before CBL can see them or receive notifications.
 - [Operational job lists](operational-list-policy.md) — show estimated then confirmed Pb and pallet counts; keep financial columns out of operational tables.
+- [Mobile concept scope](mobile-concept-scope.md) — mobile work remains isolated concepts until explicitly approved for implementation; Admin matches customer and collector.
