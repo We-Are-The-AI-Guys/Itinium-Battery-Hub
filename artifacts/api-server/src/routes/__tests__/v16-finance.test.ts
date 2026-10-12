@@ -73,7 +73,7 @@ describe("V16 dashboard finance", () => {
   });
   it.each(["accounts", "lead_client"])("%s can download the customer-only workbook", async role => {
     state.role = role; state.roles = [role];
-    state.rows = [[{ id: 12, reference: "JOB-12", tonnage: "3.125", customerTractionPercent: "65",
+    state.rows = [[{ id: 12, reference: "JOB-12", tonnage: "3.125", customerTractionPercent: "65", customerTractionRate: "1125.50",
       customerBlocsTonnage: "0.5", customerTransportCost: "50", customerAdHocCosts: "10",
       customerInvoiceValue: "750", customerInvoiceNo: "000123", netProfit: "secret", wasteInvoiceValue: "secret" }]];
     state.rows[0].push({ id: 13, reference: "JOB-13", tonnage: "1", customerInvoiceNo: "000124" });
@@ -83,9 +83,11 @@ describe("V16 dashboard finance", () => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(Buffer.from(await res.arrayBuffer()) as any);
     const sheet = wb.worksheets[0];
-    expect(sheet.getRow(1).values).toEqual([undefined, "Job reference", "Tonnage", "% LME Traction (Customer)",
+    expect(sheet.getRow(1).values).toEqual([undefined, "Job reference", "Tonnage", "£/t Traction",
       "Pb Tonnage Blocs", "Transport Costs", "Ad hoc costs", "Net invoice value", "Customer invoice Number"]);
-    expect(sheet.getRow(2).values).toEqual([undefined, "JOB-12", 3.125, 65, 0.5, 50, 10, 750, "000123"]);
+    expect(sheet.getRow(2).values).toEqual([undefined, "JOB-12", 3.125, 1125.5, 0.5, 50, 10, 750, "000123"]);
+    expect(sheet.getCell("C2").numFmt).toBe("£#,##0.00");
+    expect(sheet.getCell("C3").value).toBeNull();
     expect(sheet.rowCount).toBe(3);
     expect(sheet.getCell("A3").value).toBe("JOB-13");
     const query = new PgDialect().sqlToQuery(state.scopes[0]);

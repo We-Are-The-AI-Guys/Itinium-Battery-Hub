@@ -15,7 +15,7 @@ export function customerJobWorkbook(jobs: (typeof jobsTable.$inferSelect)[]) {
   ws.columns = [
     { header: "Job reference", key: "reference", width: 22 },
     { header: "Tonnage", key: "tonnage", width: 16 },
-    { header: "% LME Traction (Customer)", key: "traction", width: 29 },
+    { header: "£/t Traction", key: "traction", width: 22 },
     { header: "Pb Tonnage Blocs", key: "blocs", width: 22 },
     { header: "Transport Costs", key: "transport", width: 22 },
     { header: "Ad hoc costs", key: "adHoc", width: 20 },
@@ -24,12 +24,12 @@ export function customerJobWorkbook(jobs: (typeof jobsTable.$inferSelect)[]) {
   ];
   const number = (v: string | null) => v == null || v === "" ? null : Number(v);
   for (const job of jobs) ws.addRow({ reference: job.reference, tonnage: number(job.tonnage),
-    traction: number(job.customerTractionPercent), blocs: number(job.customerBlocsTonnage),
+    traction: number(job.customerTractionRate), blocs: number(job.customerBlocsTonnage),
     transport: number(job.customerTransportCost), adHoc: number(job.customerAdHocCosts),
     invoice: number(job.customerInvoiceValue), invoiceNo: job.customerInvoiceNo ?? "" });
   ws.getRow(1).font = { bold: true };
   for (const key of ["tonnage", "blocs"]) ws.getColumn(key).numFmt = "0.000";
-  ws.getColumn("traction").numFmt = '0.00"%"';
+  ws.getColumn("traction").numFmt = '£#,##0.00';
   for (const key of ["transport", "adHoc", "invoice"]) ws.getColumn(key).numFmt = '£#,##0.00';
   ws.getColumn("invoiceNo").numFmt = "@";
   return wb;
