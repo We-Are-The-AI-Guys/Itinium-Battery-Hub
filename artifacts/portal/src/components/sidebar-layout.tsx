@@ -87,7 +87,7 @@ function getNavItems(user: User | null): NavItem[] {
     items.push({ icon: MapPin, label: "Locations", path: "/locations" });
   }
 
-  if (role === "head_office_admin" || role === "team_leader") {
+  if (role === "head_office_admin") {
     items.push({ icon: Users, label: "User Access", path: "/users" });
   }
 

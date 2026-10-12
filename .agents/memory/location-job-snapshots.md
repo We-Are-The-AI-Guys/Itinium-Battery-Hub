@@ -19,6 +19,12 @@ A client's user may have multiple explicitly permitted locations. Their default 
 
 ## Administrator default selection
 
+Only Itinium Admin may create or manage user accounts, including location assignments, activation and administrative password changes. Team Leaders must not have delegated user-management access.
+
+**Why:** The user explicitly confirmed that user management belongs exclusively to Itinium Admin, superseding the earlier Team Leader delegation policy.
+
+**How to apply:** Keep navigation, direct page access and all user-management API operations admin-only. This does not remove personal account settings or change operational location scope.
+
 An administrator explicitly choosing a user's default site also grants permission to that site, within the user's client; a separate permission-selection step is not required.
 
 **Why:** On 2026-10-08 the user clarified that admin-selected defaults should attach Team Leaders to the chosen site, rather than failing because it was not separately marked permitted.

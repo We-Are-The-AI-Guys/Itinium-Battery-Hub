@@ -21,7 +21,7 @@ function managedUserScope(user: NonNullable<AuthenticatedRequest["user"]>) {
 router.get(
   "/users/stats",
   requireAuth,
-  requireRole("head_office_admin", "team_leader"),
+  requireRole("head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
       const isTeamLeader = req.user!.role === "team_leader";
@@ -56,7 +56,7 @@ router.get(
 router.get(
   "/users",
   requireAuth,
-  requireRole("head_office_admin", "team_leader"),
+  requireRole("head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
@@ -153,7 +153,7 @@ const createUserSchema = z.object({
 router.post(
   "/users",
   requireAuth,
-  requireRole("head_office_admin", "team_leader"),
+  requireRole("head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
       const parsed = createUserSchema.safeParse(req.body);
@@ -294,7 +294,7 @@ router.post(
 router.patch(
   "/users/:id/password",
   requireAuth,
-  requireRole("head_office_admin", "team_leader"),
+  requireRole("head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
       const userId = parseInt(req.params.id as string);
@@ -358,7 +358,7 @@ const updateUserSchema = z.object({
 router.patch(
   "/users/:id",
   requireAuth,
-  requireRole("head_office_admin", "team_leader"),
+  requireRole("head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
       const userId = parseInt(req.params.id as string);

@@ -63,6 +63,29 @@ const request = (path: string, body: unknown, method = "PATCH") =>
   fetch(`${origin}${path}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 describe("default location assignment", () => {
+  it.each(["team_leader", "depot_user", "accounts", "collection_company"])(
+    "denies every user-management operation to %s before reading or writing user data",
+    async role => {
+      state.user.role = role;
+      state.reads = [[{ sentinel: true }]];
+      for (const [method, path, body] of [
+        ["GET", "/users", undefined],
+        ["GET", "/users/stats", undefined],
+        ["POST", "/users", { fullName: "Blocked", email: "blocked@example.test", role: "depot_user" }],
+        ["PATCH", "/users/2", { fullName: "Changed", permittedLocationIds: [12], locationId: 12 }],
+        ["PATCH", "/users/2", { isActive: false }],
+        ["PATCH", "/users/2", { isActive: true }],
+        ["PATCH", "/users/2/password", { password: "test-password" }],
+      ] as const) {
+        const res = await request(path, body, method);
+        expect(res.status).toBe(403);
+        expect(await res.json()).toMatchObject({ message: "Insufficient permissions" });
+      }
+      expect(state.reads).toEqual([[{ sentinel: true }]]);
+      expect(state.updates).toEqual({});
+      expect(state.inserts).toEqual([]);
+    },
+  );
   it.each([undefined, []])("admin default selection grants access without a separate permitted selection (%s)", async permittedLocationIds => {
     state.reads = [[{ clientId: 10, locationId: null }], [], [{ clientId: 10 }], [{ clientId: 10, locationId: null }], [{ clientId: 10, name: "Site B" }]];
     const res = await request("/users/2", { locationId: 12, permittedLocationIds });

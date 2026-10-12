@@ -136,7 +136,7 @@ function AppRouter() {
         </RoleGuard>
       </Route>
       <Route path="/users">
-        <RoleGuard allowedRoles={["head_office_admin", "team_leader"]}>
+        <RoleGuard allowedRoles={["head_office_admin"]}>
           <UserManagementPage />
         </RoleGuard>
       </Route>
