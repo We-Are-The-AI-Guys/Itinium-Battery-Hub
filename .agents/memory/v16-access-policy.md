@@ -14,6 +14,12 @@ V16 is the authority: Admin alone administers access, internal finance/Pb/resolv
 
 Real support/operations addresses, retention duration, extra document types and collector assignment redesign remain deferred. Keep KPI presentation/functionality unchanged apart from enforcing tenant isolation. No automatic publishing.
 
+Production is in use by real clients; testing must not alter live records or notify live recipients.
+
+**Why:** On 2026-10-12 the user requested isolated staging because real clients are now using the published portal.
+
+**How to apply:** Keep staging database, documents, accounts and outbound email isolated; do not treat a separate database alone as sufficient isolation. Obtain approval before publishing production changes.
+
 KPI exception: non-Itinium users must not receive Gross Profit, Gross Margin, Overdue Invoices (count or value), or Avg CBL LME % in cards, graphs, monthly tables or API responses.
 
 **Why:** The user explicitly requested this KPI restriction on 2026-10-12, superseding the earlier preserve-KPI rule for these metrics.
