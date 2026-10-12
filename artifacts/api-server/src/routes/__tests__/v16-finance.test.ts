@@ -74,7 +74,8 @@ describe("V16 dashboard finance", () => {
   it.each(["accounts", "lead_client"])("%s can download the customer-only workbook", async role => {
     state.role = role; state.roles = [role];
     state.rows = [[{ id: 12, reference: "JOB-12", tonnage: "3.125", customerTractionPercent: "65", customerTractionRate: "1125.50",
-      customerBlocsTonnage: "0.5", customerTransportCost: "50", customerAdHocCosts: "10",
+      customerTractionTonnage: "1.750", customerBlocsTonnage: "0.5", customerTransportCost: "50", customerAdHocCosts: "10",
+      collectionDate: "2026-10-12", clientName: "Example Client", collectionPoint: "North collection point",
       customerInvoiceValue: "750", customerInvoiceNo: "000123", netProfit: "secret", wasteInvoiceValue: "secret" }]];
     state.rows[0].push({ id: 13, reference: "JOB-13", tonnage: "1", customerInvoiceNo: "000124" });
     const res = await fetch(`${origin}/kpi/export.xlsx?from=2026-10-06&to=2026-10-12&clientId=999`);
@@ -83,11 +84,17 @@ describe("V16 dashboard finance", () => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(Buffer.from(await res.arrayBuffer()) as any);
     const sheet = wb.worksheets[0];
-    expect(sheet.getRow(1).values).toEqual([undefined, "Job reference", "Tonnage", "£/t Traction",
-      "Pb Tonnage Blocs", "Transport Costs", "Ad hoc costs", "Net invoice value", "Customer invoice Number"]);
-    expect(sheet.getRow(2).values).toEqual([undefined, "JOB-12", 3.125, 1125.5, 0.5, 50, 10, 750, "000123"]);
-    expect(sheet.getCell("C2").numFmt).toBe("£#,##0.00");
-    expect(sheet.getCell("C3").value).toBeNull();
+    expect(sheet.getRow(1).values).toEqual([undefined, "Job reference", "Collection Date", "Client", "Collection Point", "Tonnage", "£/t Traction",
+      "Pb Tonnage Traction", "Pb Tonnage Blocs", "Transport Costs", "Ad hoc costs", "Net invoice value", "Customer invoice Number"]);
+    expect(sheet.getRow(2).values).toEqual([undefined, "JOB-12", new Date("2026-10-12T00:00:00Z"), "Example Client", "North collection point", 3.125, 1125.5, 1.75, 0.5, 50, 10, 750, "000123"]);
+    for (const col of ["G", "H"]) {
+      expect(sheet.getCell(`${col}2`).numFmt).toBe("0.000");
+      expect(sheet.getCell(`${col}3`).value).toBeNull();
+    }
+    expect(sheet.getCell("B2").numFmt).toBe("dd/mm/yyyy");
+    expect(sheet.getCell("B3").value).toBeNull();
+    expect(sheet.getCell("F2").numFmt).toBe("£#,##0.00");
+    expect(sheet.getCell("F3").value).toBeNull();
     expect(sheet.rowCount).toBe(3);
     expect(sheet.getCell("A3").value).toBe("JOB-13");
     const query = new PgDialect().sqlToQuery(state.scopes[0]);
