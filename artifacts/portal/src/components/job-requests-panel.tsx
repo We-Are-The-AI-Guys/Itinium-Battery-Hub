@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { ClipboardEdit, XCircle, AlertTriangle, RefreshCw, Send } from "lucide-react";
 import {
   api,
+  ApiError,
   DECISION_STYLES,
   EXCEPTION_OUTCOMES,
   REQUEST_KIND_LABELS,
@@ -29,7 +30,7 @@ async function uploadEvidence(jobId: number, requestId: number, file: File) {
 type Variant = "customer" | "collector";
 
 /**
- * Customer: amendment / cancellation requests before completion. Nothing is
+ * Customer: amendment / cancellation requests before collection. Nothing is
  * changed directly; Itinium Admin reviews every request.
  * Collector: transport exception reporting. Approval never changes job status.
  */
@@ -51,6 +52,7 @@ export function JobRequestsPanel({
   const [formError, setFormError] = useState("");
   const [sent, setSent] = useState(false);
   const [evidence, setEvidence] = useState<File | null>(null);
+  const [serverClosed, setServerClosed] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -66,7 +68,7 @@ export function JobRequestsPanel({
     load();
   }, [load]);
 
-  const closed = jobStatus === "completed" || jobStatus === "cancelled";
+  const closed = serverClosed || !["request", "confirmed"].includes(jobStatus);
   const customerCanRequest = variant === "customer" && !closed;
   const visible = (requests || []).filter((r) =>
     variant === "collector" ? r.kind === "transport_exception" : r.kind !== "transport_exception",
@@ -75,6 +77,7 @@ export function JobRequestsPanel({
 
   async function submit() {
     if (!kind) return;
+    if (variant === "customer" && !customerCanRequest) return;
     if (!notes.trim()) {
       setFormError(kind === "transport_exception" ? "Describe what happened on the collection." : "Explain what needs to change.");
       return;
@@ -107,6 +110,7 @@ export function JobRequestsPanel({
       setSent(true);
       await load();
     } catch (e) {
+      if (variant === "customer" && e instanceof ApiError && e.status === 409) setServerClosed(true);
       setFormError(e instanceof Error ? e.message : "Could not send the request.");
     } finally {
       setSubmitting(false);
@@ -139,7 +143,10 @@ export function JobRequestsPanel({
         </div>
       )}
       {variant === "customer" && closed && (
-        <p className="text-xs text-slate-500">This job is {jobStatus}. Amendments and cancellations can no longer be requested; contact Itinium through Help & Support if something is wrong.</p>
+        <p role="status" className="text-sm text-slate-600 rounded-md border border-slate-200 bg-slate-100 p-3">
+          {jobStatus === "cancelled" ? "This job has been cancelled." : "Items have been collected (Received or later)."}
+          {" "}Amendment and cancellation requests can no longer be made. Contact Itinium through Help & Support if something is wrong.
+        </p>
       )}
       {variant === "collector" && kind === null && (
         <Button variant="outline" size="sm" onClick={() => { setKind("transport_exception"); setSent(false); }} data-testid={`button-report-exception-${jobId}`}>
@@ -148,7 +155,7 @@ export function JobRequestsPanel({
       )}
 
       {kind && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3">
+        <fieldset disabled={variant === "customer" && closed} className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3 disabled:opacity-50">
           <p className="text-sm font-semibold text-[#0f2744]">{REQUEST_KIND_LABELS[kind]}</p>
           {kind === "transport_exception" && (
             <label className="block">
@@ -207,7 +214,7 @@ export function JobRequestsPanel({
               <Send className="w-3.5 h-3.5 mr-1.5" /> {submitting ? "Sending…" : "Send to Itinium"}
             </Button>
           </div>
-        </div>
+        </fieldset>
       )}
       {sent && <p className="text-sm text-green-700" role="status">Request sent. Itinium will review it.</p>}
 

@@ -69,12 +69,12 @@ router.post("/jobs/:id/requests", requireAuth, async (req: AuthenticatedRequest,
   }
   const saved = await db.transaction(async tx => {
     const [current] = await tx.select().from(jobsTable).where(eq(jobsTable.id, job.id)).for("update");
-    if (!collector && current.status === "completed") return null;
+    if (!current || (!collector && !["request", "confirmed"].includes(current.status))) return null;
     const [item] = await tx.insert(requests).values({ ...parsed.data, jobId: job.id, requesterId: req.user!.id }).returning();
     await tx.insert(audit).values({ actorId: req.user!.id, jobId: job.id, action: "request.created", details: { requestId: item.id, ...parsed.data } });
     return item;
   });
-  if (!saved) { res.status(409).json({ message: "Completed jobs cannot be amended or cancelled" }); return; }
+  if (!saved) { res.status(409).json({ message: "Amendment and cancellation requests are only available before collection. Once a job is Received or later, or cancelled, no further requests can be made." }); return; }
   const notificationStatus = await notifyWorkflow("operationsEmail", `Job request: ${job.reference}`, `${parsed.data.kind}: ${parsed.data.notes}`);
   await db.update(requests).set({ notificationStatus }).where(eq(requests.id, saved.id));
   res.status(201).json({ request: { ...saved, notificationStatus } });
@@ -99,7 +99,7 @@ router.patch("/action-requests/:id", requireAuth, requireRole("head_office_admin
     const [item] = await tx.select().from(requests).where(eq(requests.id, Number(req.params.id))).for("update");
     if (!item || item.status !== "Pending") return null;
     const [job] = await tx.select().from(jobsTable).where(eq(jobsTable.id, item.jobId)).for("update");
-    if (data.data.status === "Approved" && item.kind !== "transport_exception" && job.status === "completed") return null;
+    if (!job || (data.data.status === "Approved" && item.kind !== "transport_exception" && !["request", "confirmed"].includes(job.status))) return null;
     if (item.kind === "cancellation" && data.data.status === "Approved") {
       await tx.update(jobsTable).set({ status: "cancelled" }).where(eq(jobsTable.id, item.jobId));
     }
@@ -110,7 +110,7 @@ router.patch("/action-requests/:id", requireAuth, requireRole("head_office_admin
       title: `Request ${data.data.status}`, body: data.data.decisionNotes, link: item.kind === "transport_exception" ? "/collections" : `/jobs/${item.jobId}` });
     return updated;
   });
-  if (!result) { res.status(409).json({ message: "Request unavailable, already decided, or job is Completed" }); return; }
+  if (!result) { res.status(409).json({ message: "Request unavailable, already decided, or job is no longer eligible: amendments and cancellations cannot be approved after collection or cancellation." }); return; }
   const [requester] = await db.select().from(usersTable).where(eq(usersTable.id, result.requesterId));
   const notificationStatus = await notifyWorkflow(requester.email, `Request ${result.status}`, result.decisionNotes!);
   await db.update(requests).set({ notificationStatus }).where(eq(requests.id, result.id));
