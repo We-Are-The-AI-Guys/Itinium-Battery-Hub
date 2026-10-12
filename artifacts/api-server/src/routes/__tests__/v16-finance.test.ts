@@ -84,19 +84,19 @@ describe("V16 dashboard finance", () => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(Buffer.from(await res.arrayBuffer()) as any);
     const sheet = wb.worksheets[0];
-    expect(sheet.getRow(1).values).toEqual([undefined, "Job reference", "Collection Date", "Client", "Collection Point", "Tonnage", "£/t Traction",
-      "Pb Tonnage Traction", "Pb Tonnage Blocs", "Transport Costs", "Ad hoc costs", "Net invoice value", "Customer invoice Number"]);
-    expect(sheet.getRow(2).values).toEqual([undefined, "JOB-12", new Date("2026-10-12T00:00:00Z"), "Example Client", "North collection point", 3.125, 1125.5, 1.75, 0.5, 50, 10, 750, "000123"]);
-    for (const col of ["G", "H"]) {
-      expect(sheet.getCell(`${col}2`).numFmt).toBe("0.000");
+    expect(sheet.getRow(1).values).toEqual([undefined, "Collection Date", "Job Reference", "Client", "Collection Point",
+      "Traction Tonnage (Kg)", "Bloc Tonnage (Kg)", "LME Value £", "Transport", "Net Invoice Value £", "Invoice Number"]);
+    expect(sheet.getRow(2).values).toEqual([undefined, new Date("2026-10-12T00:00:00Z"), "JOB-12", "Example Client", "North collection point", 1750, 500, 1125.5, 50, 750, "000123"]);
+    for (const col of ["E", "F"]) {
+      expect(sheet.getCell(`${col}2`).numFmt).toBe("#,##0");
       expect(sheet.getCell(`${col}3`).value).toBeNull();
     }
-    expect(sheet.getCell("B2").numFmt).toBe("dd/mm/yyyy");
-    expect(sheet.getCell("B3").value).toBeNull();
-    expect(sheet.getCell("F2").numFmt).toBe("£#,##0.00");
-    expect(sheet.getCell("F3").value).toBeNull();
+    expect(sheet.getCell("A2").numFmt).toBe("dd/mm/yyyy");
+    expect(sheet.getCell("A3").value).toBeNull();
+    expect(sheet.getCell("G2").numFmt).toBe("£#,##0.00");
+    expect(sheet.getCell("G3").value).toBeNull();
     expect(sheet.rowCount).toBe(3);
-    expect(sheet.getCell("A3").value).toBe("JOB-13");
+    expect(sheet.getCell("B3").value).toBe("JOB-13");
     const query = new PgDialect().sqlToQuery(state.scopes[0]);
     expect(query.sql).toContain('"jobs"."client_id"');
     expect(query.params).toEqual([1, new Date("2026-10-06T00:00:00Z"), new Date("2026-10-13T00:00:00Z")]);

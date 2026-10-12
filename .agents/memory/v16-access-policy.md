@@ -26,7 +26,7 @@ KPI exception: non-Itinium users must not receive Gross Profit, Gross Margin, Ov
 
 **How to apply:** Retain these metrics for Admin only, including in printable views and chart tooltips.
 
-Accounts and Lead Client may download a date-filtered Excel spreadsheet from KPI Reporting containing one row per job: collection date, client, collection point, tonnage, customer traction rate (£/t, not LME percentage), customer Pb traction and blocs tonnages, customer transport/ad hoc costs, net customer invoice value and customer invoice number. Review flags stay Itinium-only.
+Accounts and Lead Client may download a date-filtered Excel spreadsheet from KPI Reporting containing one row per job. The user clarified that “LME Value £” means the customer's agreed traction rate (£/t), NOT the underlying LME market price. Traction and bloc weights must be exported in kilograms despite the requested “Tonnage (Kg)” headings. The separate total-tonnage and ad hoc-cost columns are excluded. Review flags stay Itinium-only.
 
 **Why:** The user explicitly extended export permissions on 2026-10-12, then corrected the placement: this must be a KPI date-range export, NOT a per-job download. This is an exception to the earlier invoice-total-only financial rule.
 

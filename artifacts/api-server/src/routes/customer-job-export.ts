@@ -13,32 +13,34 @@ export function customerJobWorkbook(jobs: (typeof jobsTable.$inferSelect)[]) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("KPI jobs");
   ws.columns = [
-    { header: "Job reference", key: "reference", width: 22 },
     { header: "Collection Date", key: "collectionDate", width: 20 },
+    { header: "Job Reference", key: "reference", width: 22 },
     { header: "Client", key: "client", width: 30 },
     { header: "Collection Point", key: "collectionPoint", width: 40 },
-    { header: "Tonnage", key: "tonnage", width: 16 },
-    { header: "£/t Traction", key: "traction", width: 22 },
-    { header: "Pb Tonnage Traction", key: "tractionTonnage", width: 24 },
-    { header: "Pb Tonnage Blocs", key: "blocs", width: 22 },
-    { header: "Transport Costs", key: "transport", width: 22 },
-    { header: "Ad hoc costs", key: "adHoc", width: 20 },
-    { header: "Net invoice value", key: "invoice", width: 22 },
-    { header: "Customer invoice Number", key: "invoiceNo", width: 28 },
+    { header: "Traction Tonnage (Kg)", key: "tractionTonnage", width: 24 },
+    { header: "Bloc Tonnage (Kg)", key: "blocs", width: 22 },
+    { header: "LME Value £", key: "traction", width: 22 },
+    { header: "Transport", key: "transport", width: 22 },
+    { header: "Net Invoice Value £", key: "invoice", width: 24 },
+    { header: "Invoice Number", key: "invoiceNo", width: 28 },
   ];
   const number = (v: string | null) => v == null || v === "" ? null : Number(v);
-  for (const job of jobs) ws.addRow({ reference: job.reference, tonnage: number(job.tonnage),
+  const kilograms = (v: string | null) => {
+    const tonnes = number(v);
+    return tonnes === null ? null : Math.round(tonnes * 1000);
+  };
+  for (const job of jobs) ws.addRow({ reference: job.reference,
     collectionDate: job.collectionDate ? new Date(`${job.collectionDate}T00:00:00Z`) : null,
     client: job.clientName ?? "", collectionPoint: job.collectionPoint ?? "",
-    traction: number(job.customerTractionRate), blocs: number(job.customerBlocsTonnage),
-    tractionTonnage: number(job.customerTractionTonnage),
-    transport: number(job.customerTransportCost), adHoc: number(job.customerAdHocCosts),
+    traction: number(job.customerTractionRate), blocs: kilograms(job.customerBlocsTonnage),
+    tractionTonnage: kilograms(job.customerTractionTonnage),
+    transport: number(job.customerTransportCost),
     invoice: number(job.customerInvoiceValue), invoiceNo: job.customerInvoiceNo ?? "" });
   ws.getRow(1).font = { bold: true };
   ws.getColumn("collectionDate").numFmt = "dd/mm/yyyy";
-  for (const key of ["tonnage", "tractionTonnage", "blocs"]) ws.getColumn(key).numFmt = "0.000";
+  for (const key of ["tractionTonnage", "blocs"]) ws.getColumn(key).numFmt = "#,##0";
   ws.getColumn("traction").numFmt = '£#,##0.00';
-  for (const key of ["transport", "adHoc", "invoice"]) ws.getColumn(key).numFmt = '£#,##0.00';
+  for (const key of ["transport", "invoice"]) ws.getColumn(key).numFmt = '£#,##0.00';
   ws.getColumn("invoiceNo").numFmt = "@";
   return wb;
 }
