@@ -14,3 +14,17 @@ uri = "file://exports/QA_Test_Plan.pdf"
 type = "pdf"
 title = "QA Test Plan (PDF)"
 logical_id = "199a10fc-1706-4a56-89c6-b9ba06e59e7f"
+
+[[outputs]]
+id = "wZPXEMj2YgS25iMXe3IEQ"
+uri = "file://attached_assets/sample-kpi-export.xlsx"
+type = "table"
+title = "Sample KPI spreadsheet"
+description = "Current ten-column export layout with three fictional sample jobs. Dates, kilogram weights, currency formatting and invoice numbers match the actual export."
+logical_id = "fe025c0d-c63e-44d1-8742-cac77eca596d"
+content_hash = "sha256:e17cc2d8e8145cff81483db12a602e70371216b837311a4b9b9d5406176e09dd"
+size = 7087
+mtime_ms = 1791814780141
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:f36d7821-a5ca-4cbc-ab38-bcc9688c67ea/fe025c0d-c63e-44d1-8742-cac77eca596d/e3a1712b-a955-4ef1-9fc5-3f81530adac1"
+storage_version_token = "1791814786013148"
+content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
