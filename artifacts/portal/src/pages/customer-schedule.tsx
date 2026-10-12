@@ -103,7 +103,7 @@ export default function CustomerSchedulePage() {
                         <span className="font-semibold text-sm text-[#0f2744]">{j.reference}</span>
                         <StatusPill status={j.status} />
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5">{j.collectionDate ? new Date(j.collectionDate).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) : ""} · {j.depot || "—"} · {fmtTonnes(j.tonnage)}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{j.collectionDate ? new Date(`${j.collectionDate.slice(0, 10)}T00:00:00`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) : ""} · {j.depot || "—"} · {fmtTonnes(j.tonnage)}</p>
                     </button>
                   </li>
                 ))}

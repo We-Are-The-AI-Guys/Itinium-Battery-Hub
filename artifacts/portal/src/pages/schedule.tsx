@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { calendarDate as isoDate } from "@/lib/calendar-date";
 import { useLocation } from "wouter";
 import {
   ChevronLeft, ChevronRight, CalendarDays, Calendar,
@@ -148,9 +149,6 @@ function getColour(status: string) {
   return STATUS_COLOUR[status] ?? { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" };
 }
 
-function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 function startOfWeek(d: Date): Date {
   const day = d.getDay();

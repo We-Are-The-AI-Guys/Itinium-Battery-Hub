@@ -5,6 +5,8 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { PgDialect } from "drizzle-orm/pg-core";
 import router from "../jobs";
+import exportRouter from "../customer-job-export";
+import ExcelJS from "exceljs";
 const state = vi.hoisted(() => ({
   role: "accounts", roles: ["accounts"], clientId: 1 as number | null,
   rows: [] as any[][], scopes: [] as any[],
@@ -25,13 +27,43 @@ vi.mock("../../middlewares/auth", async () => {
 });
 let server: Server, origin: string;
 beforeAll(async () => {
-  const app = express(); app.use(router);
+  const app = express(); app.use(router); app.use(exportRouter);
   server = app.listen(0, "127.0.0.1"); await once(server, "listening");
   origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
 afterAll(() => new Promise<void>(resolve => server.close(() => resolve())));
 beforeEach(() => { state.role = "accounts"; state.roles = ["accounts"]; state.clientId = 1; state.rows = []; state.scopes = []; });
 describe("V16 dashboard finance", () => {
+  it.each(["accounts", "lead_client"])("%s can download the customer-only workbook", async role => {
+    state.role = role; state.roles = [role];
+    state.rows = [[{ id: 12, reference: "JOB-12", tonnage: "3.125", customerTractionPercent: "65",
+      customerBlocsTonnage: "0.5", customerTransportCost: "50", customerAdHocCosts: "10",
+      customerInvoiceValue: "750", customerInvoiceNo: "000123", netProfit: "secret", wasteInvoiceValue: "secret" }]];
+    const res = await fetch(`${origin}/jobs/12/customer-export.xlsx`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("spreadsheetml");
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(await res.arrayBuffer()) as any);
+    const sheet = wb.worksheets[0];
+    expect(sheet.getRow(1).values).toEqual([undefined, "Job reference", "Tonnage", "% LME Traction (Customer)",
+      "Pb Tonnage Blocs", "Transport Costs", "Ad hoc costs", "Net invoice value", "Customer invoice Number"]);
+    expect(sheet.getRow(2).values).toEqual([undefined, "JOB-12", 3.125, 65, 0.5, 50, 10, 750, "000123"]);
+    const query = new PgDialect().sqlToQuery(state.scopes[0]);
+    expect(query.sql).toContain('"jobs"."client_id"');
+    expect(query.params).toEqual([12, 1]);
+  });
+  it.each(["team_leader", "depot_user", "collection_company"])("%s cannot export financial data", async role => {
+    state.role = role; state.roles = [role];
+    expect((await fetch(`${origin}/jobs/12/customer-export.xlsx`)).status).toBe(403);
+    expect(state.scopes).toHaveLength(0);
+  });
+  it("returns no workbook when the job is outside the permitted scope", async () => {
+    expect((await fetch(`${origin}/jobs/12/customer-export.xlsx`)).status).toBe(404);
+  });
+  it("denies export for Accounts without a client", async () => {
+    state.clientId = null;
+    expect((await fetch(`${origin}/jobs/12/customer-export.xlsx`)).status).toBe(403);
+  });
   it.each(["accounts", "lead_client"])("%s gets only invoice total and client-scoped operations", async role => {
     state.role = role; state.roles = [role];
     state.rows = [[{ pendingJobs: 2, monthlyTonnage: "4" }], [{ total: "125" }]];

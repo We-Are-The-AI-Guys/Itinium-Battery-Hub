@@ -60,6 +60,7 @@ describe("V16 access boundaries", () => {
     expect(validateRoles(["team_leader", "accounts"], 1, null)).toBeNull();
   });
   it("allowlists customer records instead of exposing new internal fields", () => {
+    expect(customerJob({ id: 1, weightVerificationRequired: true, hasFlags: true, flagCount: 3 })).toEqual({ id: 1 });
     expect(customerJob({ id: 1, tonnage: "2", grossProfit: "5", totalInvoiceValue: "10", pbContentKgSum: "7", futureSecret: "x" })).toEqual({ id: 1, tonnage: "2" });
     expect(customerBattery({ id: 1, cellType: "X", estimatedWeightKg: "5", resolvedByName: "secret", pbContentKg: "9" })).toEqual({ id: 1, cellType: "X" });
   });

@@ -31,7 +31,7 @@ const JOB_FIELDS = new Set([
   "collectionDate", "submittedAt", "status", "tonnage", "palletCount", "notes",
   "siteContacts", "siteContactName", "siteContactPhone", "siteContact2Name", "siteContact2Phone",
   "siteContact3Name", "siteContact3Phone", "siteHours", "specialInstructions", "scheduleStatus",
-  "signedDocumentTypes", "weightVerificationRequired", "createdAt",
+   "signedDocumentTypes", "createdAt",
 ]);
 const BATTERY_FIELDS = new Set([
   "id", "jobId", "palletNumber", "assetNumber", "batterySerial", "manufacture", "cellType",
@@ -54,6 +54,7 @@ export function policyAllows(user: Principal, method: string, path: string): boo
   if (/^\/schedule\/audit-log/.test(path)) return false;
   if (path === "/access-audit") return false;
   if (/^\/jobs/.test(path)) {
+    if (path === "/jobs/:id/customer-export.xlsx") return get && isCustomer(user) && !!user.clientId && clientWide(user);
     if (path === "/jobs/:id/requests" || path.startsWith("/jobs/:id/requests/")) return isCustomer(user) || hasRole(user, "collection_company");
     if (path.includes("/documents")) return true; // dedicated object and release checks
     if (hasRole(user, "collection_company")) return false;

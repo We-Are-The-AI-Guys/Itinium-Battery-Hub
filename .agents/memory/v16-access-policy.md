@@ -10,6 +10,12 @@ V16 is the authority: Admin alone administers access, internal finance/Pb/resolv
 
 Real support/operations addresses, retention duration, extra document types and collector assignment redesign remain deferred. Keep KPI presentation/functionality unchanged apart from enforcing tenant isolation. No automatic publishing.
 
+Accounts and Lead Client may download a customer job Excel file containing tonnage, customer traction LME percentage, customer Pb blocs tonnage, customer transport/ad hoc costs, net customer invoice value and customer invoice number. Review flags stay Itinium-only.
+
+**Why:** The user explicitly extended export permissions on 2026-10-12; this is an exception to the earlier invoice-total-only financial rule.
+
+**How to apply:** Limit the export to the user's client and the requested customer figures. Do not expose collector costs, profit or other internal financial fields.
+
 Warehouse teams also have read-only Schedule access for their assigned sites.
 
 **Why:** The user explicitly extended Warehouse access on 2026-10-12; this supersedes the original schedule role restriction.
