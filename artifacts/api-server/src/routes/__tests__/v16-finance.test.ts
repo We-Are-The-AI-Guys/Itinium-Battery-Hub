@@ -36,6 +36,15 @@ beforeAll(async () => {
 afterAll(() => new Promise<void>(resolve => server.close(() => resolve())));
 beforeEach(() => { state.role = "accounts"; state.roles = ["accounts"]; state.clientId = 1; state.rows = []; state.scopes = []; });
 describe("V16 dashboard finance", () => {
+  it("includes distinct pallet count on the job detail response", async () => {
+    state.rows = [
+      [{ id: 12, clientId: 1, locationId: 10, tonnage: "3.125" }],
+      [{ id: 1, palletNumber: "P1" }, { id: 2, palletNumber: " p1 " }, { id: 3, palletNumber: "P2" }],
+    ];
+    const res = await fetch(`${origin}/jobs/12`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ job: { palletCount: 2 } });
+  });
   it.each(["accounts", "head_office_admin"])("%s KPI metrics respect internal visibility", async role => {
     state.role = role; state.roles = [role];
     state.rows = [

@@ -1074,7 +1074,7 @@ router.get(
         resolvedByName: b.resolvedById != null ? (resolverMap.get(b.resolvedById) || null) : null,
       }));
 
-      res.json({ job, batteries });
+      res.json({ job: { ...job, palletCount: jobListSummary(batteryRows, job.tonnage).palletCount }, batteries });
     } catch (error) {
       console.error("Job detail error:", error);
       res.status(500).json({ message: "Internal server error" });

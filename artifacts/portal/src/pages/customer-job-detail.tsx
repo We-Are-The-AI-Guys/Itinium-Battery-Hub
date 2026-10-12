@@ -113,7 +113,7 @@ export default function CustomerJobDetailPage() {
                           <td className="px-6 py-2.5 text-[#0f2744] font-medium">{b.manufacture || "—"}</td>
                           <td className="px-6 py-2.5 text-slate-600">{b.cellType || "—"}</td>
                           <td className="px-6 py-2.5 text-slate-600">{[b.assetNumber, b.batterySerial].filter(Boolean).join(" / ") || "—"}</td>
-                          <td className="px-6 py-2.5 text-slate-600">{b.voltage != null && b.voltage !== "" ? `${b.voltage}V` : "—"}</td>
+                          <td className="px-6 py-2.5 text-slate-600">{b.voltage != null && String(b.voltage).trim() !== "" ? `${String(b.voltage).trim().replace(/(?:\s*v)+$/i, "")}V` : "—"}</td>
                           <td className="px-6 py-2.5 text-slate-600 tabular-nums">{b.isLooseCells ? b.looseCellsQty ?? "Yes" : "—"}</td>
                           <td className="px-6 py-2.5 text-slate-600">{b.palletNumber || "—"}</td>
                         </tr>
