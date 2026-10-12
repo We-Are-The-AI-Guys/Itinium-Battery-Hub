@@ -97,23 +97,23 @@ export default function CustomerJobDetailPage() {
                   <table className="w-full text-sm text-left">
                     <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-y border-slate-200">
                       <tr>
+                        <th className="px-6 py-2.5 font-semibold">Pallet</th>
                         <th className="px-6 py-2.5 font-semibold">Manufacturer</th>
                         <th className="px-6 py-2.5 font-semibold">Cell type</th>
                         <th className="px-6 py-2.5 font-semibold">Asset / serial</th>
                         <th className="px-6 py-2.5 font-semibold">Voltage</th>
                         <th className="px-6 py-2.5 font-semibold">Loose cells</th>
-                        <th className="px-6 py-2.5 font-semibold">Pallet</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {batteries.map((b) => (
                         <tr key={b.id}>
+                          <td className="px-6 py-2.5 text-slate-600">{b.palletNumber || "—"}</td>
                           <td className="px-6 py-2.5 text-[#0f2744] font-medium">{b.manufacture || "—"}</td>
                           <td className="px-6 py-2.5 text-slate-600">{b.cellType || "—"}</td>
                           <td className="px-6 py-2.5 text-slate-600">{[b.assetNumber, b.batterySerial].filter(Boolean).join(" / ") || "—"}</td>
                           <td className="px-6 py-2.5 text-slate-600">{b.voltage != null && String(b.voltage).trim() !== "" ? `${String(b.voltage).trim().replace(/(?:\s*v)+$/i, "")}V` : "—"}</td>
                           <td className="px-6 py-2.5 text-slate-600 tabular-nums">{b.isLooseCells ? b.looseCellsQty ?? "Yes" : "—"}</td>
-                          <td className="px-6 py-2.5 text-slate-600">{b.palletNumber || "—"}</td>
                         </tr>
                       ))}
                     </tbody>
