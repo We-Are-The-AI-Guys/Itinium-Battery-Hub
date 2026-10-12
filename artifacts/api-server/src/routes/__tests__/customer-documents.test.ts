@@ -3,7 +3,7 @@ import express from "express";
 import { once } from "node:events";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import router from "../job-documents";
+import router, { documentsReleased } from "../job-documents";
 
 const state = vi.hoisted(() => ({
   role: "depot_user", clientId: 1, permittedLocationIds: [10],
@@ -47,9 +47,9 @@ beforeEach(() => {
   state.reads = []; state.download.mockClear();
 });
 describe.each(["depot_user", "team_leader"])("%s document access", role => {
-  it("holds signed files until Completed", async () => {
+  it.each(["request", "confirmed", "received", "awaiting_invoice"])("holds signed files at %s", async status => {
     state.role = role;
-    state.reads = [[{ id: 5, clientId: 1, locationId: 10, status: "received" }]];
+    state.reads = [[{ id: 5, clientId: 1, locationId: 10, status }]];
     expect((await fetch(`${origin}/jobs/5/documents/collection_sheet/download`)).status).toBe(403);
     expect(state.download).not.toHaveBeenCalled();
   });
@@ -83,4 +83,25 @@ describe.each(["depot_user", "team_leader"])("%s document access", role => {
       outstandingTypes: ["collection_sheet", "consignment_note"], canUpload: false, releasePending: true,
     });
   });
+});
+describe.each(["lead_client", "accounts", "team_leader", "depot_user"])("%s Invoice release", role => {
+  it.each(["collection_sheet", "consignment_note"])("downloads the original %s at Invoice", async type => {
+    state.role = role;
+    state.reads = [[{ id: 5, clientId: 1, locationId: 10, status: "invoice" }],
+      [{ objectPath: "/objects/test", fileName: "signed.pdf", contentType: "application/pdf" }]];
+    const res = await fetch(`${origin}/jobs/5/documents/${type}/download`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("signed document");
+  });
+  it("releases document metadata at Invoice", async () => {
+    state.role = role;
+    state.reads = [[{ id: 5, clientId: 1, locationId: 10, status: "invoice" }], []];
+    const res = await fetch(`${origin}/jobs/5/documents`);
+    expect(await res.json()).toMatchObject({ releasePending: false, canUpload: false });
+  });
+});
+it("retains the collector Completed-only gate", () => {
+  const collector = { role: "collection_company", clientId: null } as Parameters<typeof documentsReleased>[0];
+  expect(documentsReleased(collector, "invoice")).toBe(false);
+  expect(documentsReleased(collector, "completed")).toBe(true);
 });

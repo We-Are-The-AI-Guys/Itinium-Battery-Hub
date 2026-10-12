@@ -18,6 +18,9 @@ const router: IRouter = Router();
 const CUSTOMER_DOCUMENT_TYPES = ["collection_sheet", "consignment_note"] as const;
 const DOCUMENT_READ_ROLES = ["accounts", "head_office_admin", "collection_company", "team_leader", "depot_user"];
 const objectStorage = new ObjectStorageService();
+export function documentsReleased(user: NonNullable<AuthenticatedRequest["user"]>, status: string): boolean {
+  return isAdmin(user) || status === "completed" || (isClientUser(user) && status === "invoice");
+}
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const ALLOWED_CONTENT_TYPES = new Set([
@@ -124,7 +127,7 @@ router.get("/customer/documents", requireAuth, requireRole("team_leader", "depot
         docType: jobDocumentsTable.docType, fileName: jobDocumentsTable.fileName,
         uploadedAt: jobDocumentsTable.uploadedAt,
       }).from(jobDocumentsTable).innerJoin(jobsTable, eq(jobsTable.id, jobDocumentsTable.jobId))
-        .where(and(jobScope(req.user!), eq(jobsTable.status, "completed"), inArray(jobDocumentsTable.docType, [...CUSTOMER_DOCUMENT_TYPES])))
+        .where(and(jobScope(req.user!), inArray(jobsTable.status, ["invoice", "completed"]), inArray(jobDocumentsTable.docType, [...CUSTOMER_DOCUMENT_TYPES])))
         .orderBy(desc(jobDocumentsTable.uploadedAt));
       res.json({ documents });
     } catch (error) {
@@ -157,11 +160,11 @@ router.get(
         .from(jobDocumentsTable)
         .where(and(eq(jobDocumentsTable.jobId, job.id), inArray(jobDocumentsTable.docType, visibleTypes)));
       res.json({
-        documents: isAdmin(req.user!) || job.status === "completed" ? documents : [],
+        documents: documentsReleased(req.user!, job.status) ? documents : [],
         requiredTypes: visibleTypes,
         outstandingTypes: visibleTypes.filter((t) => !documents.some((d) => d.docType === t)),
         canUpload: !isClientUser(req.user!) && (isAdmin(req.user!) || canUploadDocuments(job)),
-        releasePending: !isAdmin(req.user!) && job.status !== "completed",
+        releasePending: !documentsReleased(req.user!, job.status),
       });
     } catch (error) {
       console.error("List job documents error:", error);
@@ -402,8 +405,10 @@ async function serveDocument(
     res.status(404).json({ message: "Job not found" });
     return;
   }
-  if (!isAdmin(req.user!) && job.status !== "completed") {
-    res.status(403).json({ message: "Signed documents are released when Itinium marks the job Completed" }); return;
+  if (!documentsReleased(req.user!, job.status)) {
+    res.status(403).json({ message: isClientUser(req.user!)
+      ? "Signed documents are released when the job reaches Invoice"
+      : "Signed documents are released when Itinium marks the job Completed" }); return;
   }
   const [doc] = await db
     .select()

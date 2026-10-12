@@ -59,7 +59,7 @@ export default function CustomerJobDetailPage() {
 
   const job = data?.job;
   const batteries = data?.batteries || [];
-  const completed = job?.status === "completed";
+  const documentsReleased = job?.status === "invoice" || job?.status === "completed";
 
   return (
     <SidebarLayout title={job ? job.reference : "Job"} subtitle="Read-only collection record">
@@ -130,10 +130,10 @@ export default function CustomerJobDetailPage() {
               <JobRequestsPanel jobId={job.id} variant="customer" jobStatus={job.status} />
             </Panel>
             <Panel title="Signed documents" icon={<FileText className="w-4 h-4 text-[#0ea5e9]" />}>
-              {completed ? (
+              {documentsReleased ? (
                 <JobDocumentsPanel jobId={job.id} mode="customer" />
               ) : (
-                <p className="text-sm text-slate-500">The signed collection sheet and consignment note become available here once the job is completed.</p>
+                <p className="text-sm text-slate-500">The signed collection sheet and consignment note become available here once the job reaches Invoice.</p>
               )}
             </Panel>
           </div>

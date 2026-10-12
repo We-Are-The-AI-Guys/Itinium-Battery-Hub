@@ -740,7 +740,7 @@ router.get(
       res.json({
         jobs: jobs.map(job => ({
           ...job,
-          signedDocumentTypes: isAdmin(req.user!) || job.status === "completed" ? documents.filter(doc => doc.jobId === job.id).map(doc => doc.docType) : [],
+          signedDocumentTypes: isAdmin(req.user!) || ["invoice", "completed"].includes(job.status) ? documents.filter(doc => doc.jobId === job.id).map(doc => doc.docType) : [],
           ...jobListSummary(rows.filter(row => row.jobId === job.id), job.tonnage),
         })),
         total,
