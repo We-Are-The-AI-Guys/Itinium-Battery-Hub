@@ -3,7 +3,7 @@ import { Construction } from "lucide-react";
 
 export default function PlaceholderPage({ title }: { title: string }) {
   return (
-    <SidebarLayout>
+    <SidebarLayout title={title} subtitle="Coming soon">
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
         <div className="w-16 h-16 rounded-2xl bg-[#f1f5f9] flex items-center justify-center mb-4">
           <Construction className="w-8 h-8 text-[#94a3b8]" />

@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { jobsTable } from "@workspace/db/schema";
 import { sql, and, eq } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
+import { jobScope } from "../lib/depot-access";
 
 const router = Router();
 
@@ -38,7 +39,7 @@ router.get(
           : undefined;
 
       const dateFilter = sql`${jobsTable.submittedAt} >= ${fromDate} AND ${jobsTable.submittedAt} < ${toDate}`;
-      const whereConditions = clientFilter ? and(dateFilter, clientFilter) : dateFilter;
+      const whereConditions = and(dateFilter, clientFilter, jobScope(req.user!));
 
       const monthlyRows = await db
         .select({

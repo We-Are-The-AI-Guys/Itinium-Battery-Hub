@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
+import { EmailRoutingTab } from "@/components/email-routing-tab";
+import { isAdmin as isAdminRole, roleSummary } from "@/lib/roles";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +60,7 @@ const TABS = [
   { id: "weights", label: "Battery Weights", icon: Weight },
   { id: "collection-points", label: "Collection Points", icon: Building2 },
   { id: "system", label: "System", icon: Settings },
+  { id: "email-routing", label: "Email Routing", icon: Bell },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -172,7 +175,7 @@ function ProfileTab({ user, onProfileUpdated }: { user: UserProfile; onProfileUp
           <div className="grid gap-2">
             <label className="text-sm font-medium text-slate-700">Role</label>
             <Input
-              value={getRoleLabel(user.role)}
+              value={roleSummary(user)}
               disabled
               className="border-slate-200 bg-slate-50 text-slate-500 cursor-not-allowed max-w-md"
             />
@@ -1336,8 +1339,8 @@ export default function SettingsPage() {
 
   useEffect(() => { fetchUser(); }, [fetchUser]);
 
-  const isAdmin = user?.role === "head_office_admin";
-  const visibleTabs = isAdmin ? TABS : TABS.filter((t) => t.id !== "system" && t.id !== "weights" && t.id !== "collection-points");
+  const isAdmin = isAdminRole(user);
+  const visibleTabs = isAdmin ? TABS : TABS.filter((t) => t.id !== "system" && t.id !== "email-routing" && t.id !== "weights" && t.id !== "collection-points");
 
   return (
     <SidebarLayout
@@ -1378,6 +1381,7 @@ export default function SettingsPage() {
               {activeTab === "weights" && isAdmin && <WeightsTab />}
               {activeTab === "collection-points" && isAdmin && <CollectionPointsTab />}
               {activeTab === "system" && isAdmin && <SystemTab />}
+              {activeTab === "email-routing" && isAdmin && <EmailRoutingTab />}
             </>
           )}
         </div>

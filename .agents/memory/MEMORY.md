@@ -1,3 +1,5 @@
+- [Shared workspace precautions](shared-workspace-tools.md) — helpers must not stash/reset the repository during concurrent work.
+- [V16 access authority](v16-access-policy.md) — six-role specification supersedes older permissions, document release and provisional-weight policies.
 - [API server bootstrap applies hidden DDL](api-server-bootstrap-ddl.md) — constraint errors may come from startup-created indexes absent from Drizzle schema; check pg_indexes and index.ts bootstrap.
 - [Failed publish may partially apply schema](failed-publish-partial-schema.md) — recheck production and pending diff after a failed publish; additive statements may have persisted.
 - [API server restart staleness](api-server-restart-staleness.md) — first requests after restart may hit the old process; restart again/retry before assuming a code bug.

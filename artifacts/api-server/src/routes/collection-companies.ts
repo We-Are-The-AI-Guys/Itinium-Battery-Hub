@@ -59,7 +59,7 @@ export function mayProposeCollectionSchedule(
     && user.collectionCompanyId != null
     && job.collectionCompanyId === user.collectionCompanyId
     && ["request", "confirmed"].includes(job.status)
-    && ["unassigned", "proposed"].includes(job.scheduleStatus);
+    && ["unassigned", "proposed", "confirmed"].includes(job.scheduleStatus);
 }
 
 // ---- Companies -------------------------------------------------------------
@@ -345,12 +345,7 @@ router.post(
         res.status(400).json({ message: "This collection can no longer be scheduled" });
         return;
       }
-      // Once Itinium has confirmed the date with the customer, the schedule is
-      // locked — changes must go through Itinium (who can reschedule).
-      if (job.scheduleStatus === "confirmed") {
-        res.status(400).json({ message: "This collection has been confirmed by Itinium. Please contact Itinium to change the schedule." });
-        return;
-      }
+      // A new proposal preserves the confirmed collectionDate until Admin approves.
       if (!mayProposeCollectionSchedule(req.user!, job)) {
         res.status(403).json({ message: "Only the assigned collection company can propose a schedule" });
         return;
@@ -381,7 +376,7 @@ router.post(
           eq(jobsTable.id, jobId),
           eq(jobsTable.collectionCompanyId, companyId),
           inArray(jobsTable.status, ["request", "confirmed"]),
-          inArray(jobsTable.scheduleStatus, ["unassigned", "proposed"]),
+          inArray(jobsTable.scheduleStatus, ["unassigned", "proposed", "confirmed"]),
         ))
         .returning({
           id: jobsTable.id,

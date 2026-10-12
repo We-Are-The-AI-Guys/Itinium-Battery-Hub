@@ -33,7 +33,7 @@ export function JobDocumentsPanel({
   onError,
 }: {
   jobId: number;
-  mode: "upload" | "review" | "customer";
+  mode: "upload" | "review" | "customer" | "admin";
   onError?: (message: string) => void;
 }) {
   const [state, setState] = useState<DocumentsState | null>(null);
@@ -71,6 +71,16 @@ export function JobDocumentsPanel({
   async function handleFileChosen(file: File) {
     const docType = pendingTypeRef.current;
     if (!docType) return;
+    if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type)) {
+      fail("Only PDF, JPG or PNG files can be uploaded.");
+      pendingTypeRef.current = null;
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      fail("Files must be 20 MB or smaller.");
+      pendingTypeRef.current = null;
+      return;
+    }
     setUploadingType(docType);
     setError("");
     try {
@@ -146,7 +156,8 @@ export function JobDocumentsPanel({
   if (!state) return error ? <p role="alert">{error} <button className="underline" onClick={load}>Retry</button></p> : <p className="text-sm text-slate-500">Loading documents…</p>;
   if (mode === "review" && state.documents.length === 0 && !state.canUpload) return null;
 
-  const visibleTypes = mode === "customer" ? DOC_TYPES.filter(d => d.type !== "statement") : DOC_TYPES;
+  const visibleTypes = DOC_TYPES.filter(d => d.type !== "statement" || ((mode === "review" || mode === "admin") && state.documents.some(doc => doc.docType === "statement")));
+  const canUploadHere = (mode === "upload" && state.canUpload) || mode === "admin";
   const outstanding = visibleTypes.filter((d) => !state.documents.some((doc) => doc.docType === d.type));
 
   return (
@@ -154,7 +165,7 @@ export function JobDocumentsPanel({
       <input
         ref={fileInputRef}
         type="file"
-        accept="application/pdf,image/jpeg,image/png,image/webp,image/heic"
+        accept="application/pdf,image/jpeg,image/png"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -216,7 +227,7 @@ export function JobDocumentsPanel({
                   </Button>
                 </div>
               )}
-              {mode === "upload" && state.canUpload && (
+              {canUploadHere && type !== "statement" && (
                 <Button
                   size="sm"
                   className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white shrink-0"
@@ -237,7 +248,7 @@ export function JobDocumentsPanel({
       </ul>
       {mode === "upload" && !state.canUpload && (
         <p className="text-xs text-slate-400 mt-1.5">
-          You can upload the signed paperwork and your statement once the collection has been carried out.
+          You can upload the signed collection sheet and consignment note once the collection has been carried out.
         </p>
       )}
       {error && <p className="text-sm text-red-600 mt-2">{error}</p>}

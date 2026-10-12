@@ -58,7 +58,7 @@ describe("real authentication middleware depot boundary", () => {
   });
   it.each(["/jobs/100", "/JOBS/100", "/jobs/%31%30%30", "/jobs/100/collection-sheet.pdf"])("denies a same-client foreign depot at %s", async path => {
     seed(11);
-    expect((await request(path)).status).toBe(404);
+    expect((await request(path)).status).toBe(path.endsWith(".pdf") ? 403 : 404);
   });
   it.each(["/jobs/100junk", "/jobs/1e2", "/jobs/1e100", "/jobs/100.5", "/jobs/-1"])("rejects malformed job identifiers at %s", async path => {
     expect((await request(path)).status).toBe(404);
@@ -78,10 +78,10 @@ describe("real authentication middleware depot boundary", () => {
   });
   it("rejects a foreign nested battery", async () => {
     state.reads.push([]);
-    expect((await request("/jobs/100/batteries/999/admin", "PATCH")).status).toBe(404);
+    expect((await request("/jobs/100/batteries/999/admin", "PATCH")).status).toBe(403);
   });
-  it("allows an owned nested battery", async () => {
+  it("denies official edits even to an owned nested battery", async () => {
     state.reads.push([{ id: 99 }]);
-    expect((await request("/jobs/100/batteries/99/admin", "PATCH")).status).toBe(200);
+    expect((await request("/jobs/100/batteries/99/admin", "PATCH")).status).toBe(403);
   });
 });

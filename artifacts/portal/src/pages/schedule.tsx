@@ -989,7 +989,7 @@ export default function SchedulePage() {
   };
 
   return (
-    <SidebarLayout>
+    <SidebarLayout title="Schedule" subtitle="Collection planning">
       <div className="flex flex-col h-full -m-8">
         {/* Page header */}
         <div className="flex items-center justify-between px-8 py-5 border-b border-slate-200 bg-white shrink-0">

@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/select";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { JobDocumentsPanel } from "@/components/job-documents";
+import { WeightVerificationBanner } from "@/components/weight-verification-banner";
 import { CollectionConversation } from "@/components/collection-conversation";
 import { JOB_NOTES_DESCRIPTION, JOB_NOTES_PLACEHOLDER } from "@/lib/collection-notes-copy";
 import { hasBatteryReviewFlags, reviewSaveSummary } from "@/lib/battery-review";
@@ -1505,6 +1506,9 @@ export default function JobDetailPage() {
     <SidebarLayout title={job.reference} subtitle={`${job.clientName} — ${job.depot}`}>
       <div className="space-y-6">
         {userRole === "head_office_admin" && <JobOwnership jobId={job.id} />}
+        {(job as { weightVerificationRequired?: boolean }).weightVerificationRequired && (
+          <WeightVerificationBanner jobId={job.id} onVerified={() => { toast({ title: "Weights verified" }); loadJob(); }} />
+        )}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -1687,7 +1691,7 @@ export default function JobDetailPage() {
 
         {(userRole === "accounts" || userRole === "head_office_admin" || userRole === "team_leader") && (
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-6" data-testid="card-job-documents">
-            <JobDocumentsPanel jobId={job.id} mode={userRole === "team_leader" ? "customer" : "review"} />
+            <JobDocumentsPanel jobId={job.id} mode="admin" />
           </div>
         )}
 

@@ -15,7 +15,7 @@ router.get(
     try {
       const user = req.user!;
       const role = user.role;
-      if (!["head_office_admin", "accounts", "team_leader", "depot_user"].includes(role)) {
+      if (!["head_office_admin", "lead_client", "accounts", "team_leader", "depot_user"].includes(role)) {
         res.status(403).json({ message: "Access denied" }); return;
       }
 
@@ -36,7 +36,7 @@ router.get(
             )
           )
           .orderBy(desc(jobDraftsTable.updatedAt));
-      } else if (role === "team_leader") {
+      } else if (isClientUser(user)) {
         if (!user.clientId) {
           res.json({ drafts: [] });
           return;
@@ -91,7 +91,7 @@ router.post(
       }
 
       const formDataJson = typeof formData === "string" ? JSON.parse(formData) : formData;
-      if (!["head_office_admin", "accounts", "team_leader", "depot_user"].includes(user.role)) {
+      if (!["head_office_admin", "lead_client", "accounts", "team_leader", "depot_user"].includes(user.role)) {
         res.status(403).json({ message: "Access denied" }); return;
       }
       const selectedId = Number(formDataJson.selectedLocationId) || null;

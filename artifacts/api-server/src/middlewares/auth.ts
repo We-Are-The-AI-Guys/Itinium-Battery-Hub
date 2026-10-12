@@ -2,8 +2,9 @@ import type { Request, Response, NextFunction } from "express";
 import { db } from "@workspace/db";
 import { usersTable, sessionsTable, userLocationsTable, locationsTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
-import { jobsTable, jobBatteriesTable } from "@workspace/db/schema";
+import { jobsTable, jobBatteriesTable, accessAuditTable } from "@workspace/db/schema";
 import { isClientUser, mayAccessDepot } from "../lib/depot-access";
+import { rolesOf, hasRole, isAdmin, clientWide, policyAllows, customerJob, customerBattery } from "../lib/access-policy";
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -11,6 +12,7 @@ export interface AuthenticatedRequest extends Request {
     email: string;
     fullName: string;
     role: string;
+    roles?: string[];
     depot: string | null;
     clientId: number | null;
     locationId: number | null;
@@ -50,7 +52,7 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
             return;
           }
 
-          const memberships = user.clientId ? await db.select({ id: locationsTable.id })
+          const memberships = user.clientId && clientWide(user) ? await db.select({ id: locationsTable.id }).from(locationsTable).where(eq(locationsTable.clientId, user.clientId)) : user.clientId ? await db.select({ id: locationsTable.id })
             .from(userLocationsTable).innerJoin(locationsTable, eq(locationsTable.id, userLocationsTable.locationId))
             .where(and(eq(userLocationsTable.userId, user.id), eq(locationsTable.clientId, user.clientId))) : [];
           req.user = {
@@ -58,12 +60,25 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
             email: user.email,
             fullName: user.fullName,
             role: user.role,
+            roles: rolesOf(user),
             depot: user.depot,
             clientId: user.clientId,
             locationId: user.locationId,
             permittedLocationIds: memberships.map(row => row.id),
             collectionCompanyId: user.collectionCompanyId,
           };
+          if (!policyAllows(req.user, req.method, String(req.route?.path || req.path))) {
+            res.status(403).json({ message: "Insufficient permissions" }); return;
+          }
+          if (isClientUser(req.user) && ["/jobs", "/jobs/:id", "/jobs/schedule"].includes(String(req.route?.path))) {
+            const originalJson = res.json.bind(res);
+            res.json = ((body: any) => originalJson(body && typeof body === "object" ? {
+              ...body,
+              ...(body.job ? { job: customerJob(body.job) } : {}),
+              ...(body.jobs ? { jobs: body.jobs.map(customerJob) } : {}),
+              ...(body.batteries ? { batteries: body.batteries.map(customerBattery) } : {}),
+            } : body)) as typeof res.json;
+          }
 
           db.update(sessionsTable)
             .set({ lastUsedAt: new Date() })
@@ -87,6 +102,19 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
               }
             }
           }
+          const routePath = String(req.route?.path || "");
+          if (isAdmin(req.user) && req.method !== "GET" && req.params.id &&
+            (routePath.startsWith("/jobs/") || routePath.includes("confirm-schedule"))) {
+            const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, Number(req.params.id)));
+            const confirming = ["confirmed", "received", "awaiting_invoice", "invoice", "completed"].includes(req.body?.status) || routePath.includes("confirm-schedule") || routePath.endsWith("/schedule/confirm");
+            if (confirming && job && (job.weightVerificationRequired || Number(job.tonnage) > 26)) {
+              res.status(409).json({ message: "Itinium must verify provisional weight and reduce any load above 26 tonnes before confirmation" }); return;
+            }
+            if (job && req.body?.status && job.status !== req.body.status) {
+              await db.insert(accessAuditTable).values({ actorId: user.id, jobId: job.id, action: "job.status.requested",
+                details: { before: job.status, requested: req.body.status, documentRelease: req.body.status === "completed" } });
+            }
+          }
           next();
         });
     })
@@ -103,7 +131,15 @@ export function requireRole(...roles: string[]) {
       return;
     }
 
-    if (!roles.includes(req.user.role)) {
+    const path = String(req.route?.path || req.path);
+    if (!policyAllows(req.user, req.method, path)) {
+      res.status(403).json({ message: "Insufficient permissions" }); return;
+    }
+    const customerRead = req.method === "GET" && isClientUser(req.user) && (
+      ["/jobs", "/jobs/:id", "/jobs/schedule", "/dashboard/stats", "/customer/documents", "/clients/:clientId/locations"].includes(path)
+      || path.startsWith("/jobs/:id/documents")
+    );
+    if (!customerRead && !hasRole(req.user, ...roles) && !(isAdmin(req.user) && path.includes("/documents"))) {
       res.status(403).json({ message: "Insufficient permissions" });
       return;
     }

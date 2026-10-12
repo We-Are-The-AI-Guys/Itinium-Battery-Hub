@@ -10,6 +10,7 @@ export const usersTable = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   fullName: varchar("full_name", { length: 255 }).notNull(),
   role: varchar("role", { length: 50 }).notNull().default("depot_user"),
+  roles: jsonb("roles").$type<string[]>(),
   depot: varchar("depot", { length: 255 }),
   clientId: integer("client_id").references(() => clientsTable.id),
   locationId: integer("location_id").references(() => locationsTable.id),

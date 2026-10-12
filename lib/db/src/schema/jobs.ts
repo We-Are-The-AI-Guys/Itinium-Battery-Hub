@@ -1,3 +1,4 @@
+// V16 provisional weight review is independent of the existing official status.
 import { pgTable, serial, integer, text, timestamp, varchar, decimal, date, index, boolean, uniqueIndex, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -7,6 +8,7 @@ import { clientsTable } from "./clients";
 import { relations } from "drizzle-orm";
 
 export const jobsTable = pgTable("jobs", {
+  weightVerificationRequired: boolean("weight_verification_required").notNull().default(false),
   id: serial("id").primaryKey(),
   reference: varchar("reference", { length: 50 }).notNull().unique(),
   clientName: varchar("client_name", { length: 255 }).notNull(),

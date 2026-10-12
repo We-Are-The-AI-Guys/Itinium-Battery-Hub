@@ -281,6 +281,9 @@ export async function dispatchToMany(
 }
 
 export async function recipientsWithRoles(roles: string[]): Promise<number[]> {
+  // Legacy "accounts" recipient lists mean internal invoicing staff. V16 Accounts
+  // is a customer role; never deliver those internal messages across tenants.
+  roles = [...new Set(roles.map(role => role === "accounts" ? "head_office_admin" : role))];
   const users = await db
     .select({ id: usersTable.id })
     .from(usersTable)

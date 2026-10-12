@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/auth";
 import { userLocationsTable, locationsTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
+import { isCustomer, clientWide } from "../lib/access-policy";
 
 const router = Router();
 
@@ -12,7 +13,11 @@ router.get(
   requireAuth,
   async (_req: AuthenticatedRequest, res: Response) => {
     try {
-      if (["depot_user", "team_leader"].includes(_req.user!.role)) {
+      if (isCustomer(_req.user!) && clientWide(_req.user!)) {
+        const locations = await db.select({ name: locationsTable.name }).from(locationsTable).where(eq(locationsTable.clientId, _req.user!.clientId ?? -1));
+        res.json({ depots: locations.map(row => row.name) }); return;
+      }
+      if (isCustomer(_req.user!)) {
         const locations = await db.select({ name: locationsTable.name }).from(locationsTable)
           .innerJoin(userLocationsTable, eq(userLocationsTable.locationId, locationsTable.id))
           .where(and(eq(userLocationsTable.userId, _req.user!.id), eq(locationsTable.clientId, _req.user!.clientId ?? -1)));

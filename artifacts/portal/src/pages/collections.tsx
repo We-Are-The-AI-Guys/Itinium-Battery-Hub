@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { JobDocumentsPanel } from "@/components/job-documents";
+import { JobRequestsPanel } from "@/components/job-requests-panel";
 import { CollectionConversation } from "@/components/collection-conversation";
 import { JOB_NOTES_DESCRIPTION } from "@/lib/collection-notes-copy";
 import { NotificationBell } from "@/components/notification-panel";
@@ -342,7 +343,7 @@ export default function CollectionsPage() {
                           {job.clientName} — {job.depot} · {parseFloat(job.tonnage).toFixed(3)}t · {job.palletCount} pallets
                         </p>
                       </div>
-                      {job.scheduleStatus !== "confirmed" ? (
+                      {["request", "confirmed"].includes(job.status) ? (
                         <Button
                           size="sm"
                           className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
@@ -434,31 +435,17 @@ export default function CollectionsPage() {
                       </div>
                     )}
 
-                    {job.scheduleStatus === "confirmed" && (
-                      <div className="mt-4 pt-4 border-t border-slate-100">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-[#0ea5e9] border-[#0ea5e9]/40 hover:bg-[#0ea5e9] hover:text-white"
-                          onClick={() => downloadCollectionSheet(job)}
-                          disabled={downloadingSheetId === job.id}
-                          data-testid={`button-collection-sheet-${job.id}`}
-                        >
-                          <Download className="w-3.5 h-3.5 mr-1.5" />
-                          {downloadingSheetId === job.id ? "Preparing…" : "Collection Sheet PDF"}
-                        </Button>
-                        {downloadError?.jobId === job.id && (
-                          <p className="mt-2 text-sm text-red-600" role="alert">
-                            {downloadError.message}
-                          </p>
-                        )}
-                      </div>
-                    )}
 
                     {(job.scheduleStatus === "confirmed" ||
                       ["received", "awaiting_invoice", "invoice", "completed"].includes(job.status)) && (
                       <div className="mt-4 pt-4 border-t border-slate-100">
                         <JobDocumentsPanel jobId={job.id} mode="upload" />
+                      </div>
+                    )}
+                    {(job.scheduleStatus === "confirmed" ||
+                      ["received", "awaiting_invoice", "invoice", "completed"].includes(job.status)) && (
+                      <div className="mt-4 pt-4 border-t border-slate-100">
+                        <JobRequestsPanel jobId={job.id} variant="collector" jobStatus={job.status} />
                       </div>
                     )}
                     <Button variant="outline" size="sm" className="mt-4" onClick={() => setOpenConversationId(openConversationId === job.id ? null : job.id)}>

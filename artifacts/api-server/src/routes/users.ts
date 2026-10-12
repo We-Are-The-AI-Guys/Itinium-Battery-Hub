@@ -1,3 +1,4 @@
+import { rolesOf, validateRoles } from "../lib/access-policy";
 import { Router, type IRouter } from "express";
 import crypto from "crypto";
 import { db } from "@workspace/db";
@@ -96,6 +97,7 @@ router.get(
           email: usersTable.email,
           fullName: usersTable.fullName,
           role: usersTable.role,
+          roles: usersTable.roles,
           depot: usersTable.depot,
           clientId: usersTable.clientId,
           locationId: usersTable.locationId,
@@ -127,7 +129,7 @@ router.get(
           const [l] = await db.select({ name: locationsTable.name }).from(locationsTable).where(eq(locationsTable.id, u.locationId));
           if (l) locationName = l.name;
         }
-        enrichedUsers.push({ ...u, clientName, locationName, permittedLocationIds: await userLocationIds(u.id, u.clientId) });
+        enrichedUsers.push({ ...u, roles: rolesOf(u), clientName, locationName, permittedLocationIds: await userLocationIds(u.id, u.clientId) });
       }
 
       res.json({ users: enrichedUsers, total: count });
@@ -139,10 +141,11 @@ router.get(
 );
 
 const createUserSchema = z.object({
+  roles: z.array(z.enum(["head_office_admin", "lead_client", "accounts", "team_leader", "depot_user", "collection_company"])).min(1).optional(),
   permittedLocationIds: z.array(z.number().int().positive()).optional(),
   fullName: z.string().min(1),
   email: z.string().email(),
-  role: z.enum(["depot_user", "team_leader", "accounts", "head_office_admin", "collection_company"]),
+  role: z.enum(["lead_client", "depot_user", "team_leader", "accounts", "head_office_admin", "collection_company"]),
   depot: z.string().nullable().optional(),
   clientId: z.number().nullable().optional(),
   locationId: z.number().nullable().optional(),
@@ -162,7 +165,11 @@ router.post(
         return;
       }
 
-      const { fullName, email, role, depot, password } = parsed.data;
+      const { fullName, email, depot, password } = parsed.data;
+      const assignedRoles = [...new Set(parsed.data.roles ?? [parsed.data.role])];
+      const role = assignedRoles[0];
+      const roleError = validateRoles(assignedRoles, parsed.data.clientId ?? null, parsed.data.collectionCompanyId ?? null);
+      if (roleError) { res.status(400).json({ message: roleError }); return; }
       let { clientId, locationId } = parsed.data;
 
       if (req.user!.role === "team_leader") {
@@ -206,7 +213,7 @@ router.post(
 
       const permittedIds = [...new Set(parsed.data.permittedLocationIds ?? (locationId ? [locationId] : []))];
       // An administrator's explicit default selection is also an access grant.
-      if (req.user!.role === "head_office_admin" && locationId && !permittedIds.includes(locationId)) permittedIds.push(locationId);
+      if (parsed.data.permittedLocationIds === undefined && req.user!.role === "head_office_admin" && locationId && !permittedIds.includes(locationId)) permittedIds.push(locationId);
       for (const id of permittedIds) {
         const [loc] = await db.select().from(locationsTable).where(eq(locationsTable.id, id));
         if (!loc || loc.clientId !== clientId || (req.user!.role === "team_leader" && !req.user!.permittedLocationIds?.includes(id))) {
@@ -261,6 +268,7 @@ router.post(
           fullName,
           email: email.toLowerCase().trim(),
           role,
+          roles: assignedRoles,
           depot: locationName || depot || null,
           clientId: clientId || null,
           locationId: locationId || null,
@@ -345,9 +353,10 @@ router.patch(
 );
 
 const updateUserSchema = z.object({
+  roles: z.array(z.enum(["head_office_admin", "lead_client", "accounts", "team_leader", "depot_user", "collection_company"])).min(1).optional(),
   permittedLocationIds: z.array(z.number().int().positive()).optional(),
   fullName: z.string().min(1).optional(),
-  role: z.enum(["depot_user", "team_leader", "accounts", "head_office_admin", "collection_company"]).optional(),
+  role: z.enum(["lead_client", "depot_user", "team_leader", "accounts", "head_office_admin", "collection_company"]).optional(),
   collectionCompanyId: z.number().nullable().optional(),
   depot: z.string().nullable().optional(),
   clientId: z.number().nullable().optional(),
@@ -400,6 +409,12 @@ router.patch(
 
       const [membershipTarget] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
       if (!membershipTarget) { res.status(404).json({ message: "User not found" }); return; }
+      const assignedRoles = [...new Set(parsed.data.roles ?? (parsed.data.role ? [parsed.data.role] : rolesOf(membershipTarget)))];
+      const rolesChanged = parsed.data.roles !== undefined || parsed.data.role !== undefined || parsed.data.clientId !== undefined || parsed.data.collectionCompanyId !== undefined;
+      const roleError = validateRoles(assignedRoles,
+        parsed.data.clientId === undefined ? membershipTarget.clientId : parsed.data.clientId,
+        parsed.data.collectionCompanyId === undefined ? membershipTarget.collectionCompanyId : parsed.data.collectionCompanyId);
+      if (rolesChanged && roleError) { res.status(400).json({ message: roleError }); return; }
       const oldIds = await userLocationIds(userId, membershipTarget.clientId);
       if (req.user!.role === "team_leader" && (!oldIds.length || oldIds.some(id => !req.user!.permittedLocationIds?.includes(id)))) {
         res.status(403).json({ message: "User is outside your permitted locations" }); return;
@@ -409,7 +424,7 @@ router.patch(
       if (parsed.data.locationId && !nextClient) {
         res.status(400).json({ message: "Cannot assign a location without a client" }); return;
       }
-      if (req.user!.role === "head_office_admin" && parsed.data.locationId && !permittedIds.includes(parsed.data.locationId)) {
+      if (parsed.data.permittedLocationIds === undefined && req.user!.role === "head_office_admin" && parsed.data.locationId && !permittedIds.includes(parsed.data.locationId)) {
         permittedIds.push(parsed.data.locationId);
       }
       for (const id of permittedIds) {
@@ -425,7 +440,7 @@ router.patch(
       if (requestedDefault && !permittedIds.includes(requestedDefault)) parsed.data.locationId = null;
       const updates: Record<string, unknown> = {};
       if (parsed.data.fullName !== undefined) updates.fullName = parsed.data.fullName;
-      if (parsed.data.role !== undefined) updates.role = parsed.data.role;
+      if (parsed.data.role !== undefined || parsed.data.roles !== undefined) { updates.role = assignedRoles[0]; updates.roles = assignedRoles; }
       if (parsed.data.depot !== undefined) updates.depot = parsed.data.depot;
       if (parsed.data.isActive !== undefined) updates.isActive = parsed.data.isActive;
 

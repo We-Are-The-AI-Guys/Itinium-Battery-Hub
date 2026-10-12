@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { collectionReleaseSummary } from "../lib/collection-release";
 import { jobListSummary } from "../lib/job-list-summary";
+import { isAdmin, isCustomer, canSeeFinance, customerJob } from "../lib/access-policy";
 import { jobScope, mayAccessDepot, isClientUser } from "../lib/depot-access";
 import { userLocationIds } from "../lib/user-memberships";
 import { db } from "@workspace/db";
@@ -461,7 +462,7 @@ router.get(
         })
         .from(jobsTable)
         .leftJoin(jobBatteriesTable, eq(jobBatteriesTable.jobId, jobsTable.id))
-        .where(sql`${jobsTable.collectionDate} IS NOT NULL`)
+        .where(and(jobScope(_req.user!), sql`${jobsTable.collectionDate} IS NOT NULL`))
         .groupBy(
           jobsTable.id,
           jobsTable.reference,
@@ -739,7 +740,7 @@ router.get(
       res.json({
         jobs: jobs.map(job => ({
           ...job,
-          signedDocumentTypes: documents.filter(doc => doc.jobId === job.id).map(doc => doc.docType),
+          signedDocumentTypes: isAdmin(req.user!) || job.status === "completed" ? documents.filter(doc => doc.jobId === job.id).map(doc => doc.docType) : [],
           ...jobListSummary(rows.filter(row => row.jobId === job.id), job.tonnage),
         })),
         total,
@@ -1136,12 +1137,12 @@ router.post(
         specialInstructions,
       } = req.body;
       let { depot } = req.body;
-      const internalRequest = ["accounts", "head_office_admin"].includes(req.user!.role);
+      const internalRequest = isAdmin(req.user!);
       const allowTonnageOverride = internalRequest && tonnageManualOverride;
 
       let resolvedClientId = req.user!.clientId || null;
       let resolvedLocationId = req.body.locationId === undefined ? req.user!.locationId || null : null;
-      const clientUser = ["depot_user", "team_leader"].includes(req.user!.role);
+      const clientUser = isCustomer(req.user!);
       if (!clientUser && !internalRequest) {
         res.status(403).json({ message: "Access denied" }); return;
       }
@@ -1253,6 +1254,10 @@ router.post(
       }
 
       const batteryInputs = batteries as BatteryInput[];
+      if (!internalRequest) for (const battery of batteryInputs) {
+        battery.weightManual = false;
+        battery.estimatedWeightKg = null;
+      }
 
       for (let i = 0; i < batteryInputs.length; i++) {
         const b = batteryInputs[i];
@@ -1363,14 +1368,8 @@ router.post(
             }
           }
         }
-        if (!internalRequest && (
-          parsePositiveWeightKg(b.estimatedWeightKg) === null ||
-          b.cellModelFlagReason === TOKEN_WEIGHT_FLAG_REASON
-        )) {
-          res.status(400).json({ message: "Battery weights need confirmation. Complete the battery details or save your draft and contact Itinium before submitting." });
-          return;
-        }
-        applyTokenWeightFallback(b);
+        if (internalRequest) applyTokenWeightFallback(b);
+        else if (parsePositiveWeightKg(b.estimatedWeightKg) === null) b.cellModelFlagReason = TOKEN_WEIGHT_FLAG_REASON;
       }
 
       let autoTonnage = 0;
@@ -1442,6 +1441,7 @@ router.post(
             tonnage: finalTonnage,
             tonnageManualOverride: !!(allowTonnageOverride && !isNaN(parsedTonnage) && isFinite(parsedTonnage) && parsedTonnage >= 0),
             status: "request",
+            weightVerificationRequired: batteryInputs.some(b => parsePositiveWeightKg(b.estimatedWeightKg) === null || b.cellModelFlagReason === TOKEN_WEIGHT_FLAG_REASON),
             notes: notes || null,
             submittedById: req.user!.id,
             lmeRateUsed: latestLmeGbpPrice !== null ? String(latestLmeGbpPrice) : null,
@@ -2866,6 +2866,23 @@ router.get(
   async (_req: AuthenticatedRequest, res) => {
     try {
       const now = new Date();
+      if (!isAdmin(_req.user!)) {
+        const conditions = and(jobScope(_req.user!), buildJobsWhere(_req.query as Record<string, unknown>));
+        const [operational] = await db.select({
+          pendingJobs: sql<number>`COUNT(*) FILTER (WHERE ${jobsTable.status} = 'request')`,
+          monthlyTonnage: sql<string>`COALESCE(SUM(${jobsTable.tonnage}) FILTER (WHERE ${jobsTable.submittedAt} >= date_trunc('month', now())), 0)`,
+        }).from(jobsTable).where(conditions);
+        let totalInvoiceValue: number | undefined;
+        if (canSeeFinance(_req.user!)) {
+          const [finance] = await db.select({
+            total: sql<string>`COALESCE(SUM(${jobsTable.totalInvoiceValue}), 0)`,
+          }).from(jobsTable).where(and(conditions, inArray(jobsTable.invoiceStatus, ["invoiced", "paid"])));
+          totalInvoiceValue = Number(finance?.total ?? 0);
+        }
+        res.json({ pendingJobs: Number(operational?.pendingJobs ?? 0), monthlyTonnage: Number(operational?.monthlyTonnage ?? 0),
+          ...(totalInvoiceValue === undefined ? {} : { totalInvoiceValue }) });
+        return;
+      }
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 

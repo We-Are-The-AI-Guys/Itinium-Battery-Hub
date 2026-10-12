@@ -64,6 +64,10 @@ router.post(
   }
 );
 
+router.get("/support/screenshot/:filename", requireAuth, (_req, res) => {
+  res.status(404).json({ message: "Legacy screenshots are not publicly available" });
+});
+/* Legacy screenshot files are preserved, but have no provable owner metadata.
 router.get("/support/screenshot/:filename", (req, res) => {
   const filename = path.basename(req.params.filename);
   const filePath = path.join(SCREENSHOT_DIR, filename);
@@ -73,6 +77,7 @@ router.get("/support/screenshot/:filename", (req, res) => {
   }
   res.sendFile(filePath);
 });
+*/
 
 router.post("/support/ticket", requireAuth, async (req: AuthenticatedRequest, res) => {
   const apiKey = process.env.AIGUYS_API_KEY;
@@ -134,7 +139,7 @@ router.post("/support/ticket", requireAuth, async (req: AuthenticatedRequest, re
     if (!crmRes.ok) {
       const crmDown = !isJson || crmRes.status === 404;
       console.error("[support] CRM responded with", crmRes.status, body);
-      const crmMessage = typeof body?.message === "string" ? body.message : null;
+      const crmMessage = typeof (body as any)?.message === "string" ? (body as any).message : null;
       res.status(502).json({
         success: false,
         message: crmDown

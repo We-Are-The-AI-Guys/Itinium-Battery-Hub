@@ -2,7 +2,15 @@ import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, useAuth } from "@/contexts/auth-context";
+import { AuthProvider, useAuth, type AuthUser } from "@/contexts/auth-context";
+import { hasRole, isAdmin, isCollector, isCustomer, isUnassigned, isWarehouseOnly, canSeeSchedule } from "@/lib/roles";
+import CustomerDashboardPage from "@/pages/customer-dashboard";
+import CustomerJobsPage from "@/pages/customer-jobs";
+import CustomerJobDetailPage from "@/pages/customer-job-detail";
+import CustomerSchedulePage from "@/pages/customer-schedule";
+import OperationalOverviewPage from "@/pages/operational-overview";
+import ActionQueuePage from "@/pages/action-queue";
+import SupportPage from "@/pages/support";
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
 import AdminDashboardPage from "@/pages/admin-dashboard";
@@ -15,7 +23,6 @@ import SettingsPage from "@/pages/settings";
 import JobListPage from "@/pages/job-list";
 import JobDetailPage from "@/pages/job-detail";
 import StillagesPage from "@/pages/stillages";
-import PlaceholderPage from "@/pages/placeholder";
 import SchedulePage from "@/pages/schedule";
 import KpiPage from "@/pages/kpi";
 import ForgotPasswordPage from "@/pages/forgot-password";
@@ -45,18 +52,23 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-const ADMIN_ROLES = ["team_leader", "accounts", "head_office_admin"];
+type Pred = (u: AuthUser) => boolean;
 
-function RoleGuard({ allowedRoles, children }: { allowedRoles: string[]; children: React.ReactNode }) {
+function Gate({ allow, children }: { allow: Pred; children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <AppSpinner />;
   if (!user) return <Redirect to="/login" />;
-  if (!allowedRoles.includes(user.role)) return <Redirect to="/" />;
+  if (!allow(user)) return <Redirect to="/" />;
   return <>{children}</>;
 }
 
-function AdminGuard({ children }: { children: React.ReactNode }) {
-  return <RoleGuard allowedRoles={ADMIN_ROLES}>{children}</RoleGuard>;
+const assignedCustomer: Pred = (u) => isCustomer(u) && !isUnassigned(u);
+const adminOrCustomer: Pred = (u) => isAdmin(u) || assignedCustomer(u);
+
+/** Admin keeps the original full component; customers get the safe read-only variant. */
+function ByRole({ admin, customer }: { admin: React.ReactNode; customer: React.ReactNode }) {
+  const { user } = useAuth();
+  return <>{isAdmin(user) ? admin : customer}</>;
 }
 
 function GuestGuard({ children }: { children: React.ReactNode }) {
@@ -86,34 +98,34 @@ function AppRouter() {
         </AuthGuard>
       </Route>
       <Route path="/dashboard">
-        <AdminGuard>
-          <AdminDashboardPage />
-        </AdminGuard>
+        <Gate allow={(u) => isAdmin(u) || (assignedCustomer(u) && !isWarehouseOnly(u))}>
+          <ByRole admin={<AdminDashboardPage />} customer={<CustomerDashboardPage />} />
+        </Gate>
       </Route>
       <Route path="/jobs">
-        <AdminGuard>
-          <JobListPage />
-        </AdminGuard>
+        <Gate allow={adminOrCustomer}>
+          <ByRole admin={<JobListPage />} customer={<CustomerJobsPage />} />
+        </Gate>
       </Route>
       <Route path="/jobs/:id">
-        <AdminGuard>
-          <JobDetailPage />
-        </AdminGuard>
+        <Gate allow={adminOrCustomer}>
+          <ByRole admin={<JobDetailPage />} customer={<CustomerJobDetailPage />} />
+        </Gate>
       </Route>
       <Route path="/collections">
-        <RoleGuard allowedRoles={["collection_company"]}>
+        <Gate allow={isCollector}>
           <CollectionsPage />
-        </RoleGuard>
+        </Gate>
       </Route>
       <Route path="/stillages">
-        <AuthGuard>
+        <Gate allow={adminOrCustomer}>
           <StillagesPage />
-        </AuthGuard>
+        </Gate>
       </Route>
       <Route path="/kpi">
-        <RoleGuard allowedRoles={["accounts", "head_office_admin"]}>
+        <Gate allow={u => isAdmin(u) || hasRole(u, "accounts")}>
           <KpiPage />
-        </RoleGuard>
+        </Gate>
       </Route>
       <Route path="/help">
         <AuthGuard>
@@ -121,24 +133,24 @@ function AppRouter() {
         </AuthGuard>
       </Route>
       <Route path="/lme-pricing">
-        <RoleGuard allowedRoles={["accounts", "head_office_admin"]}>
+        <Gate allow={isAdmin}>
           <LmePricingPage />
-        </RoleGuard>
+        </Gate>
       </Route>
       <Route path="/clients">
-        <RoleGuard allowedRoles={["head_office_admin"]}>
+        <Gate allow={isAdmin}>
           <ClientManagementPage />
-        </RoleGuard>
+        </Gate>
       </Route>
       <Route path="/locations">
-        <RoleGuard allowedRoles={["team_leader"]}>
+        <Gate allow={isAdmin}>
           <LocationManagementPage />
-        </RoleGuard>
+        </Gate>
       </Route>
       <Route path="/users">
-        <RoleGuard allowedRoles={["head_office_admin"]}>
+        <Gate allow={isAdmin}>
           <UserManagementPage />
-        </RoleGuard>
+        </Gate>
       </Route>
       <Route path="/settings">
         <AuthGuard>
@@ -146,19 +158,34 @@ function AppRouter() {
         </AuthGuard>
       </Route>
       <Route path="/collection/new">
-        <AuthGuard>
+        <Gate allow={adminOrCustomer}>
           <DepotFormPage />
-        </AuthGuard>
+        </Gate>
       </Route>
       <Route path="/schedule">
-        <RoleGuard allowedRoles={["head_office_admin"]}>
-          <SchedulePage />
-        </RoleGuard>
+        <Gate allow={(u) => isAdmin(u) || (assignedCustomer(u) && canSeeSchedule(u))}>
+          <ByRole admin={<SchedulePage />} customer={<CustomerSchedulePage />} />
+        </Gate>
       </Route>
       <Route path="/correction-audit">
-        <RoleGuard allowedRoles={["head_office_admin"]}>
+        <Gate allow={isAdmin}>
           <CorrectionAuditPage />
-        </RoleGuard>
+        </Gate>
+      </Route>
+      <Route path="/operational-overview">
+        <Gate allow={(u) => assignedCustomer(u) && isWarehouseOnly(u)}>
+          <OperationalOverviewPage />
+        </Gate>
+      </Route>
+      <Route path="/action-queue">
+        <Gate allow={isAdmin}>
+          <ActionQueuePage />
+        </Gate>
+      </Route>
+      <Route path="/support">
+        <AuthGuard>
+          <SupportPage />
+        </AuthGuard>
       </Route>
       <Route component={NotFound} />
     </Switch>

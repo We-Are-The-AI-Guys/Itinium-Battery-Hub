@@ -5,6 +5,9 @@ export interface AuthUser {
   email: string;
   fullName: string;
   role: string;
+  roles?: string[];
+  permittedLocationIds?: number[];
+  collectionCompanyId?: number | null;
   depot: string | null;
   clientId: number | null;
   clientName: string | null;

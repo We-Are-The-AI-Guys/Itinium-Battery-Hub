@@ -6,7 +6,7 @@ import { eq, desc, sql, and, inArray, type SQL } from "drizzle-orm";
 import { z } from "zod/v4";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/auth";
 
-const ADMIN_ROLES = ["accounts", "head_office_admin"];
+const ADMIN_ROLES = ["head_office_admin"];
 
 const createMovementSchema = z.object({
   locationId: z.coerce.number().int().positive("Select a location"),
@@ -43,7 +43,7 @@ function resolveDepotScope(req: AuthenticatedRequest): { depot: string | null; f
   if (isAdmin) {
     return { depot: null, forbidden: false };
   }
-  if (!["team_leader", "depot_user"].includes(req.user?.role || "")) {
+  if (!["lead_client", "accounts", "team_leader", "depot_user"].some(role => (req.user?.roles ?? [req.user?.role]).includes(role))) {
     return { depot: null, forbidden: true };
   }
   return { depot: null, forbidden: false };

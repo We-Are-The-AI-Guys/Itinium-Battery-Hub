@@ -47,9 +47,15 @@ beforeEach(() => {
   state.reads = []; state.download.mockClear();
 });
 describe.each(["depot_user", "team_leader"])("%s document access", role => {
+  it("holds signed files until Completed", async () => {
+    state.role = role;
+    state.reads = [[{ id: 5, clientId: 1, locationId: 10, status: "received" }]];
+    expect((await fetch(`${origin}/jobs/5/documents/collection_sheet/download`)).status).toBe(403);
+    expect(state.download).not.toHaveBeenCalled();
+  });
   it.each(["collection_sheet", "consignment_note"])("downloads permitted %s", async type => {
     state.role = role;
-    state.reads = [[{ id: 5, clientId: 1, locationId: 10 }],
+    state.reads = [[{ id: 5, clientId: 1, locationId: 10, status: "completed" }],
       [{ objectPath: "/objects/test", fileName: "signed.pdf", contentType: "application/pdf" }]];
     const res = await fetch(`${origin}/jobs/5/documents/${type}/download`);
     expect(res.status).toBe(200);
@@ -74,7 +80,7 @@ describe.each(["depot_user", "team_leader"])("%s document access", role => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       documents: [], requiredTypes: ["collection_sheet", "consignment_note"],
-      outstandingTypes: ["collection_sheet", "consignment_note"], canUpload: false,
+      outstandingTypes: ["collection_sheet", "consignment_note"], canUpload: false, releasePending: true,
     });
   });
 });

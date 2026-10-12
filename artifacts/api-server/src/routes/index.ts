@@ -22,11 +22,15 @@ import correctionAuditRouter from "./correction-audit";
 import collectionCompaniesRouter from "./collection-companies";
 import collectionCommunicationRouter from "./collection-communication";
 import jobDocumentsRouter from "./job-documents";
+import accessWorkflowsRouter from "./access-workflows";
+import exceptionEvidenceRouter from "./exception-evidence";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
+router.use(accessWorkflowsRouter);
+router.use(exceptionEvidenceRouter);
 router.use(jobsRouter);
 router.use(jobDraftsRouter);
 router.use(kpiRouter);

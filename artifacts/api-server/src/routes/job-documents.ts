@@ -2,7 +2,8 @@ import { Readable } from "stream";
 import { createHmac, timingSafeEqual } from "crypto";
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { jobsTable, jobDocumentsTable, JOB_DOCUMENT_TYPES, type JobDocumentType } from "@workspace/db/schema";
+import { jobsTable, jobDocumentsTable, accessAuditTable, JOB_DOCUMENT_TYPES, type JobDocumentType } from "@workspace/db/schema";
+import { isAdmin } from "../lib/access-policy";
 import { eq, and, sql, inArray, desc } from "drizzle-orm";
 import { isClientUser, mayAccessDepot, jobScope } from "../lib/depot-access";
 import { z } from "zod";
@@ -18,13 +19,11 @@ const CUSTOMER_DOCUMENT_TYPES = ["collection_sheet", "consignment_note"] as cons
 const DOCUMENT_READ_ROLES = ["accounts", "head_office_admin", "collection_company", "team_leader", "depot_user"];
 const objectStorage = new ObjectStorageService();
 
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const ALLOWED_CONTENT_TYPES = new Set([
   "application/pdf",
   "image/jpeg",
   "image/png",
-  "image/webp",
-  "image/heic",
 ]);
 
 export const DOC_TYPE_LABELS: Record<JobDocumentType, string> = {
@@ -125,7 +124,7 @@ router.get("/customer/documents", requireAuth, requireRole("team_leader", "depot
         docType: jobDocumentsTable.docType, fileName: jobDocumentsTable.fileName,
         uploadedAt: jobDocumentsTable.uploadedAt,
       }).from(jobDocumentsTable).innerJoin(jobsTable, eq(jobsTable.id, jobDocumentsTable.jobId))
-        .where(and(jobScope(req.user!), inArray(jobDocumentsTable.docType, [...CUSTOMER_DOCUMENT_TYPES])))
+        .where(and(jobScope(req.user!), eq(jobsTable.status, "completed"), inArray(jobDocumentsTable.docType, [...CUSTOMER_DOCUMENT_TYPES])))
         .orderBy(desc(jobDocumentsTable.uploadedAt));
       res.json({ documents });
     } catch (error) {
@@ -145,7 +144,7 @@ router.get(
         res.status(404).json({ message: "Job not found" });
         return;
       }
-      const visibleTypes = isClientUser(req.user!) ? [...CUSTOMER_DOCUMENT_TYPES] : [...JOB_DOCUMENT_TYPES];
+      const visibleTypes = isAdmin(req.user!) ? [...JOB_DOCUMENT_TYPES] : [...CUSTOMER_DOCUMENT_TYPES];
       const documents = await db
         .select({
           id: jobDocumentsTable.id,
@@ -158,10 +157,11 @@ router.get(
         .from(jobDocumentsTable)
         .where(and(eq(jobDocumentsTable.jobId, job.id), inArray(jobDocumentsTable.docType, visibleTypes)));
       res.json({
-        documents,
+        documents: isAdmin(req.user!) || job.status === "completed" ? documents : [],
         requiredTypes: visibleTypes,
         outstandingTypes: visibleTypes.filter((t) => !documents.some((d) => d.docType === t)),
-        canUpload: !isClientUser(req.user!) && canUploadDocuments(job),
+        canUpload: !isClientUser(req.user!) && (isAdmin(req.user!) || canUploadDocuments(job)),
+        releasePending: !isAdmin(req.user!) && job.status !== "completed",
       });
     } catch (error) {
       console.error("List job documents error:", error);
@@ -193,12 +193,15 @@ router.post(
         res.status(400).json({ message: parsed.error.issues[0]?.message || "Invalid upload request" });
         return;
       }
+      if (!(CUSTOMER_DOCUMENT_TYPES as readonly string[]).includes(parsed.data.docType)) {
+        res.status(403).json({ message: "Only signed collection sheets and consignment notes may be uploaded here" }); return;
+      }
       const job = await loadJobForCompany(req, parseInt(String(req.params.id), 10));
       if (!job) {
         res.status(404).json({ message: "Collection not found" });
         return;
       }
-      if (!canUploadDocuments(job)) {
+      if (!isAdmin(req.user!) && !canUploadDocuments(job)) {
         res.status(400).json({ message: "Documents can be uploaded once the collection has been scheduled and carried out" });
         return;
       }
@@ -246,11 +249,14 @@ router.post(
         res.status(404).json({ message: "Collection not found" });
         return;
       }
-      if (!canUploadDocuments(job)) {
+      if (!isAdmin(req.user!) && !canUploadDocuments(job)) {
         res.status(400).json({ message: "Documents can be uploaded once the collection has been scheduled and carried out" });
         return;
       }
       const { docType, name, size, contentType, objectPath, uploadToken } = parsed.data;
+      if (!(CUSTOMER_DOCUMENT_TYPES as readonly string[]).includes(docType)) {
+        res.status(403).json({ message: "This document type is not permitted" }); return;
+      }
 
       // The intent must match the caller and everything they now claim.
       const intent = verifyUploadIntent(uploadToken);
@@ -284,7 +290,7 @@ router.post(
         throw err;
       }
       if (!storedSize || storedSize > MAX_UPLOAD_BYTES) {
-        res.status(400).json({ message: "The uploaded file is empty or exceeds the 25 MB limit." });
+        res.status(400).json({ message: "The uploaded file is empty or exceeds the 20 MB limit." });
         return;
       }
       if (storedContentType && !ALLOWED_CONTENT_TYPES.has(storedContentType)) {
@@ -303,6 +309,9 @@ router.post(
         const existingTypes = existingDocuments.map((item) => item.docType);
         const wasComplete = JOB_DOCUMENT_TYPES.every((type) => existingTypes.includes(type));
 
+        const previous = await tx.select().from(jobDocumentsTable).where(and(eq(jobDocumentsTable.jobId, job.id), eq(jobDocumentsTable.docType, docType)));
+        await tx.insert(accessAuditTable).values({ actorId: req.user!.id, jobId: job.id, action: "document.upload",
+          details: { docType, objectPath, name, previous } });
         const [savedDocument] = await tx
           .insert(jobDocumentsTable)
           .values({
@@ -380,7 +389,7 @@ async function serveDocument(
   disposition: "inline" | "attachment"
 ) {
   const docType = String(req.params.docType);
-  if (isClientUser(req.user!) && !(CUSTOMER_DOCUMENT_TYPES as readonly string[]).includes(docType)) {
+  if (!isAdmin(req.user!) && !(CUSTOMER_DOCUMENT_TYPES as readonly string[]).includes(docType)) {
     res.status(404).json({ message: "Document not found" });
     return;
   }
@@ -392,6 +401,9 @@ async function serveDocument(
   if (!job) {
     res.status(404).json({ message: "Job not found" });
     return;
+  }
+  if (!isAdmin(req.user!) && job.status !== "completed") {
+    res.status(403).json({ message: "Signed documents are released when Itinium marks the job Completed" }); return;
   }
   const [doc] = await db
     .select()

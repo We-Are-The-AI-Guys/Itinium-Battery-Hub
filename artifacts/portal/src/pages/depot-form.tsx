@@ -1,3 +1,4 @@
+import { isAdmin as isAdminRole, isCustomer as isCustomerRole } from "@/lib/roles";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Link, useSearch, useLocation } from "wouter";
 import {
@@ -396,7 +397,8 @@ export default function DepotFormPage() {
   const searchStr = useSearch();
   const [, navigate] = useLocation();
   const [user, setUser] = useState<User | null>(null);
-  const showReviewFeedback = user?.role === "accounts" || user?.role === "head_office_admin";
+  const showReviewFeedback = isAdminRole(user);
+  const [provisionalAck, setProvisionalAck] = useState(false);
   const [collectionPoint, setCollectionPoint] = useState("");
   const [jobNotes, setJobNotes] = useState("");
   const [batteries, setBatteries] = useState<BatteryRow[]>([createEmptyBattery()]);
@@ -451,7 +453,7 @@ export default function DepotFormPage() {
       .then((data) => {
         if (data?.user) {
           setUser(data.user);
-          if (data.user.clientId && ["team_leader", "depot_user"].includes(data.user.role)) {
+          if (data.user.clientId && isCustomerRole(data.user)) {
             fetch(`/api/clients/${data.user.clientId}/locations`, { credentials: "include" })
               .then((r) => (r.ok ? r.json() : null))
               .then((d) => {
@@ -1295,15 +1297,15 @@ export default function DepotFormPage() {
   }
 
   async function onSubmit() {
-    if (user && ["team_leader", "depot_user"].includes(user.role) &&
+    if (user && isCustomerRole(user) &&
       !clientLocations.some(location => String(location.id) === selectedLocationId)) {
       toast({ title: "Select a location", description: "Choose a location belonging to your client before submitting.", variant: "destructive" });
       return;
     }
-    if (!showReviewFeedback && tokenWeightRows.length > 0) {
+    if (!showReviewFeedback && tokenWeightRows.length > 0 && !provisionalAck) {
       toast({
-        title: "Battery weights need confirmation",
-        description: "We cannot verify the total load yet. Complete the battery details or save this draft and contact Itinium for assistance before submitting.",
+        title: "Confirm provisional submission",
+        description: "Some battery weights are unknown. Tick the provisional weight confirmation to submit for Itinium Admin verification, or complete the battery details.",
         variant: "destructive",
       });
       return;
@@ -1650,7 +1652,7 @@ export default function DepotFormPage() {
           <div className="flex justify-between items-end mb-2">
             <div>
               <p className="text-xs sm:text-sm font-semibold text-slate-600 uppercase tracking-wider mb-1">
-                Current Load
+                Current Total Load
               </p>
               <h3 className={`text-lg sm:text-xl font-bold ${isRed ? "text-red-700" : isAmber ? "text-amber-700" : "text-[#0f2744]"}`}>
                 {currentLoad.toFixed(3)}t{" "}
@@ -1702,8 +1704,14 @@ export default function DepotFormPage() {
               Weight is not confirmed for {tokenWeightRows.length} battery row{tokenWeightRows.length > 1 ? "s" : ""}.
               A provisional 500kg allowance per unresolved row, plus the loading factor, is included in the total;
               it is not a verified weight. Complete the battery details or save your draft and contact Itinium
-              for assistance. {showReviewFeedback ? "These rows require Itinium review." : "You cannot submit until these weights are confirmed."}
+              for assistance. {showReviewFeedback ? "These rows require Itinium review." : "You may submit provisionally; Itinium Admin must verify the weight before the collection is confirmed."}
             </p>
+          )}
+          {tokenWeightRows.length > 0 && !showReviewFeedback && (
+            <label className="flex items-start gap-2 text-xs font-medium text-amber-900 rounded-md border border-amber-300 bg-amber-50 p-2.5 mb-2">
+              <input type="checkbox" className="mt-0.5" checked={provisionalAck} onChange={(e) => setProvisionalAck(e.target.checked)} data-testid="checkbox-provisional-ack" />
+              I understand this is a provisional submission with unknown weights. The total load is an estimate and Itinium Admin must verify it before confirmation.
+            </label>
           )}
           <div className="relative h-3 w-full bg-slate-200 rounded-full overflow-hidden mt-3">
             <div
@@ -1755,7 +1763,7 @@ export default function DepotFormPage() {
             </span>
           </div>
 
-          {user && ["team_leader", "depot_user"].includes(user.role) && (
+          {user && isCustomerRole(user) && (
             <div className="space-y-1.5 max-w-xl">
               <label className="text-sm font-medium text-[#1e293b] flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-slate-400" />
@@ -2721,7 +2729,7 @@ export default function DepotFormPage() {
             type="button"
             className="flex-1 sm:w-auto h-12 bg-[#0f2744] hover:bg-[#132744] text-white font-medium px-8 shadow-md"
             onClick={onSubmit}
-            disabled={submitting || csvReading || !!pendingCsvImport || currentLoad > maxCapacity || (!showReviewFeedback && tokenWeightRows.length > 0)}
+            disabled={submitting || csvReading || !!pendingCsvImport || currentLoad > maxCapacity || (!showReviewFeedback && tokenWeightRows.length > 0 && !provisionalAck)}
             data-testid="button-submit-collection"
           >
             <Send className="w-4 h-4 mr-2" />

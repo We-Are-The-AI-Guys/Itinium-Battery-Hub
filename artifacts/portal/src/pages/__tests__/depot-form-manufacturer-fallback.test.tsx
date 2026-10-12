@@ -376,13 +376,16 @@ describe("rows that contribute no weight", () => {
       expect(screen.getByDisplayValue("SER-ZW1")).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId("text-zero-weight-warning")).toHaveTextContent("cannot submit");
+    expect(screen.getByTestId("text-zero-weight-warning")).toHaveTextContent("Admin must verify");
     expect(screen.queryByText("Needs Review")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("button-submit-collection"));
     expect(screen.getByTestId("button-submit-collection")).toBeDisabled();
     expect(screen.getByTestId("button-save-draft")).not.toBeDisabled();
     expect(jobPostBodies).toHaveLength(0);
+    // V16: explicit acknowledgement unlocks a provisional submission for Admin verification.
+    fireEvent.click(screen.getByTestId("checkbox-provisional-ack"));
+    expect(screen.getByTestId("button-submit-collection")).not.toBeDisabled();
   });
 
   it("does not warn for a fully empty template row", async () => {
@@ -445,7 +448,7 @@ describe("CSV review feedback by role", () => {
     },
   );
 
-  it.each(["accounts", "head_office_admin"])(
+  it.each(["head_office_admin"])(
     "keeps the import review window and row warnings available to %s",
     async (role) => {
       userRole = role;

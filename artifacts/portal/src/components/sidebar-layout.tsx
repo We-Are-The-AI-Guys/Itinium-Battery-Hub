@@ -22,7 +22,10 @@ import {
   X as XIcon,
   ClipboardList,
   BookOpen,
+  Inbox,
+  Truck,
 } from "lucide-react";
+import { hasRole, isAdmin, isCollector, isCustomer, isUnassigned, isWarehouseOnly, canSeeSchedule, roleSummary } from "@/lib/roles";
 import { NotificationBell } from "@/components/notification-panel";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
 import { Input } from "@/components/ui/input";
@@ -40,6 +43,7 @@ interface User {
   email: string;
   fullName: string;
   role: string;
+  roles?: string[];
   depot: string | null;
   clientId: number | null;
   locationId: number | null;
@@ -56,49 +60,47 @@ interface NavItem {
 
 function getNavItems(user: User | null): NavItem[] {
   if (!user) return [];
-  const role = user.role;
-
   const items: NavItem[] = [];
-
-  if (role === "head_office_admin" || role === "accounts" || role === "team_leader") {
+  if (isAdmin(user)) {
     items.push({ icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" });
-  } else {
-    items.push({ icon: LayoutDashboard, label: "Dashboard", path: "/" });
-  }
-
-  if (role === "head_office_admin" || role === "accounts" || role === "team_leader") {
     items.push({ icon: Briefcase, label: "Job Management", path: "/jobs" });
-  }
-
-  items.push({ icon: Package, label: "Stillages", path: "/stillages" });
-
-  if (role === "head_office_admin" || role === "accounts") {
+    items.push({ icon: Inbox, label: "Action Queue", path: "/action-queue" });
+    items.push({ icon: Package, label: "Stillages", path: "/stillages" });
     items.push({ icon: BarChart3, label: "KPI Reporting", path: "/kpi" });
     items.push({ icon: LineChart, label: "LME Pricing", path: "/lme-pricing" });
-  }
-
-  if (role === "head_office_admin") {
     items.push({ icon: Building2, label: "Clients", path: "/clients" });
     items.push({ icon: CalendarDays, label: "Schedule", path: "/schedule" });
     items.push({ icon: ClipboardList, label: "AI Correction Audit", path: "/correction-audit" });
-  }
-
-  if (role === "team_leader") {
-    items.push({ icon: MapPin, label: "Locations", path: "/locations" });
-  }
-
-  if (role === "head_office_admin") {
     items.push({ icon: Users, label: "User Access", path: "/users" });
+    return items;
   }
-
+  if (isCollector(user)) {
+    items.push({ icon: Truck, label: "Collections", path: "/collections" });
+    return items;
+  }
+  if (!isCustomer(user) || isUnassigned(user)) return items;
+  if (hasRole(user, "accounts")) items.push({ icon: BarChart3, label: "KPI Reporting", path: "/kpi" });
+  if (isWarehouseOnly(user)) {
+    items.push({ icon: LayoutDashboard, label: "Operational Overview", path: "/operational-overview" });
+  } else {
+    items.push({ icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" });
+  }
+  items.push({ icon: Briefcase, label: "Jobs", path: "/jobs" });
+  if (canSeeSchedule(user)) items.push({ icon: CalendarDays, label: "Schedule", path: "/schedule" });
+  items.push({ icon: Package, label: "Stillages", path: "/stillages" });
   return items;
 }
 
-const linkNavItems: NavItem[] = [
-  { icon: Plus, label: "New Collection", path: "/collection/new" },
-  { icon: BookOpen, label: "User Guide", path: "/help" },
-  { icon: Settings, label: "Settings", path: "/settings" },
-];
+function getLinkNavItems(user: User | null): NavItem[] {
+  const out: NavItem[] = [];
+  if (user && (isAdmin(user) || (isCustomer(user) && !isUnassigned(user)))) {
+    out.push({ icon: Plus, label: "New Collection", path: "/collection/new" });
+  }
+  out.push({ icon: BookOpen, label: "User Guide", path: "/help" });
+  out.push({ icon: HelpCircle, label: "Help & Support", path: "/support" });
+  out.push({ icon: Settings, label: "Settings", path: "/settings" });
+  return out;
+}
 
 function getInitials(name: string) {
   return name
@@ -529,7 +531,7 @@ export function SidebarLayout({
             />
           </div>
           <p className="text-xs text-slate-400 font-medium">
-            {user?.clientName || "Admin Portal"}
+            {user?.clientName || (isAdmin(user) ? "Admin Portal" : "Battery Portal")}
           </p>
         </div>
 
@@ -547,7 +549,7 @@ export function SidebarLayout({
 
           <div className="my-6 border-t border-white/10 mx-4"></div>
 
-          {linkNavItems.map((item) => (
+          {getLinkNavItems(user).map((item) => (
             <Link
               key={item.path}
               href={item.path}
@@ -558,13 +560,6 @@ export function SidebarLayout({
             </Link>
           ))}
 
-          <button
-            onClick={() => setSupportOpen(true)}
-            className={navItemStyle(false)}
-          >
-            <HelpCircle className="w-5 h-5" />
-            Help & Support
-          </button>
         </nav>
 
         <div className="p-4 border-t border-white/10">
@@ -577,7 +572,7 @@ export function SidebarLayout({
                 {user?.fullName || "Loading..."}
               </p>
               <p className="text-xs text-slate-400 truncate">
-                {user ? getRoleLabel(user.role) : "..."}
+                {user ? roleSummary(user) : "..."}
               </p>
             </div>
             <button

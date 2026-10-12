@@ -1,4 +1,5 @@
 import app from "./app";
+import { migrateAccessWorkflows } from "./lib/access-migration";
 import { db } from "@workspace/db";
 import { usersTable, systemSettingsTable, batteryWeightReferenceTable, cellModelsTable, collectionPointsTable } from "@workspace/db/schema";
 import { count, sql } from "drizzle-orm";
@@ -6,6 +7,7 @@ import bcrypt from "bcrypt";
 import { CELL_MODEL_DATA } from "@workspace/db/data/cell-models";
 
 async function bootstrap() {
+  await migrateAccessWorkflows();
   // Security migration must succeed before the server starts. The marker
   // prevents a later restart from re-granting a deliberately revoked site.
   await db.transaction(async tx => {

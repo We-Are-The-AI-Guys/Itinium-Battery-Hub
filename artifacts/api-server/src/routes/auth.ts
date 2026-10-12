@@ -1,3 +1,4 @@
+import { rolesOf } from "../lib/access-policy";
 import { Router, type IRouter } from "express";
 import { userLocationIds } from "../lib/user-memberships";
 import { db } from "@workspace/db";
@@ -18,7 +19,7 @@ const loginRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res, _next, options) => {
-    const rl = req.rateLimit;
+    const rl = (req as typeof req & { rateLimit?: { resetTime?: Date } }).rateLimit;
     const resetTime = rl?.resetTime instanceof Date ? rl.resetTime.getTime() : Date.now() + options.windowMs;
     const remainingMs = Math.max(0, resetTime - Date.now());
     const retryAfterMins = Math.max(1, Math.ceil(remainingMs / 1000 / 60));
@@ -98,6 +99,7 @@ router.post("/auth/login", loginRateLimiter, async (req, res) => {
         email: user.email,
         fullName: user.fullName,
         role: user.role,
+        roles: rolesOf(user),
         depot: user.depot,
         clientId: user.clientId,
         permittedLocationIds: await userLocationIds(user.id, user.clientId),
@@ -163,6 +165,7 @@ router.get("/auth/me", async (req, res) => {
         email: user.email,
         fullName: user.fullName,
         role: user.role,
+        roles: rolesOf(user),
         depot: user.depot,
         clientId: user.clientId,
         permittedLocationIds: await userLocationIds(user.id, user.clientId),

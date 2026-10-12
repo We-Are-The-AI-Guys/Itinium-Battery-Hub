@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { collectionPointsTable, locationsTable } from "@workspace/db/schema";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
+import { isCustomer } from "../lib/access-policy";
 
 const router: IRouter = Router();
 
@@ -11,7 +12,7 @@ router.get(
   requireAuth,
   async (_req: AuthenticatedRequest, res) => {
     try {
-      if (["depot_user", "team_leader"].includes(_req.user!.role)) {
+      if (isCustomer(_req.user!)) {
         const points = await db.select({ id: locationsTable.id, name: locationsTable.name, address: locationsTable.address }).from(locationsTable)
           .where(and(eq(locationsTable.clientId, _req.user!.clientId ?? -1),
             _req.user!.permittedLocationIds?.length ? inArray(locationsTable.id, _req.user!.permittedLocationIds) : sql`false`));

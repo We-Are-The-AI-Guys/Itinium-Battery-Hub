@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
+import { UserAccessDialog } from "@/components/user-access-dialog";
+import { rolesOf, isUnassigned, ROLE_LABELS } from "@/lib/roles";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +30,8 @@ import {
 
 interface UserData {
   permittedLocationIds: number[];
+  roles?: string[];
+  collectionCompanyId?: number | null;
   id: number;
   email: string;
   fullName: string;
@@ -109,6 +113,7 @@ export default function UserManagementPage() {
   const [activeFilter, setActiveFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [accessDialog, setAccessDialog] = useState<{ user: UserData | null } | null>(null);
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -598,7 +603,7 @@ export default function UserManagementPage() {
               </Button>
               <Button
                 className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white border-none shadow-sm"
-                onClick={() => { setShowModal(true); setFormError(""); }}
+                onClick={() => setAccessDialog({ user: null })}
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add New User
@@ -641,8 +646,11 @@ export default function UserManagementPage() {
                       </td>
                       <td className="px-6 py-4">
                         <Badge variant="outline" className={`font-medium shadow-none ${roleStyle.badge}`}>
-                          {getRoleLabel(user.role)}
+                          {rolesOf(user).length > 0 ? rolesOf(user).map((r) => ROLE_LABELS[r] || getRoleLabel(r)).join(" · ") : "No role"}
                         </Badge>
+                        {isUnassigned(user) && (
+                          <span className="ml-2 inline-block text-[11px] font-medium px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-800" title="No client or recognised role assigned. This account cannot see data until an admin assigns access.">Restricted</span>
+                        )}
                       </td>
                       {showClientColumn && (
                         <td className="px-6 py-4 text-slate-600">{user.clientName || "Head Office"}</td>
@@ -670,7 +678,7 @@ export default function UserManagementPage() {
                               variant="outline"
                               size="sm"
                               className="h-7 px-2.5 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-[#0f2744] transition-colors"
-                              onClick={() => openEditModal(user)}
+                              onClick={() => setAccessDialog({ user })}
                             >
                               <Edit className="w-3.5 h-3.5 mr-1" />
                               Edit
@@ -1150,6 +1158,20 @@ export default function UserManagementPage() {
             </div>
           </div>
         </div>
+      )}
+      {accessDialog && (
+        <UserAccessDialog
+          user={accessDialog.user}
+          clients={clients}
+          companies={collectionCompanies}
+          onClose={() => setAccessDialog(null)}
+          onSaved={({ tempPassword }) => {
+            setAccessDialog(null);
+            fetchUsers();
+            fetchStats();
+            if (tempPassword) { setCreatedTempPassword(tempPassword); setShowModal(true); }
+          }}
+        />
       )}
     </SidebarLayout>
   );
