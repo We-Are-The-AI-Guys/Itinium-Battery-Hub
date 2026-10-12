@@ -48,6 +48,12 @@ export function customerBattery(row: Record<string, any>) {
 export function policyAllows(user: Principal, method: string, path: string): boolean {
   if (isAdmin(user)) return true;
   const get = method === "GET";
+  // Collectors need their own fleet to propose schedules. Route handlers enforce
+  // company ownership; keep company administration and other fleet methods closed.
+  if (hasRole(user, "collection_company") && user.collectionCompanyId &&
+    ((get && path === "/collection-companies/fleet") ||
+     (method === "POST" && ["/collection-companies/vehicles", "/collection-companies/drivers"].includes(path)) ||
+     (method === "PATCH" && ["/collection-companies/vehicles/:id", "/collection-companies/drivers/:id"].includes(path)))) return true;
   if (/^\/(users|settings|v16\/settings|action-requests|correction-audit|collection-companies|lme)(\/|$)/.test(path)) return false;
   if (/^\/clients/.test(path) && !(get && path === "/clients/:clientId/locations")) return false;
   if (path === "/collection/schedule/confirm" || /\/confirm-schedule$/.test(path)) return false;
