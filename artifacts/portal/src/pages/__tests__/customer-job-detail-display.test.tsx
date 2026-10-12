@@ -6,7 +6,6 @@ vi.mock("wouter", () => ({
   Link: ({ children }: any) => <a>{children}</a>,
 }));
 vi.mock("@/components/sidebar-layout", () => ({ SidebarLayout: ({ children }: any) => <div>{children}</div> }));
-vi.mock("@/components/customer-job-export", () => ({ CustomerJobExport: () => null }));
 vi.mock("@/components/job-requests-panel", () => ({ JobRequestsPanel: () => null }));
 beforeEach(() => vi.stubGlobal("fetch", vi.fn(async () => ({
   ok: true, json: async () => ({
@@ -24,5 +23,6 @@ it("shows one voltage suffix and the supplied overview pallet count", async () =
   expect(screen.getByText("48V")).toBeInTheDocument();
   expect(screen.getByText("80V")).toBeInTheDocument();
   expect(screen.queryByText(/VV/)).not.toBeInTheDocument();
+  expect(screen.queryByText("Download Excel")).not.toBeInTheDocument();
   expect(screen.getByText("Pallets").parentElement).toHaveTextContent("Pallets2");
 });

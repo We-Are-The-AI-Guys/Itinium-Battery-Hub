@@ -2,14 +2,16 @@ import { Router } from "express";
 import ExcelJS from "exceljs";
 import { db } from "@workspace/db";
 import { jobsTable } from "@workspace/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql, asc } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { jobScope } from "../lib/depot-access";
+import { isAdmin } from "../lib/access-policy";
+import { kpiDateRange } from "../lib/kpi-policy";
 
 const router = Router();
-export function customerJobWorkbook(job: typeof jobsTable.$inferSelect) {
+export function customerJobWorkbook(jobs: (typeof jobsTable.$inferSelect)[]) {
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet("Customer job");
+  const ws = wb.addWorksheet("KPI jobs");
   ws.columns = [
     { header: "Job reference", key: "reference", width: 22 },
     { header: "Tonnage", key: "tonnage", width: 16 },
@@ -21,7 +23,7 @@ export function customerJobWorkbook(job: typeof jobsTable.$inferSelect) {
     { header: "Customer invoice Number", key: "invoiceNo", width: 28 },
   ];
   const number = (v: string | null) => v == null || v === "" ? null : Number(v);
-  ws.addRow({ reference: job.reference, tonnage: number(job.tonnage),
+  for (const job of jobs) ws.addRow({ reference: job.reference, tonnage: number(job.tonnage),
     traction: number(job.customerTractionPercent), blocs: number(job.customerBlocsTonnage),
     transport: number(job.customerTransportCost), adHoc: number(job.customerAdHocCosts),
     invoice: number(job.customerInvoiceValue), invoiceNo: job.customerInvoiceNo ?? "" });
@@ -33,17 +35,24 @@ export function customerJobWorkbook(job: typeof jobsTable.$inferSelect) {
   return wb;
 }
 
-router.get("/jobs/:id/customer-export.xlsx", requireAuth,
+router.get("/kpi/export.xlsx", requireAuth,
   requireRole("head_office_admin", "lead_client", "accounts"),
   async (req: AuthenticatedRequest, res) => {
-    const id = Number(req.params.id);
-    if (!Number.isSafeInteger(id) || id <= 0) { res.status(404).json({ message: "Job not found" }); return; }
+    if (!isAdmin(req.user!) && !req.user!.clientId) { res.status(403).json({ message: "Client assignment required" }); return; }
+    const { from, to, clientId } = req.query as Record<string, string>;
+    let dates;
+    try { dates = kpiDateRange(from, to); }
+    catch (error) { res.status(400).json({ message: error instanceof Error ? error.message : "Invalid date range" }); return; }
     try {
-      const [job] = await db.select().from(jobsTable).where(and(eq(jobsTable.id, id), jobScope(req.user!)));
-      if (!job) { res.status(404).json({ message: "Job not found" }); return; }
-      const buffer = await customerJobWorkbook(job).xlsx.writeBuffer();
+      const { fromDate, toDate } = dates;
+      const jobs = await db.select().from(jobsTable).where(and(
+        jobScope(req.user!),
+        sql`${jobsTable.submittedAt} >= ${fromDate} AND ${jobsTable.submittedAt} < ${toDate}`,
+        isAdmin(req.user!) && clientId && !isNaN(parseInt(clientId)) ? eq(jobsTable.clientId, parseInt(clientId)) : undefined,
+      )).orderBy(asc(jobsTable.submittedAt), asc(jobsTable.id));
+      const buffer = await customerJobWorkbook(jobs).xlsx.writeBuffer();
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename="job-${id}-customer.xlsx"`);
+      res.setHeader("Content-Disposition", `attachment; filename="kpi-jobs-${fromDate.toISOString().slice(0, 10)}.xlsx"`);
       res.send(Buffer.from(buffer));
     } catch (error) {
       console.error("Customer job export failed:", error);

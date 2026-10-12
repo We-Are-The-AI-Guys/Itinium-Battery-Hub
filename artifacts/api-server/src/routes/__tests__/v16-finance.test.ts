@@ -76,7 +76,8 @@ describe("V16 dashboard finance", () => {
     state.rows = [[{ id: 12, reference: "JOB-12", tonnage: "3.125", customerTractionPercent: "65",
       customerBlocsTonnage: "0.5", customerTransportCost: "50", customerAdHocCosts: "10",
       customerInvoiceValue: "750", customerInvoiceNo: "000123", netProfit: "secret", wasteInvoiceValue: "secret" }]];
-    const res = await fetch(`${origin}/jobs/12/customer-export.xlsx`);
+    state.rows[0].push({ id: 13, reference: "JOB-13", tonnage: "1", customerInvoiceNo: "000124" });
+    const res = await fetch(`${origin}/kpi/export.xlsx?from=2026-10-06&to=2026-10-12&clientId=999`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("spreadsheetml");
     const wb = new ExcelJS.Workbook();
@@ -85,21 +86,34 @@ describe("V16 dashboard finance", () => {
     expect(sheet.getRow(1).values).toEqual([undefined, "Job reference", "Tonnage", "% LME Traction (Customer)",
       "Pb Tonnage Blocs", "Transport Costs", "Ad hoc costs", "Net invoice value", "Customer invoice Number"]);
     expect(sheet.getRow(2).values).toEqual([undefined, "JOB-12", 3.125, 65, 0.5, 50, 10, 750, "000123"]);
+    expect(sheet.rowCount).toBe(3);
+    expect(sheet.getCell("A3").value).toBe("JOB-13");
     const query = new PgDialect().sqlToQuery(state.scopes[0]);
     expect(query.sql).toContain('"jobs"."client_id"');
-    expect(query.params).toEqual([12, 1]);
+    expect(query.params).toEqual([1, new Date("2026-10-06T00:00:00Z"), new Date("2026-10-13T00:00:00Z")]);
   });
   it.each(["team_leader", "depot_user", "collection_company"])("%s cannot export financial data", async role => {
     state.role = role; state.roles = [role];
-    expect((await fetch(`${origin}/jobs/12/customer-export.xlsx`)).status).toBe(403);
+    expect((await fetch(`${origin}/kpi/export.xlsx`)).status).toBe(403);
     expect(state.scopes).toHaveLength(0);
   });
-  it("returns no workbook when the job is outside the permitted scope", async () => {
+  it("returns a header-only workbook when the filtered range contains no jobs", async () => {
+    const res = await fetch(`${origin}/kpi/export.xlsx?from=2026-10-06&to=2026-10-12`);
+    expect(res.status).toBe(200);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(await res.arrayBuffer()) as any);
+    expect(wb.worksheets[0].rowCount).toBe(1);
+  });
+  it("rejects reversed export dates", async () => {
+    expect((await fetch(`${origin}/kpi/export.xlsx?from=2026-10-12&to=2026-10-06`)).status).toBe(400);
+    expect(state.scopes).toHaveLength(0);
+  });
+  it("no longer exposes a per-job Excel endpoint", async () => {
     expect((await fetch(`${origin}/jobs/12/customer-export.xlsx`)).status).toBe(404);
   });
   it("denies export for Accounts without a client", async () => {
     state.clientId = null;
-    expect((await fetch(`${origin}/jobs/12/customer-export.xlsx`)).status).toBe(403);
+    expect((await fetch(`${origin}/kpi/export.xlsx`)).status).toBe(403);
   });
   it.each(["accounts", "lead_client"])("%s gets only invoice total and client-scoped operations", async role => {
     state.role = role; state.roles = [role];

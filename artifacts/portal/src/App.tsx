@@ -123,7 +123,7 @@ function AppRouter() {
         </Gate>
       </Route>
       <Route path="/kpi">
-        <Gate allow={u => isAdmin(u) || hasRole(u, "accounts")}>
+        <Gate allow={u => isAdmin(u) || (assignedCustomer(u) && hasRole(u, "accounts", "lead_client"))}>
           <KpiPage />
         </Gate>
       </Route>

@@ -28,6 +28,7 @@ import { SidebarLayout } from "@/components/sidebar-layout";
 import { useAuth } from "@/contexts/auth-context";
 import { isAdmin as isItinium } from "@/lib/roles";
 import { calendarDate } from "@/lib/calendar-date";
+import { KpiExport } from "@/components/kpi-export";
 const API_BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
 interface MonthData {
@@ -321,6 +322,8 @@ export default function KpiPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <KpiExport {...(range === "Custom" ? { from: customFrom, to: customTo } : computeDateRange(range))}
+              clientId={clientId} disabled={invalidRange || loading || error} />
             <Button
               variant="outline"
               size="sm"

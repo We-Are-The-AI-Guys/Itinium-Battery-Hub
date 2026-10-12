@@ -79,7 +79,7 @@ function getNavItems(user: User | null): NavItem[] {
     return items;
   }
   if (!isCustomer(user) || isUnassigned(user)) return items;
-  if (hasRole(user, "accounts")) items.push({ icon: BarChart3, label: "KPI Reporting", path: "/kpi" });
+  if (hasRole(user, "accounts", "lead_client")) items.push({ icon: BarChart3, label: "KPI Reporting", path: "/kpi" });
   if (isWarehouseOnly(user)) {
     items.push({ icon: LayoutDashboard, label: "Operational Overview", path: "/operational-overview" });
   } else {

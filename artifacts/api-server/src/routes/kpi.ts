@@ -12,7 +12,7 @@ const router = Router();
 router.get(
   "/kpi/summary",
   requireAuth,
-  requireRole("accounts", "head_office_admin"),
+  requireRole("accounts", "lead_client", "head_office_admin"),
   async (req: AuthenticatedRequest, res) => {
     try {
       const { from, to, clientId: rawClientId } = req.query as Record<string, string>;

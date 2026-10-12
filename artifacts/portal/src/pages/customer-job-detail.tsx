@@ -4,7 +4,6 @@ import { ArrowLeft, MapPin, CalendarDays, Package, Scale, FileText, MessageSquar
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { JobDocumentsPanel } from "@/components/job-documents";
 import { JobRequestsPanel } from "@/components/job-requests-panel";
-import { CustomerJobExport } from "@/components/customer-job-export";
 import { StatusPill, SkeletonRows, ErrorState, Panel } from "@/components/v16-ui";
 import { api, fmtDate, fmtTonnes, type SafeJob } from "@/lib/v16-api";
 
@@ -80,7 +79,6 @@ export default function CustomerJobDetailPage() {
                   <h3 className="text-2xl font-bold text-[#0f2744]">{job.reference}</h3>
                 </div>
                 <StatusPill status={job.status} />
-                <CustomerJobExport jobId={job.id} />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <Fact icon={<MapPin className="w-4 h-4 text-[#0ea5e9]" />} label="Location" value={job.depot || "—"} />

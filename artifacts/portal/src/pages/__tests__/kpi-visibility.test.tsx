@@ -45,7 +45,13 @@ describe("KPI controls and visibility", () => {
     fireEvent.change(screen.getByLabelText("Start date"), { target: { value: "2026-10-06" } });
     fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2026-10-12" } });
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining("from=2026-10-06&to=2026-10-12"), expect.anything()));
+    await waitFor(() => expect(screen.getByText("Download Excel")).toBeEnabled());
+    fireEvent.click(screen.getByText("Download Excel"));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining("/kpi/export.xlsx?from=2026-10-06&to=2026-10-12"), expect.anything()));
+    // The response mock has no blob: consume the expected download failure before testing range validation.
+    await screen.findByRole("alert");
     fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2026-10-05" } });
-    expect(screen.getByRole("alert")).toHaveTextContent("end on or after the start");
+    expect(screen.getByText("Choose both dates, with the end on or after the start.")).toBeInTheDocument();
+    expect(screen.getByText("Download Excel")).toBeDisabled();
   });
 });

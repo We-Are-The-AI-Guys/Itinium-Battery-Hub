@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { CustomerJobExport } from "@/components/customer-job-export";
+import { JobDocumentDownloads } from "@/components/job-document-downloads";
 import { Link, useLocation } from "wouter";
 import { Plus, Search, FileCheck2, ChevronLeft, ChevronRight } from "lucide-react";
 import { SidebarLayout } from "@/components/sidebar-layout";
@@ -113,10 +113,9 @@ export default function CustomerJobsPage() {
                     <td className="px-6 py-3 text-slate-600 tabular-nums">{j.palletCount ?? "—"}</td>
                     <td className="px-6 py-3"><StatusPill status={j.status} /></td>
                     <td className="px-6 py-3 text-slate-500">
-                      <CustomerJobExport jobId={j.id} />
-                      {["invoice", "completed"].includes(j.status) && j.signedDocumentTypes && j.signedDocumentTypes.length > 0 ? (
-                        <span className="inline-flex items-center gap-1 text-green-700"><FileCheck2 className="w-4 h-4" /> {j.signedDocumentTypes.length}</span>
-                      ) : "—"}
+                      {["invoice", "completed"].includes(j.status) ? (
+                        <JobDocumentDownloads jobId={j.id} reference={j.reference} available={j.signedDocumentTypes ?? []} />
+                      ) : <span className="text-xs">Available from Invoice</span>}
                     </td>
                   </tr>
                 ))}

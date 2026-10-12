@@ -20,11 +20,11 @@ KPI exception: non-Itinium users must not receive Gross Profit, Gross Margin, Ov
 
 **How to apply:** Retain these metrics for Admin only, including in printable views and chart tooltips.
 
-Accounts and Lead Client may download a customer job Excel file containing tonnage, customer traction LME percentage, customer Pb blocs tonnage, customer transport/ad hoc costs, net customer invoice value and customer invoice number. Review flags stay Itinium-only.
+Accounts and Lead Client may download a date-filtered Excel spreadsheet from KPI Reporting containing one row per job: tonnage, customer traction LME percentage, customer Pb blocs tonnage, customer transport/ad hoc costs, net customer invoice value and customer invoice number. Review flags stay Itinium-only.
 
-**Why:** The user explicitly extended export permissions on 2026-10-12; this is an exception to the earlier invoice-total-only financial rule.
+**Why:** The user explicitly extended export permissions on 2026-10-12, then corrected the placement: this must be a KPI date-range export, NOT a per-job download. This is an exception to the earlier invoice-total-only financial rule.
 
-**How to apply:** Limit the export to the user's client and the requested customer figures. Do not expose collector costs, profit or other internal financial fields.
+**How to apply:** Match the KPI date filter and client scope. Jobs pages offer the signed document downloads instead of Excel. Do not expose collector costs, profit or other internal financial fields.
 
 Warehouse teams also have read-only Schedule access for their assigned sites.
 
