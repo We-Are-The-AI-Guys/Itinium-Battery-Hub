@@ -4,6 +4,8 @@ import { jobsTable } from "@workspace/db/schema";
 import { sql, and, eq } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { jobScope } from "../lib/depot-access";
+import { isAdmin } from "../lib/access-policy";
+import { kpiDateRange, publicKpiRow } from "../lib/kpi-policy";
 
 const router = Router();
 
@@ -14,24 +16,12 @@ router.get(
   async (req: AuthenticatedRequest, res) => {
     try {
       const { from, to, clientId: rawClientId } = req.query as Record<string, string>;
-      const clientId = req.user?.role === "head_office_admin" ? rawClientId : undefined;
-
-      const now = new Date();
-
-      let fromDate: Date;
-      if (from && /^\d{4}-\d{2}$/.test(from)) {
-        fromDate = new Date(from + "-01T00:00:00");
-      } else {
-        fromDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-      }
-
-      let toDate: Date;
-      if (to && /^\d{4}-\d{2}$/.test(to)) {
-        const [yr, mo] = to.split("-").map(Number);
-        toDate = new Date(yr, mo, 1);
-      } else {
-        toDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      }
+      const admin = isAdmin(req.user!);
+      const clientId = admin ? rawClientId : undefined;
+      let dates;
+      try { dates = kpiDateRange(from, to); }
+      catch (error) { res.status(400).json({ message: error instanceof Error ? error.message : "Invalid date range" }); return; }
+      const { fromDate, toDate } = dates;
 
       const clientFilter =
         clientId && !isNaN(parseInt(clientId))
@@ -85,11 +75,11 @@ router.get(
       const monthlyMap = new Map(monthlyRows.map((r) => [r.month, r]));
 
       const allMonths: string[] = [];
-      const cur = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
+      const cur = new Date(Date.UTC(fromDate.getUTCFullYear(), fromDate.getUTCMonth(), 1));
       while (cur < toDate) {
-        const label = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`;
+        const label = `${cur.getUTCFullYear()}-${String(cur.getUTCMonth() + 1).padStart(2, "0")}`;
         allMonths.push(label);
-        cur.setMonth(cur.getMonth() + 1);
+        cur.setUTCMonth(cur.getUTCMonth() + 1);
       }
 
       const months = allMonths.map((m) => {
@@ -130,7 +120,7 @@ router.get(
         statusBreakdown[r.status] = r.count;
       }
 
-      res.json({
+      const result = {
         months,
         totals: {
           jobCount: months.reduce((s, m) => s + m.jobCount, 0),
@@ -147,6 +137,9 @@ router.get(
           overdueValue: Math.round(months.reduce((s, m) => s + m.overdueValue, 0) * 100) / 100,
         },
         statusBreakdown,
+      };
+      res.json(admin ? result : {
+        ...result, months: result.months.map(publicKpiRow), totals: publicKpiRow(result.totals),
       });
     } catch (error) {
       console.error("KPI summary error:", error);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   BarChart,
   Bar,
@@ -25,6 +25,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SidebarLayout } from "@/components/sidebar-layout";
+import { useAuth } from "@/contexts/auth-context";
+import { isAdmin as isItinium } from "@/lib/roles";
+import { calendarDate } from "@/lib/calendar-date";
+const API_BASE = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
 interface MonthData {
   month: string;
@@ -202,20 +206,24 @@ const CustomTooltipOps = ({ active, payload, label }: CustomTooltipProps) => {
 
 export default function KpiPage() {
   const [range, setRange] = useState("6M");
+  const [customFrom, setCustomFrom] = useState(() => calendarDate(new Date(new Date().getFullYear(), 0, 1)));
+  const [customTo, setCustomTo] = useState(() => calendarDate(new Date()));
+  const { user } = useAuth();
+  const isAdmin = isItinium(user);
+  const invalidRange = range === "Custom" && (!customFrom || !customTo || customFrom > customTo);
   const [clientId, setClientId] = useState<string>("");
   const [clients, setClients] = useState<Client[]>([]);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [data, setData] = useState<KpiData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const latestRequest = useRef(0);
 
   useEffect(() => {
-    fetch("/api/auth/me", { credentials: "include" })
+    fetch(`${API_BASE}/api/auth/me`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((u) => {
         if (u?.user?.role === "head_office_admin") {
-          setIsAdmin(true);
-          fetch("/api/clients", { credentials: "include" })
+          fetch(`${API_BASE}/api/clients`, { credentials: "include" })
             .then((r) => (r.ok ? r.json() : null))
             .then((d) => { if (d?.clients) setClients(d.clients); })
             .catch(() => {});
@@ -225,21 +233,24 @@ export default function KpiPage() {
   }, []);
 
   const loadData = useCallback(() => {
+    const requestId = ++latestRequest.current;
+    if (invalidRange) { setData(null); setLoading(false); return; }
     setLoading(true);
     setError(false);
-    const { from, to } = computeDateRange(range);
+    const { from, to } = range === "Custom" ? { from: customFrom, to: customTo } : computeDateRange(range);
     const params = new URLSearchParams({ from, to });
     if (clientId) params.set("clientId", clientId);
 
-    fetch(`/api/kpi/summary?${params}`, { credentials: "include" })
+    fetch(`${API_BASE}/api/kpi/summary?${params}`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
+        if (requestId !== latestRequest.current) return;
         if (d) setData(d);
         else setError(true);
         setLoading(false);
       })
-      .catch(() => { setError(true); setLoading(false); });
-  }, [range, clientId]);
+      .catch(() => { if (requestId === latestRequest.current) { setError(true); setLoading(false); } });
+  }, [range, clientId, customFrom, customTo, invalidRange]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -248,7 +259,7 @@ export default function KpiPage() {
     Jobs: m.jobCount,
     "Tonnage (t)": m.tonnage,
     "Invoice Value": m.invoiceValue,
-    "Gross Profit": m.grossProfit,
+    ...(isAdmin ? { "Gross Profit": m.grossProfit } : {}),
   }));
 
   const totalStatusJobs = Object.values(data?.statusBreakdown ?? {}).reduce((a, b) => a + b, 0);
@@ -275,7 +286,7 @@ export default function KpiPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 print-hide">
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex bg-slate-100 p-1 rounded-lg">
-              {RANGES.map((r) => (
+              {[...RANGES, { label: "Custom" }].map((r) => (
                 <button
                   key={r.label}
                   onClick={() => setRange(r.label)}
@@ -289,6 +300,11 @@ export default function KpiPage() {
                 </button>
               ))}
             </div>
+            {range === "Custom" && <div className="flex flex-wrap items-center gap-2">
+              <label className="text-sm">From <input aria-label="Start date" type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="border rounded px-2 py-1" /></label>
+              <label className="text-sm">To <input aria-label="End date" type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="border rounded px-2 py-1" /></label>
+              {invalidRange && <p role="alert" className="text-sm text-red-600">Choose both dates, with the end on or after the start.</p>}
+            </div>}
 
             {isAdmin && clients.length > 0 && (
               <select
@@ -364,7 +380,7 @@ export default function KpiPage() {
                 color="#10b981"
                 icon={<Receipt className="w-4 h-4" />}
               />
-              <StatCard
+              {isAdmin && <><StatCard
                 label="Gross Profit"
                 value={formatCurrency(data.totals.grossProfit)}
                 sub={data.totals.grossMarginPct > 0 ? `${data.totals.grossMarginPct.toFixed(1)}% margin` : undefined}
@@ -376,14 +392,14 @@ export default function KpiPage() {
                 value={data.totals.avgCblLmePct > 0 ? `${data.totals.avgCblLmePct.toFixed(1)}%` : "—"}
                 color="#f59e0b"
                 icon={<Percent className="w-4 h-4" />}
-              />
+              /></>}
               <StatCard
                 label="Avg Days to Pay"
                 value={data.totals.avgDaysToPay > 0 ? `${data.totals.avgDaysToPay.toFixed(0)}` : "—"}
                 color="#6366f1"
                 icon={<CalendarClock className="w-4 h-4" />}
               />
-              <StatCard
+              {isAdmin && <><StatCard
                 label="Overdue Invoices"
                 value={String(data.totals.overdueCount)}
                 sub={data.totals.overdueCount > 0 ? formatCurrency(data.totals.overdueValue) + " overdue" : undefined}
@@ -396,7 +412,7 @@ export default function KpiPage() {
                 value={data.totals.grossMarginPct > 0 ? `${data.totals.grossMarginPct.toFixed(1)}%` : "—"}
                 color="#0f2744"
                 icon={<TrendingUp className="w-4 h-4" />}
-              />
+              /></>}
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -437,7 +453,7 @@ export default function KpiPage() {
                       <Tooltip content={<CustomTooltipCurrency />} />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
                       <Bar dataKey="Invoice Value" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={40} />
-                      <Bar dataKey="Gross Profit" fill="#8b5cf6" radius={[3, 3, 0, 0]} maxBarSize={40} />
+                      {isAdmin && <Bar dataKey="Gross Profit" fill="#8b5cf6" radius={[3, 3, 0, 0]} maxBarSize={40} />}
                     </BarChart>
                   </ResponsiveContainer>
                 )}
@@ -491,9 +507,9 @@ export default function KpiPage() {
                         <th className="px-4 py-3 font-semibold text-right">Jobs</th>
                         <th className="px-4 py-3 font-semibold text-right">Tonnage</th>
                         <th className="px-4 py-3 font-semibold text-right">Invoice Value</th>
-                        <th className="px-4 py-3 font-semibold text-right">Gross Profit</th>
+                        {isAdmin && <><th className="px-4 py-3 font-semibold text-right">Gross Profit</th>
                         <th className="px-4 py-3 font-semibold text-right">Margin</th>
-                        <th className="px-4 py-3 font-semibold text-right">Avg LME %</th>
+                        <th className="px-4 py-3 font-semibold text-right">Avg LME %</th></>}
                         <th className="px-4 py-3 font-semibold text-right">Avg Days Pay</th>
                       </tr>
                     </thead>
@@ -511,7 +527,7 @@ export default function KpiPage() {
                           <td className="px-4 py-3 text-right text-slate-700">
                             {m.invoiceValue > 0 ? formatCurrencyDecimal(m.invoiceValue) : "—"}
                           </td>
-                          <td className="px-4 py-3 text-right">
+                          {isAdmin && <><td className="px-4 py-3 text-right">
                             {m.grossProfit !== 0 ? (
                               <span className={m.grossProfit >= 0 ? "text-emerald-700" : "text-red-600"}>
                                 {formatCurrencyDecimal(m.grossProfit)}
@@ -525,7 +541,7 @@ export default function KpiPage() {
                           </td>
                           <td className="px-4 py-3 text-right text-slate-700">
                             {m.avgCblLmePct > 0 ? `${m.avgCblLmePct.toFixed(1)}%` : "—"}
-                          </td>
+                          </td></>}
                           <td className="px-4 py-3 text-right text-slate-700">
                             {m.avgDaysToPay > 0 ? m.avgDaysToPay.toFixed(0) : "—"}
                           </td>
@@ -533,7 +549,7 @@ export default function KpiPage() {
                       ))}
                       {data.months.length === 0 && (
                         <tr>
-                          <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                          <td colSpan={isAdmin ? 8 : 5} className="px-4 py-8 text-center text-slate-400">
                             No jobs in selected period
                           </td>
                         </tr>
@@ -548,7 +564,7 @@ export default function KpiPage() {
                           <td className="px-4 py-3 text-right text-[#0f2744]">
                             {data.totals.invoiceValue > 0 ? formatCurrencyDecimal(data.totals.invoiceValue) : "—"}
                           </td>
-                          <td className="px-4 py-3 text-right text-[#0f2744]">
+                          {isAdmin && <><td className="px-4 py-3 text-right text-[#0f2744]">
                             {data.totals.grossProfit !== 0 ? formatCurrencyDecimal(data.totals.grossProfit) : "—"}
                           </td>
                           <td className="px-4 py-3 text-right text-[#0f2744]">
@@ -556,7 +572,7 @@ export default function KpiPage() {
                           </td>
                           <td className="px-4 py-3 text-right text-[#0f2744]">
                             {data.totals.avgCblLmePct > 0 ? `${data.totals.avgCblLmePct.toFixed(1)}%` : "—"}
-                          </td>
+                          </td></>}
                           <td className="px-4 py-3 text-right text-[#0f2744]">
                             {data.totals.avgDaysToPay > 0 ? data.totals.avgDaysToPay.toFixed(0) : "—"}
                           </td>

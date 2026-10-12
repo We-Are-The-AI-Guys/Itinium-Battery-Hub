@@ -10,6 +10,12 @@ V16 is the authority: Admin alone administers access, internal finance/Pb/resolv
 
 Real support/operations addresses, retention duration, extra document types and collector assignment redesign remain deferred. Keep KPI presentation/functionality unchanged apart from enforcing tenant isolation. No automatic publishing.
 
+KPI exception: non-Itinium users must not receive Gross Profit, Gross Margin, Overdue Invoices (count or value), or Avg CBL LME % in cards, graphs, monthly tables or API responses.
+
+**Why:** The user explicitly requested this KPI restriction on 2026-10-12, superseding the earlier preserve-KPI rule for these metrics.
+
+**How to apply:** Retain these metrics for Admin only, including in printable views and chart tooltips.
+
 Accounts and Lead Client may download a customer job Excel file containing tonnage, customer traction LME percentage, customer Pb blocs tonnage, customer transport/ad hoc costs, net customer invoice value and customer invoice number. Review flags stay Itinium-only.
 
 **Why:** The user explicitly extended export permissions on 2026-10-12; this is an exception to the earlier invoice-total-only financial rule.

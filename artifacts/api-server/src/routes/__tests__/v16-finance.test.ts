@@ -6,6 +6,7 @@ import type { AddressInfo } from "node:net";
 import { PgDialect } from "drizzle-orm/pg-core";
 import router from "../jobs";
 import exportRouter from "../customer-job-export";
+import kpiRouter from "../kpi";
 import ExcelJS from "exceljs";
 const state = vi.hoisted(() => ({
   role: "accounts", roles: ["accounts"], clientId: 1 as number | null,
@@ -15,6 +16,7 @@ vi.mock("@workspace/db", () => ({ db: {
   select: () => {
     const result = state.rows.shift() ?? [];
     const q = { from: () => q, where: (scope: any) => { state.scopes.push(scope); return q; },
+      groupBy: () => q, orderBy: () => q,
       then: (resolve: any) => Promise.resolve(result).then(resolve) };
     return q;
   },
@@ -27,13 +29,39 @@ vi.mock("../../middlewares/auth", async () => {
 });
 let server: Server, origin: string;
 beforeAll(async () => {
-  const app = express(); app.use(router); app.use(exportRouter);
+  const app = express(); app.use(router); app.use(exportRouter); app.use(kpiRouter);
   server = app.listen(0, "127.0.0.1"); await once(server, "listening");
   origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
 afterAll(() => new Promise<void>(resolve => server.close(() => resolve())));
 beforeEach(() => { state.role = "accounts"; state.roles = ["accounts"]; state.clientId = 1; state.rows = []; state.scopes = []; });
 describe("V16 dashboard finance", () => {
+  it.each(["accounts", "head_office_admin"])("%s KPI metrics respect internal visibility", async role => {
+    state.role = role; state.roles = [role];
+    state.rows = [
+      [{ month: "2026-10", jobCount: 2, tonnage: "3", invoiceValue: "100", grossProfit: "20", avgCblLmePct: "65", avgDaysToPay: "10" }],
+      [{ month: "2026-10", overdueCount: 1, overdueValue: "10" }],
+      [{ status: "completed", count: 2 }],
+      [{ avgCblLmePct: "65", avgDaysToPay: "10" }],
+    ];
+    const res = await fetch(`${origin}/kpi/summary?from=2026-10-06&to=2026-10-12`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { totals: Record<string, unknown>; months: Record<string, unknown>[] };
+    for (const row of [body.totals, ...body.months]) {
+      for (const field of ["grossProfit", "grossMarginPct", "overdueCount", "overdueValue", "avgCblLmePct"]) {
+        expect(Object.hasOwn(row, field)).toBe(role === "head_office_admin");
+      }
+      expect(row.invoiceValue).toBe(100);
+    }
+    const query = new PgDialect().sqlToQuery(state.scopes[0]);
+    expect(query.params).toContainEqual(new Date("2026-10-06T00:00:00Z"));
+    expect(query.params).toContainEqual(new Date("2026-10-13T00:00:00Z"));
+    if (role === "accounts") expect(query.sql).toContain('"jobs"."client_id"');
+  });
+  it("rejects invalid custom dates before querying KPI data", async () => {
+    expect((await fetch(`${origin}/kpi/summary?from=2026-10-12&to=2026-10-06`)).status).toBe(400);
+    expect(state.scopes).toHaveLength(0);
+  });
   it.each(["accounts", "lead_client"])("%s can download the customer-only workbook", async role => {
     state.role = role; state.roles = [role];
     state.rows = [[{ id: 12, reference: "JOB-12", tonnage: "3.125", customerTractionPercent: "65",
