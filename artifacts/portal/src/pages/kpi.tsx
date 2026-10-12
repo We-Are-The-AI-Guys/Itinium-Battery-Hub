@@ -63,7 +63,7 @@ interface Client {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  request: "Request",
+  request: "Requested",
   confirmed: "Confirmed",
   received: "Received",
   invoice: "Invoice",

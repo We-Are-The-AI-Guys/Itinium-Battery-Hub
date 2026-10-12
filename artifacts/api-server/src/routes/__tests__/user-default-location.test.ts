@@ -4,6 +4,7 @@ import { once } from "node:events";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import usersRouter from "../users";
+import locationsRouter from "../locations";
 import jobsRouter from "../jobs";
 
 const state = vi.hoisted(() => ({
@@ -49,7 +50,7 @@ let origin: string;
 beforeAll(async () => {
   const app = express();
   app.use(express.json());
-  app.use("/api", usersRouter, jobsRouter);
+  app.use("/api", usersRouter, jobsRouter, locationsRouter);
   server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
@@ -63,6 +64,26 @@ const request = (path: string, body: unknown, method = "PATCH") =>
   fetch(`${origin}${path}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 describe("default location assignment", () => {
+  it.each(["team_leader", "depot_user", "accounts", "collection_company"])(
+    "blocks location activation/deactivation by %s", async role => {
+      state.user.role = role;
+      for (const isActive of [false, true]) {
+        const res = await request("/clients/10/locations/11", { isActive, name: "Must not be saved" });
+        expect(res.status).toBe(403);
+        expect(state.updates).toEqual({});
+      }
+    },
+  );
+  it.each([false, true])("allows admin to set location isActive to %s", async isActive => {
+    const res = await request("/clients/10/locations/11", { isActive });
+    expect(res.status).toBe(200);
+    expect(state.updates).toEqual({ isActive });
+  });
+  it("preserves team leader permission to edit assigned location details", async () => {
+    state.user.role = "team_leader";
+    expect((await request("/clients/10/locations/11", { name: "Updated site" })).status).toBe(200);
+    expect(state.updates).toEqual({ name: "Updated site" });
+  });
   it.each(["team_leader", "depot_user", "accounts", "collection_company"])(
     "denies every user-management operation to %s before reading or writing user data",
     async role => {

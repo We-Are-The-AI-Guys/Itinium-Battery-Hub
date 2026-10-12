@@ -244,7 +244,7 @@ const statusDotStyles: Record<string, string> = {
 };
 
 const statusLabels: Record<string, string> = {
-  request: "Request",
+  request: "Requested",
   confirmed: "Confirmed",
   received: "Received",
   invoice: "Invoice",

@@ -170,19 +170,6 @@ export default function LocationManagementPage() {
     }
   }
 
-  async function handleToggleActive(loc: LocationData) {
-    if (!userInfo?.clientId) return;
-    try {
-      await fetch(`/api/clients/${userInfo.clientId}/locations/${loc.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ isActive: !loc.isActive }),
-      });
-      fetchLocations();
-    } catch {}
-  }
-
   return (
     <SidebarLayout
       title="Locations"
@@ -258,12 +245,6 @@ export default function LocationManagementPage() {
                           <Edit className="w-3.5 h-3.5 mr-1" />
                           Edit
                         </Button>
-                        <button
-                          className={`text-xs font-medium hover:underline ${loc.isActive ? "text-red-600" : "text-green-600"}`}
-                          onClick={() => handleToggleActive(loc)}
-                        >
-                          {loc.isActive ? "Deactivate" : "Activate"}
-                        </button>
                       </div>
                     </td>
                   </tr>

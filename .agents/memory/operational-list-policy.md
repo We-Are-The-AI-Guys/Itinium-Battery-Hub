@@ -13,6 +13,12 @@ The user explicitly clarified that the Operational dashboard needs a Pallets col
 
 ## Dashboard financial weight source
 
+Job table column order must put Pallets immediately before Status, followed by Documents. Documents offers only the uploaded signed consignment note and signed collection sheet, never generated replacement PDFs.
+
+**Why:** The user explicitly requested this operational table arrangement and access to signed originals.
+
+**How to apply:** Preserve access checks at download time; show non-clickable missing-document states. Display the initial status as “Requested” but keep the stored/API value `request` and its workflow semantics unchanged.
+
 Operational dashboard tonnage remains the full CBL collection load. Financial dashboard weight must come from the Customer section on the right of the Master Financial Log, not the CBL/waste-collector weight or a generic battery Pb total.
 
 **Why:** The user explicitly distinguishes the load CBL collects from the customer-side Pb weight used for finances.

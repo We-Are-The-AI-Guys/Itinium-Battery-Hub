@@ -1,3 +1,4 @@
+import { JobDocumentDownloads } from "@/components/job-document-downloads";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
@@ -26,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatPbKg } from "@/lib/job-list-format";
 
 interface Job {
+  signedDocumentTypes?: string[];
   id: number;
   reference: string;
   clientName: string;
@@ -61,7 +63,7 @@ const statusStyles: Record<string, string> = {
 };
 
 const statusLabels: Record<string, string> = {
-  request: "Request",
+  request: "Requested",
   confirmed: "Confirmed",
   received: "Received",
   invoice: "Invoice",
@@ -90,7 +92,7 @@ interface CollectionPointOption {
 }
 
 const STATUS_OPTIONS = [
-  { value: "request", label: "Request" },
+  { value: "request", label: "Requested" },
   { value: "confirmed", label: "Confirmed" },
   { value: "received", label: "Received" },
   { value: "invoice", label: "Invoice" },
@@ -224,7 +226,7 @@ export default function JobListPage() {
               <div className="flex bg-slate-100 p-1 rounded-lg flex-wrap">
                 {[
                   { value: "all", label: "All" },
-                  { value: "request", label: "Request" },
+                  { value: "request", label: "Requested" },
                   { value: "confirmed", label: "Confirmed" },
                   { value: "received", label: "Received" },
                   { value: "invoice", label: "Invoice" },
@@ -307,8 +309,9 @@ export default function JobListPage() {
                 <th className="px-6 py-3.5 font-semibold">Customer</th>
                 <th className="px-6 py-3.5 font-semibold">Collection Point</th>
                 <th className="px-6 py-3.5 font-semibold">Pb (kg)</th>
+                <th className="px-6 py-3.5 font-semibold">Pallets</th>
                 <th className="px-6 py-3.5 font-semibold">Status</th>
-                <th className="px-6 py-3.5 font-semibold">Total Pallets</th>
+                <th className="px-6 py-3.5 font-semibold">Documents</th>
                 <th className="px-6 py-3.5 font-semibold text-right">Actions</th>
               </tr>
             </thead>
@@ -347,6 +350,7 @@ export default function JobListPage() {
                       </span>
                     )}
                   </td>
+                  <td className="px-6 py-4 font-medium text-slate-700">{job.palletCount}</td>
                   <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                     {canEditStatus ? (
                       <Select
@@ -380,7 +384,7 @@ export default function JobListPage() {
                     )}
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">
-                    {job.palletCount}
+                    <JobDocumentDownloads jobId={job.id} reference={job.reference} available={job.signedDocumentTypes ?? []} />
                   </td>
                   <td className="px-6 py-4 text-right">
                     <Button
@@ -400,7 +404,7 @@ export default function JobListPage() {
               ))}
               {jobs.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={9} className="px-6 py-12 text-center text-slate-500">
                     No jobs found
                   </td>
                 </tr>

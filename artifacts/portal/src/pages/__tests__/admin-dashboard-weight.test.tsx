@@ -7,6 +7,7 @@ vi.mock("@/components/sidebar-layout", () => ({
   SidebarLayout: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
 }));
 vi.mock("wouter", () => ({ useLocation: () => ["/", vi.fn()] }));
+vi.mock("@/components/customer-documents", () => ({ CustomerDocuments: () => null }));
 
 let traction = "1.234";
 let blocs = "0.006";
@@ -55,7 +56,7 @@ describe("Customer Pb dashboard weight", () => {
     expect(table.getByText("£1,250")).toBeTruthy();
     expect(table.getByText("£250")).toBeTruthy();
     expect(table.queryByText("9.9t")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Request", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Requested", exact: true }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/jobs?status=request&limit=8&offset=0", expect.anything()));
     fireEvent.click(screen.getByRole("button", { name: "2", exact: true }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/jobs?status=request&limit=8&offset=8", expect.anything()));
@@ -68,6 +69,9 @@ describe("Customer Pb dashboard weight", () => {
     traction = "2.000"; blocs = "0.005";
     render(<AdminDashboardPage />);
     await screen.findByText("WEIGHT-TEST");
+    const headers = within(screen.getByRole("table")).getAllByRole("columnheader").map(h => h.textContent);
+    expect(headers.slice(headers.indexOf("Pallets"), headers.indexOf("Pallets") + 3)).toEqual(["Pallets", "Status", "Documents"]);
+    expect(within(screen.getByRole("table")).getAllByText("Not uploaded")).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Financial", exact: true }));
     expect(within(screen.getByRole("table")).getByText("2.005t")).toBeTruthy();
   });

@@ -4,6 +4,7 @@ import { jobListSummary } from "../lib/job-list-summary";
 import { jobScope, mayAccessDepot, isClientUser } from "../lib/depot-access";
 import { userLocationIds } from "../lib/user-memberships";
 import { db } from "@workspace/db";
+import { jobDocumentsTable } from "@workspace/db/schema";
 import { jobsTable, jobBatteriesTable, cellModelsTable, batteryWeightReferenceTable, lmePricesTable, locationsTable, clientsTable, usersTable, jobDraftsTable, scheduleRescheduleLogTable, correctionAuditLogTable, collectionCompaniesTable } from "@workspace/db/schema";
 import { eq, sql, and, count, ilike, or, inArray, desc, asc, getTableColumns, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
@@ -729,9 +730,16 @@ router.get(
       }).from(jobBatteriesTable)
         .where(inArray(jobBatteriesTable.jobId, jobs.map(job => job.id))) : [];
 
+      const documents = jobs.length ? await db.select({
+        jobId: jobDocumentsTable.jobId, docType: jobDocumentsTable.docType,
+      }).from(jobDocumentsTable).where(and(
+        inArray(jobDocumentsTable.jobId, jobs.map(job => job.id)),
+        inArray(jobDocumentsTable.docType, ["consignment_note", "collection_sheet"]),
+      )) : [];
       res.json({
         jobs: jobs.map(job => ({
           ...job,
+          signedDocumentTypes: documents.filter(doc => doc.jobId === job.id).map(doc => doc.docType),
           ...jobListSummary(rows.filter(row => row.jobId === job.id), job.tonnage),
         })),
         total,

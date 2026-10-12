@@ -172,6 +172,10 @@ router.patch(
         res.status(400).json({ message: "Invalid data", errors: parsed.error.issues });
         return;
       }
+      if (parsed.data.isActive !== undefined && req.user!.role !== "head_office_admin") {
+        res.status(403).json({ message: "Only Itinium admins can activate or deactivate locations" });
+        return;
+      }
 
       const updates: Record<string, unknown> = {};
       if (parsed.data.name !== undefined) updates.name = parsed.data.name.trim();

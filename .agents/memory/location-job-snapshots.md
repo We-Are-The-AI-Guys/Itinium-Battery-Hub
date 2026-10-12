@@ -19,6 +19,12 @@ A client's user may have multiple explicitly permitted locations. Their default 
 
 ## Administrator default selection
 
+Location activation and deactivation are also exclusively Itinium Admin actions; Team Leaders may retain ordinary site-detail editing but must not change active status.
+
+**Why:** The user explicitly stated that no one other than Itinium Admin should deactivate locations or users.
+
+**How to apply:** Enforce active-status changes server-side, including mixed-field update requests, and remove non-admin toggle controls.
+
 Only Itinium Admin may create or manage user accounts, including location assignments, activation and administrative password changes. Team Leaders must not have delegated user-management access.
 
 **Why:** The user explicitly confirmed that user management belongs exclusively to Itinium Admin, superseding the earlier Team Leader delegation policy.

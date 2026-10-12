@@ -1,3 +1,4 @@
+import { JobDocumentDownloads } from "@/components/job-document-downloads";
 import { CustomerDocuments } from "@/components/customer-documents";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
@@ -40,6 +41,7 @@ interface DashboardStats {
 }
 
 interface Job {
+  signedDocumentTypes?: string[];
   id: number;
   reference: string;
   clientName: string;
@@ -72,7 +74,7 @@ const statusStyles: Record<string, string> = {
 };
 
 const statusLabels: Record<string, string> = {
-  request: "Request",
+  request: "Requested",
   confirmed: "Confirmed",
   received: "Received",
   invoice: "Invoice",
@@ -439,7 +441,7 @@ export default function AdminDashboardPage() {
             <div className="flex bg-slate-100 p-1 rounded-lg flex-wrap">
               {[
                 { value: "All", label: "All" },
-                { value: "request", label: "Request" },
+                { value: "request", label: "Requested" },
                 { value: "confirmed", label: "Confirmed" },
                 { value: "received", label: "Received" },
                 { value: "invoice", label: "Invoice" },
@@ -473,15 +475,15 @@ export default function AdminDashboardPage() {
                 <th className="px-6 py-4 font-semibold">
                   {dashboardTab === "financial" ? "Customer Pb weight (t)" : "Tonnage"}
                 </th>
-                {dashboardTab === "operational" ? (
-                  <th className="px-6 py-4 font-semibold">Pallets</th>
-                ) : (
+                {dashboardTab === "financial" && (
                   <>
                     <th className="px-6 py-4 font-semibold">Value</th>
                     <th className="px-6 py-4 font-semibold">Gross Profit</th>
                   </>
                 )}
+                <th className="px-6 py-4 font-semibold">Pallets</th>
                 <th className="px-6 py-4 font-semibold">Status</th>
+                <th className="px-6 py-4 font-semibold">Documents</th>
                 <th className="px-6 py-4 font-semibold">Invoice</th>
                 <th className="px-6 py-4 font-semibold text-right">Actions</th>
               </tr>
@@ -507,9 +509,7 @@ export default function AdminDashboardPage() {
                       ? formatCustomerPbWeight(job.customerTractionTonnage, job.customerBlocsTonnage)
                       : `${parseFloat(job.tonnage).toFixed(1)}t`}
                   </td>
-                  {dashboardTab === "operational" ? (
-                    <td className="px-6 py-4 text-slate-700">{job.palletCount ?? "—"}</td>
-                  ) : (
+                  {dashboardTab === "financial" && (
                     <>
                       <td className="px-6 py-4 font-medium text-slate-700">
                         {job.calculatedValue != null && job.calculatedValue !== "" ? formatCurrency(Number(job.calculatedValue)) : "—"}
@@ -519,6 +519,7 @@ export default function AdminDashboardPage() {
                       </td>
                     </>
                   )}
+                  <td className="px-6 py-4 text-slate-700">{job.palletCount ?? "—"}</td>
                   <td className="px-6 py-4">
                     <Badge
                       variant="outline"
@@ -528,6 +529,9 @@ export default function AdminDashboardPage() {
                     >
                       {statusLabels[job.status] || job.status}
                     </Badge>
+                  </td>
+                  <td className="px-6 py-4">
+                    <JobDocumentDownloads jobId={job.id} reference={job.reference} available={job.signedDocumentTypes ?? []} />
                   </td>
                   <td className="px-6 py-4">
                     {job.invoiceStatus ? (
@@ -559,7 +563,7 @@ export default function AdminDashboardPage() {
               {jobs.length === 0 && (
                 <tr>
                   <td
-                    colSpan={dashboardTab === "financial" ? 10 : 9}
+                    colSpan={dashboardTab === "financial" ? 12 : 10}
                     className="px-6 py-12 text-center text-slate-500"
                   >
                     No jobs found
