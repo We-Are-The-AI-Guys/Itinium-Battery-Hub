@@ -3,7 +3,8 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { jobsTable, jobDocumentsTable, JOB_DOCUMENT_TYPES, type JobDocumentType } from "@workspace/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray, desc } from "drizzle-orm";
+import { isClientUser, mayAccessDepot, jobScope } from "../lib/depot-access";
 import { z } from "zod";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage";
@@ -13,6 +14,8 @@ import {
 } from "../lib/notifications";
 
 const router: IRouter = Router();
+const CUSTOMER_DOCUMENT_TYPES = ["collection_sheet", "consignment_note"] as const;
+const DOCUMENT_READ_ROLES = ["accounts", "head_office_admin", "collection_company", "team_leader", "depot_user"];
 const objectStorage = new ObjectStorageService();
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB
@@ -103,6 +106,7 @@ async function loadJobForCompany(req: AuthenticatedRequest, jobId: number) {
   if (isNaN(jobId)) return null;
   const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
   if (!job) return null;
+  if (isClientUser(req.user!) && !mayAccessDepot(req.user!, job)) return null;
   if (req.user!.role === "collection_company") {
     if (!req.user!.collectionCompanyId || job.collectionCompanyId !== req.user!.collectionCompanyId) {
       return null;
@@ -113,10 +117,27 @@ async function loadJobForCompany(req: AuthenticatedRequest, jobId: number) {
 
 // ---- List documents (staff + owning collection company) --------------------
 
+router.get("/customer/documents", requireAuth, requireRole("team_leader", "depot_user"),
+  async (req: AuthenticatedRequest, res) => {
+    try {
+      const documents = await db.select({
+        jobId: jobsTable.id, reference: jobsTable.reference, depot: jobsTable.depot,
+        docType: jobDocumentsTable.docType, fileName: jobDocumentsTable.fileName,
+        uploadedAt: jobDocumentsTable.uploadedAt,
+      }).from(jobDocumentsTable).innerJoin(jobsTable, eq(jobsTable.id, jobDocumentsTable.jobId))
+        .where(and(jobScope(req.user!), inArray(jobDocumentsTable.docType, [...CUSTOMER_DOCUMENT_TYPES])))
+        .orderBy(desc(jobDocumentsTable.uploadedAt));
+      res.json({ documents });
+    } catch (error) {
+      console.error("Customer documents error:", error);
+      res.status(500).json({ message: "Failed to load collection documents" });
+    }
+  });
+
 router.get(
   "/jobs/:id/documents",
   requireAuth,
-  requireRole("accounts", "head_office_admin", "collection_company"),
+  requireRole(...DOCUMENT_READ_ROLES),
   async (req: AuthenticatedRequest, res) => {
     try {
       const job = await loadJobForCompany(req, parseInt(String(req.params.id), 10));
@@ -124,6 +145,7 @@ router.get(
         res.status(404).json({ message: "Job not found" });
         return;
       }
+      const visibleTypes = isClientUser(req.user!) ? [...CUSTOMER_DOCUMENT_TYPES] : [...JOB_DOCUMENT_TYPES];
       const documents = await db
         .select({
           id: jobDocumentsTable.id,
@@ -134,12 +156,12 @@ router.get(
           uploadedAt: jobDocumentsTable.uploadedAt,
         })
         .from(jobDocumentsTable)
-        .where(eq(jobDocumentsTable.jobId, job.id));
+        .where(and(eq(jobDocumentsTable.jobId, job.id), inArray(jobDocumentsTable.docType, visibleTypes)));
       res.json({
         documents,
-        requiredTypes: JOB_DOCUMENT_TYPES,
-        outstandingTypes: JOB_DOCUMENT_TYPES.filter((t) => !documents.some((d) => d.docType === t)),
-        canUpload: canUploadDocuments(job),
+        requiredTypes: visibleTypes,
+        outstandingTypes: visibleTypes.filter((t) => !documents.some((d) => d.docType === t)),
+        canUpload: !isClientUser(req.user!) && canUploadDocuments(job),
       });
     } catch (error) {
       console.error("List job documents error:", error);
@@ -358,6 +380,10 @@ async function serveDocument(
   disposition: "inline" | "attachment"
 ) {
   const docType = String(req.params.docType);
+  if (isClientUser(req.user!) && !(CUSTOMER_DOCUMENT_TYPES as readonly string[]).includes(docType)) {
+    res.status(404).json({ message: "Document not found" });
+    return;
+  }
   if (!(JOB_DOCUMENT_TYPES as readonly string[]).includes(docType)) {
     res.status(400).json({ message: "Unknown document type" });
     return;
@@ -379,6 +405,7 @@ async function serveDocument(
   const response = await objectStorage.downloadObject(file);
   res.status(response.status);
   response.headers.forEach((value, key) => res.setHeader(key, value));
+  res.setHeader("Cache-Control", "private, no-store");
   res.setHeader("Content-Type", doc.contentType);
   res.setHeader("Content-Disposition", `${disposition}; filename="${doc.fileName.replace(/["\\\r\n]/g, "_")}"`);
   if (response.body) {
@@ -391,7 +418,7 @@ async function serveDocument(
 router.get(
   "/jobs/:id/documents/:docType/view",
   requireAuth,
-  requireRole("accounts", "head_office_admin", "collection_company"),
+  requireRole(...DOCUMENT_READ_ROLES),
   async (req: AuthenticatedRequest, res) => {
     try {
       await serveDocument(req, res, "inline");
@@ -409,7 +436,7 @@ router.get(
 router.get(
   "/jobs/:id/documents/:docType/download",
   requireAuth,
-  requireRole("accounts", "head_office_admin", "collection_company"),
+  requireRole(...DOCUMENT_READ_ROLES),
   async (req: AuthenticatedRequest, res) => {
     try {
       await serveDocument(req, res, "attachment");

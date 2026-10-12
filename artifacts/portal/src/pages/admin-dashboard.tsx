@@ -1,3 +1,4 @@
+import { CustomerDocuments } from "@/components/customer-documents";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
@@ -221,6 +222,7 @@ export default function AdminDashboardPage() {
       subtitle="Overview of all operations"
       showSearch
     >
+      <CustomerDocuments />
       {noLocations && <p role="alert" className="mb-6 rounded border border-amber-200 bg-amber-50 p-4 text-amber-900">Your account has no permitted locations. Ask your administrator to assign the sites you need. No depot jobs are available until then.</p>}
       <div className="flex bg-slate-100 p-1 rounded-lg mb-6 w-fit">
         {([

@@ -1685,9 +1685,9 @@ export default function JobDetailPage() {
           </div>
         )}
 
-        {(userRole === "accounts" || userRole === "head_office_admin") && (
+        {(userRole === "accounts" || userRole === "head_office_admin" || userRole === "team_leader") && (
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-6" data-testid="card-job-documents">
-            <JobDocumentsPanel jobId={job.id} mode="review" />
+            <JobDocumentsPanel jobId={job.id} mode={userRole === "team_leader" ? "customer" : "review"} />
           </div>
         )}
 

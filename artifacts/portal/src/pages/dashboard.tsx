@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { CustomerDocuments } from "@/components/customer-documents";
 import { Link, Redirect, useLocation } from "wouter";
 import { LogOut, Plus, Battery, TrendingUp, FileText, Trash2, Clock, ChevronRight, BookOpen, Settings, HelpCircle } from "lucide-react";
 import itiniumLogo from "@assets/itinium-logo-transparent_1773848738567.png";
@@ -175,6 +176,7 @@ export default function DashboardPage() {
           </Link>
         </div>
 
+        <CustomerDocuments />
         {drafts.length > 0 && (
           <div className="mb-8" data-testid="section-drafts">
             <div className="flex items-center gap-2 mb-4">

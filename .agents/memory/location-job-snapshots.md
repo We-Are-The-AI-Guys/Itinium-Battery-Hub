@@ -33,6 +33,12 @@ An administrator explicitly choosing a user's default site also grants permissio
 
 ## Ambiguous related records
 
+Customers must be able to download the collector-uploaded signed consignment note and signed collection sheet, but not the Statement to Itinium or other private documents.
+
+**Why:** The user explicitly requested customer access to just those two signed documents.
+
+**How to apply:** Preserve client/location isolation and enforce the document-type restriction server-side on both listings and file delivery, not just in the UI.
+
 Legacy stillage records without canonical client/location ownership remain internal-only, rather than being matched to a client by their depot label.
 
 **Why:** Similar depot names can exist under different clients. Recovering permissions from names would recreate the cross-client exposure that explicit memberships are intended to prevent.

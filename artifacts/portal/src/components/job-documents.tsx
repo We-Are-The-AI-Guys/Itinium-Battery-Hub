@@ -33,7 +33,7 @@ export function JobDocumentsPanel({
   onError,
 }: {
   jobId: number;
-  mode: "upload" | "review";
+  mode: "upload" | "review" | "customer";
   onError?: (message: string) => void;
 }) {
   const [state, setState] = useState<DocumentsState | null>(null);
@@ -48,14 +48,19 @@ export function JobDocumentsPanel({
       if (res.ok) {
         const data = await res.json();
         setState({ documents: data.documents || [], canUpload: !!data.canUpload });
+        setError("");
+      } else {
+        setError("Could not load collection documents.");
       }
     } catch {
-      // Panel stays hidden on load failure; the rest of the page still works.
+      setError("Could not load collection documents.");
     }
   }, [jobId]);
 
   useEffect(() => {
     load();
+    const timer = setInterval(load, 30000);
+    return () => clearInterval(timer);
   }, [load]);
 
   function fail(message: string) {
@@ -138,10 +143,11 @@ export function JobDocumentsPanel({
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
-  if (!state) return null;
+  if (!state) return error ? <p role="alert">{error} <button className="underline" onClick={load}>Retry</button></p> : <p className="text-sm text-slate-500">Loading documents…</p>;
   if (mode === "review" && state.documents.length === 0 && !state.canUpload) return null;
 
-  const outstanding = DOC_TYPES.filter((d) => !state.documents.some((doc) => doc.docType === d.type));
+  const visibleTypes = mode === "customer" ? DOC_TYPES.filter(d => d.type !== "statement") : DOC_TYPES;
+  const outstanding = visibleTypes.filter((d) => !state.documents.some((doc) => doc.docType === d.type));
 
   return (
     <div data-testid={`documents-panel-${jobId}`}>
@@ -171,7 +177,7 @@ export function JobDocumentsPanel({
         )}
       </div>
       <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
-        {DOC_TYPES.map(({ type, label }) => {
+        {visibleTypes.map(({ type, label }) => {
           const doc = state.documents.find((d) => d.docType === type);
           return (
             <li key={type} className="px-3 py-2.5 flex items-center gap-3 text-sm" data-testid={`document-row-${type}-${jobId}`}>
