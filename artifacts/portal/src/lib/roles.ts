@@ -27,7 +27,7 @@ export const ROLE_DESCRIPTIONS: Record<string, string> = {
   lead_client: "All locations for one client. Sees Total Invoice Value.",
   accounts: "All locations for one client. Sees Total Invoice Value.",
   team_leader: "Assigned locations only. Read-only schedule, no financials.",
-  depot_user: "Assigned locations only. Simplified Operational Overview.",
+  depot_user: "Assigned locations only. Operational Overview and read-only schedule.",
   collection_company: "Assigned collection schedule only.",
 };
 
@@ -52,7 +52,7 @@ export const isAdmin = (u: RoleBearer | null | undefined) => hasRole(u, "head_of
 export const isCollector = (u: RoleBearer | null | undefined) => !isAdmin(u) && hasRole(u, "collection_company");
 export const isCustomer = (u: RoleBearer | null | undefined) => !isAdmin(u) && hasRole(u, ...CUSTOMER_ROLES);
 export const canSeeInvoiceTotal = (u: RoleBearer | null | undefined) => isCustomer(u) && hasRole(u, ...CLIENT_WIDE_ROLES);
-export const canSeeSchedule = (u: RoleBearer | null | undefined) => isCustomer(u) && hasRole(u, "lead_client", "accounts", "team_leader");
+export const canSeeSchedule = (u: RoleBearer | null | undefined) => isCustomer(u) && hasRole(u, "lead_client", "accounts", "team_leader", "depot_user");
 export const isWarehouseOnly = (u: RoleBearer | null | undefined) =>
   isCustomer(u) && rolesOf(u).filter((r) => CUSTOMER_ROLES.includes(r)).every((r) => r === "depot_user");
 

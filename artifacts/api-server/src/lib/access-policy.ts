@@ -60,7 +60,7 @@ export function policyAllows(user: Principal, method: string, path: string): boo
     if (!isCustomer(user) || !user.clientId) return false;
     if (path === "/jobs" && method === "POST") return true;
     if (!get) return false;
-    if (path === "/jobs/schedule") return hasRole(user, "lead_client", "accounts", "team_leader");
+    if (path === "/jobs/schedule") return hasRole(user, "lead_client", "accounts", "team_leader", "depot_user");
     return path === "/jobs" || path === "/jobs/:id";
   }
   if (path === "/dashboard/stats") return isCustomer(user) && !!user.clientId && hasRole(user, "lead_client", "accounts", "team_leader");

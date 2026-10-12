@@ -29,7 +29,7 @@ describe("roles union", () => {
     expect(canSeeInvoiceTotal(u(["team_leader"]))).toBe(false);
     expect(canSeeInvoiceTotal(u(["depot_user"]))).toBe(false);
     expect(canSeeSchedule(u(["team_leader"]))).toBe(true);
-    expect(canSeeSchedule(u(["depot_user"]))).toBe(false);
+    expect(canSeeSchedule(u(["depot_user"]))).toBe(true);
     expect(isWarehouseOnly(u(["depot_user"]))).toBe(true);
     expect(isCollector(u(["collection_company"]))).toBe(true);
   });

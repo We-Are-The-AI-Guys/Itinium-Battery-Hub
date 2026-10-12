@@ -10,6 +10,12 @@ V16 is the authority: Admin alone administers access, internal finance/Pb/resolv
 
 Real support/operations addresses, retention duration, extra document types and collector assignment redesign remain deferred. Keep KPI presentation/functionality unchanged apart from enforcing tenant isolation. No automatic publishing.
 
+Warehouse teams also have read-only Schedule access for their assigned sites.
+
+**Why:** The user explicitly extended Warehouse access on 2026-10-12; this supersedes the original schedule role restriction.
+
+**How to apply:** Keep the Operational Overview landing page and location/client boundaries; do not grant schedule editing, confirmation, finance or main-dashboard access.
+
 **Why:** These are the user's explicit scope boundaries, not implementation assumptions.
 
 **How to apply:** Require configured mailbox/sender addresses, retain requests even when email is pending configuration, and preserve original files/history.

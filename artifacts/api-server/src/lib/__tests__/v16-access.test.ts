@@ -1,8 +1,26 @@
 import { describe, it, expect } from "vitest";
 import { policyAllows, validateRoles, customerJob, customerBattery, canSeeFinance } from "../access-policy";
-import { mayAccessDepot } from "../depot-access";
+import { mayAccessDepot, jobScope } from "../depot-access";
+import { PgDialect } from "drizzle-orm/pg-core";
 const user = (roles: string[], clientId: number | null = 1) => ({ role: roles[0], roles, clientId, permittedLocationIds: [10] });
 describe("V16 access boundaries", () => {
+  it("Warehouse can read its site schedule but cannot manage it or gain finance access", () => {
+    const p = user(["depot_user"]);
+    expect(policyAllows(p, "GET", "/jobs/schedule")).toBe(true);
+    expect(policyAllows(user(["depot_user"], null), "GET", "/jobs/schedule")).toBe(false);
+    expect(policyAllows(p, "POST", "/jobs/:id/schedule/confirm")).toBe(false);
+    expect(policyAllows(p, "PATCH", "/jobs/:id/admin")).toBe(false);
+    expect(policyAllows(p, "GET", "/dashboard/stats")).toBe(false);
+    expect(canSeeFinance(p)).toBe(false);
+    expect(mayAccessDepot(p, { clientId: 1, locationId: 10 })).toBe(true);
+    expect(mayAccessDepot(p, { clientId: 1, locationId: 11 })).toBe(false);
+    expect(mayAccessDepot(p, { clientId: 2, locationId: 10 })).toBe(false);
+    const query = new PgDialect().sqlToQuery(jobScope(p));
+    expect(query.sql).toContain('"jobs"."client_id"');
+    expect(query.sql).toContain('"jobs"."location_id"');
+    expect(query.params).toEqual([1, 10]);
+    expect(new PgDialect().sqlToQuery(jobScope({ ...p, permittedLocationIds: [] })).sql).toBe("false");
+  });
   it.each(["lead_client", "accounts", "team_leader", "depot_user"])("%s cannot cross clients or mutate jobs", role => {
     const p = user([role]);
     expect(mayAccessDepot(p, { clientId: 2, locationId: 10 })).toBe(false);
