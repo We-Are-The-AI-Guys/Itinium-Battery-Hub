@@ -28,3 +28,17 @@ mtime_ms = 1791814780141
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:f36d7821-a5ca-4cbc-ab38-bcc9688c67ea/fe025c0d-c63e-44d1-8742-cac77eca596d/e3a1712b-a955-4ef1-9fc5-3f81530adac1"
 storage_version_token = "1791814786013148"
 content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+[[outputs]]
+id = "tOTIxYrSHPOJjGKxOpK2T"
+uri = "file://attached_assets/sample-kpi-export-styled.xlsx"
+type = "table"
+title = "Styled KPI spreadsheet sample"
+description = "Updated sample with navy headings, bold white text, blue underline and a frozen header row. Uses fictional data and the exact current export layout."
+logical_id = "9b9e7d37-66c8-4e73-a45f-ce4fc8bd788b"
+content_hash = "sha256:65eaed8ebaa058477b8774d886327e7569e669faee436900204ceaee1a35100f"
+size = 7296
+mtime_ms = 1791814892709
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:f36d7821-a5ca-4cbc-ab38-bcc9688c67ea/9b9e7d37-66c8-4e73-a45f-ce4fc8bd788b/150c7d95-5d86-4253-bfa0-7a5ba41c9f99"
+storage_version_token = "1791814926380084"
+content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

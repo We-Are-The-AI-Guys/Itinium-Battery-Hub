@@ -36,7 +36,15 @@ export function customerJobWorkbook(jobs: (typeof jobsTable.$inferSelect)[]) {
     tractionTonnage: kilograms(job.customerTractionTonnage),
     transport: number(job.customerTransportCost),
     invoice: number(job.customerInvoiceValue), invoiceNo: job.customerInvoiceNo ?? "" });
-  ws.getRow(1).font = { bold: true };
+  const header = ws.getRow(1);
+  header.height = 34;
+  header.eachCell(cell => {
+    cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0F2744" } };
+    cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true, indent: 1 };
+    cell.border = { bottom: { style: "medium", color: { argb: "FF0EA5E9" } } };
+  });
+  ws.views = [{ state: "frozen", ySplit: 1 }];
   ws.getColumn("collectionDate").numFmt = "dd/mm/yyyy";
   for (const key of ["tractionTonnage", "blocs"]) ws.getColumn(key).numFmt = "#,##0";
   ws.getColumn("traction").numFmt = '£#,##0.00';

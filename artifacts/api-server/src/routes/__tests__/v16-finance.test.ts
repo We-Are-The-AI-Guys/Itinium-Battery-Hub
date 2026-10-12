@@ -84,6 +84,14 @@ describe("V16 dashboard finance", () => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(Buffer.from(await res.arrayBuffer()) as any);
     const sheet = wb.worksheets[0];
+    expect(sheet.getRow(1).height).toBe(34);
+    sheet.getRow(1).eachCell(cell => {
+      expect(cell.font).toMatchObject({ bold: true, color: { argb: "FFFFFFFF" } });
+      expect(cell.fill).toMatchObject({ type: "pattern", fgColor: { argb: "FF0F2744" } });
+      expect(cell.alignment).toMatchObject({ vertical: "middle", wrapText: true });
+      expect(cell.border.bottom).toMatchObject({ style: "medium", color: { argb: "FF0EA5E9" } });
+    });
+    expect(sheet.views[0]).toMatchObject({ state: "frozen", ySplit: 1 });
     expect(sheet.getRow(1).values).toEqual([undefined, "Collection Date", "Job Reference", "Client", "Collection Point",
       "Traction Tonnage (Kg)", "Bloc Tonnage (Kg)", "LME Value £", "Transport", "Net Invoice Value £", "Invoice Number"]);
     expect(sheet.getRow(2).values).toEqual([undefined, new Date("2026-10-12T00:00:00Z"), "JOB-12", "Example Client", "North collection point", 1750, 500, 1125.5, 50, 750, "000123"]);
