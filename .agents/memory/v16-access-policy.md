@@ -6,11 +6,17 @@ V16 is the authority: Admin alone administers access, internal finance/Pb/resolv
 
 **Why:** The user supplied the approved V16 specification with explicit overrides to previous spreadsheets and instructions.
 
-**How to apply:** Warehouse uses operational overview, not the main dashboard. Customers request amendments/cancellation only before collection (Requested or Confirmed); Admin decides separately from official job status. Only signed consignment notes and collection sheets are customer-approved. Customers may download at Invoice or Completed; assigned collectors remain Completed-only. Admin and assigned collectors may upload PDF/JPEG/PNG up to 20MB; Statement and exception evidence remain Admin-only. Provisional unknown weights are allowed at request time, not confirmation; 26t remains the hard limit.
+**How to apply:** Warehouse uses operational overview, not the main dashboard. Customers request amendments/cancellation only before collection (Requested or Confirmed); Admin decides separately from official job status. Only signed consignment notes and collection sheets are customer-approved. Customers may download at Invoice or Completed; assigned collectors remain Completed-only. Admin and assigned collectors may upload PDF/JPEG/PNG up to 20MB; exception evidence remains Admin-only, and Statement uploads follow the override below. Provisional unknown weights are allowed at request time, not confirmation; 26t remains the hard limit.
 
 **Why (request cutoff override):** On 2026-10-12 the user specified that once items are collected, amendment/cancellation requests are unavailable. Received and later statuses must show disabled controls and a clear explanation. Collector exception reporting is separate.
 
 **Why (document release override):** On 2026-10-12 the user explicitly moved client document access from Completed to Invoice. Awaiting Invoice is not Invoice; do not change the status ordering or collector release policy as part of this override.
+
+Assigned collectors must be able to upload their Statement to Itinium as the third post-collection document. Clients must never see it. Collectors also need the generated unsigned driver Collection Sheet before collection, separately from signed-document downloads.
+
+**Why:** The user supplied an email on 2026-10-13 reporting loss of both capabilities and explicitly confirming that clients do not see Statements.
+
+**How to apply:** Preserve customer Statement exclusion across UI, metadata, file endpoints and notifications while restoring assigned-collector upload. Do not apply the Completed-only signed-document gate to the unsigned driver sheet; retain explicit collection release, confirmed schedule and assigned-company checks.
 
 Real support/operations addresses, retention duration, extra document types and collector assignment redesign remain deferred. Keep KPI presentation/functionality unchanged apart from enforcing tenant isolation. No automatic publishing.
 
