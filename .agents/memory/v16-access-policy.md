@@ -18,6 +18,12 @@ Assigned collectors must be able to upload their Statement to Itinium as the thi
 
 **How to apply:** Preserve customer Statement exclusion across UI, metadata, file endpoints and notifications while restoring assigned-collector upload. Do not apply the Completed-only signed-document gate to the unsigned driver sheet; retain explicit collection release, confirmed schedule and assigned-company checks.
 
+Collectors need uploaded-file metadata before Completed to track all three outstanding documents; metadata visibility is not permission to view or download the file itself.
+
+**Why:** The collector workflow must confirm successful uploads and retain accurate progress after reload while preserving the signed-file release gate.
+
+**How to apply:** Separate upload progress from content release. Customer requirements and metadata always exclude Statements, and internal document notifications go to Itinium Admin, never the customer Accounts role.
+
 Real support/operations addresses, retention duration, extra document types and collector assignment redesign remain deferred. Keep KPI presentation/functionality unchanged apart from enforcing tenant isolation. No automatic publishing.
 
 Production is in use by real clients; testing must not alter live records or notify live recipients.

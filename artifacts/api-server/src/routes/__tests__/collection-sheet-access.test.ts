@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { canDownloadRawCollectionSheet, collectionSheetInstructions } from "../jobs";
 
-const staffRoles = ["team_leader", "accounts", "head_office_admin"];
+const staffRoles = ["head_office_admin"];
 const jobsRouteSource = readFileSync(join(process.cwd(), "src/routes/jobs.ts"), "utf8");
 
 describe("raw collection sheet access", () => {
@@ -17,7 +17,7 @@ describe("raw collection sheet access", () => {
   it("allows the assigned collection company after Itinium confirms the schedule", () => {
     expect(canDownloadRawCollectionSheet(
       { role: "collection_company", collectionCompanyId: 10 },
-      { collectionCompanyId: 10, scheduleStatus: "confirmed" }
+      { collectionCompanyId: 10, scheduleStatus: "confirmed", collectionReleasedAt: new Date(), collectionDate: "2026-10-20" }
     )).toBe(true);
   });
 
@@ -40,6 +40,17 @@ describe("raw collection sheet access", () => {
       { role: "collection_company", collectionCompanyId: null },
       { collectionCompanyId: 10, scheduleStatus: "confirmed" }
     )).toBe(false);
+  });
+  it.each(["lead_client", "accounts", "team_leader", "depot_user"])("denies customer %s", role => {
+    expect(canDownloadRawCollectionSheet({ role, collectionCompanyId: null },
+      { collectionCompanyId: 10, scheduleStatus: "confirmed", collectionReleasedAt: new Date(), collectionDate: "2026-10-20" })).toBe(false);
+  });
+  it.each([
+    { collectionReleasedAt: null, collectionDate: "2026-10-20" },
+    { collectionReleasedAt: new Date(), collectionDate: null },
+  ])("requires explicit release and a confirmed date (%j)", details => {
+    expect(canDownloadRawCollectionSheet({ role: "collection_company", collectionCompanyId: 10 },
+      { collectionCompanyId: 10, scheduleStatus: "confirmed", ...details })).toBe(false);
   });
 });
 

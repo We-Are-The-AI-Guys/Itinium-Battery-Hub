@@ -62,7 +62,7 @@ export function UserAccessDialog({
   clients: Option[];
   companies: Option[];
   onClose: () => void;
-  onSaved: (result: { tempPassword?: string | null }) => void;
+  onSaved: (result: { tempPassword?: string | null; email?: string }) => void;
 }) {
   const [fullName, setFullName] = useState(user?.fullName || "");
   const [email, setEmail] = useState(user?.email || "");
@@ -120,8 +120,8 @@ export function UserAccessDialog({
         await api(`/api/users/${user.id}`, { method: "PATCH", json: { fullName: fullName.trim(), ...payload } });
         onSaved({});
       } else {
-        const d = await api<{ tempPassword?: string }>("/api/users", { method: "POST", json: { fullName: fullName.trim(), email: email.trim(), ...payload } });
-        onSaved({ tempPassword: d.tempPassword ?? null });
+        const d = await api<{ tempPassword?: string; user: { email: string } }>("/api/users", { method: "POST", json: { fullName: fullName.trim(), email: email.trim(), ...payload } });
+        onSaved({ tempPassword: d.tempPassword ?? null, email: d.user.email });
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save user.");

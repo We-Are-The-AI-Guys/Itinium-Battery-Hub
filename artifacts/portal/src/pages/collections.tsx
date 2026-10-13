@@ -45,6 +45,7 @@ interface CollectionJob {
   depot: string;
   collectionPoint: string | null;
   collectionDate: string | null;
+  collectionReleasedAt: string | null;
   proposedCollectionDate: string | null;
   scheduleStatus: string;
   driverName: string | null;
@@ -225,7 +226,7 @@ export default function CollectionsPage() {
     setDownloadError(null);
     try {
       await downloadFromApi(
-        `/api/jobs/${job.id}/collection-sheet.pdf`,
+        `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/jobs/${job.id}/collection-sheet.pdf`,
         `collection-sheet-${job.reference.toLowerCase().replace(/[^a-z0-9]/g, "-")}.pdf`
       );
     } catch (error) {
@@ -436,6 +437,18 @@ export default function CollectionsPage() {
                     )}
 
 
+                    {job.collectionReleasedAt && job.scheduleStatus === "confirmed" && job.collectionDate && (
+                      <div className="mt-4">
+                        <Button variant="outline" size="sm" disabled={downloadingSheetId !== null}
+                          onClick={() => void downloadCollectionSheet(job)}
+                          data-testid={`button-collection-sheet-${job.id}`}>
+                          <Download className="w-4 h-4 mr-2" />
+                          {downloadingSheetId === job.id ? "Downloading…" : "Collection Sheet PDF"}
+                        </Button>
+                        <p className="text-xs text-slate-500 mt-1">Unsigned collection sheet for the driver.</p>
+                        {downloadError?.jobId === job.id && <p role="alert" className="text-sm text-red-600 mt-2">{downloadError.message} <button className="underline" onClick={() => void downloadCollectionSheet(job)}>Retry</button></p>}
+                      </div>
+                    )}
                     {(job.scheduleStatus === "confirmed" ||
                       ["received", "awaiting_invoice", "invoice", "completed"].includes(job.status)) && (
                       <div className="mt-4 pt-4 border-t border-slate-100">

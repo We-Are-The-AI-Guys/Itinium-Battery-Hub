@@ -29,6 +29,7 @@ export const collectorJobSelection = {
   locationId: jobsTable.locationId,
   collectionPoint: jobsTable.collectionPoint,
   collectionDate: jobsTable.collectionDate,
+  collectionReleasedAt: jobsTable.collectionReleasedAt,
   proposedCollectionDate: jobsTable.proposedCollectionDate,
   scheduleStatus: jobsTable.scheduleStatus,
   driverName: jobsTable.driverName,

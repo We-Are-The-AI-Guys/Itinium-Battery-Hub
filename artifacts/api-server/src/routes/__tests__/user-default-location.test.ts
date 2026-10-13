@@ -79,10 +79,10 @@ describe("default location assignment", () => {
     expect(res.status).toBe(200);
     expect(state.updates).toEqual({ isActive });
   });
-  it("preserves team leader permission to edit assigned location details", async () => {
+  it("keeps location editing admin-only", async () => {
     state.user.role = "team_leader";
-    expect((await request("/clients/10/locations/11", { name: "Updated site" })).status).toBe(200);
-    expect(state.updates).toEqual({ name: "Updated site" });
+    expect((await request("/clients/10/locations/11", { name: "Updated site" })).status).toBe(403);
+    expect(state.updates).toEqual({});
   });
   it.each(["team_leader", "depot_user", "accounts", "collection_company"])(
     "denies every user-management operation to %s before reading or writing user data",
@@ -108,24 +108,24 @@ describe("default location assignment", () => {
     },
   );
   it.each([undefined, []])("admin default selection grants access without a separate permitted selection (%s)", async permittedLocationIds => {
-    state.reads = [[{ clientId: 10, locationId: null }], [], [{ clientId: 10 }], [{ clientId: 10, locationId: null }], [{ clientId: 10, name: "Site B" }]];
+    state.reads = [[{ clientId: 10, locationId: null, role: "depot_user" }], [{ role: "depot_user" }], [], [{ clientId: 10 }], [{ clientId: 10, locationId: null }], [{ clientId: 10, name: "Site B" }]];
     const res = await request("/users/2", { locationId: 12, permittedLocationIds });
     expect(res.status).toBe(200);
     expect(state.updates).toMatchObject({ locationId: 12, depot: "Site B" });
     expect(state.inserts).toContainEqual({ userId: 2, locationId: 12 });
   });
   it("assigns a same-client default", async () => {
-    state.reads = [[{ clientId: 10, locationId: null }], [], [{ clientId: 10 }], [{ clientId: 10, locationId: null }], [{ clientId: 10, name: "Site B" }]];
+    state.reads = [[{ clientId: 10, locationId: null, role: "depot_user" }], [{ role: "depot_user" }], [], [{ clientId: 10 }], [{ clientId: 10, locationId: null }], [{ clientId: 10, name: "Site B" }]];
     expect((await request("/users/2", { locationId: 12, permittedLocationIds: [12] })).status).toBe(200);
     expect(state.updates).toMatchObject({ locationId: 12, depot: "Site B" });
   });
   it("rejects a default from another client", async () => {
-    state.reads = [[{ clientId: 10, locationId: 11 }], [], [{ clientId: 20, name: "Foreign site" }]];
+    state.reads = [[{ clientId: 10, locationId: 11, role: "depot_user" }], [{ role: "depot_user" }], [], [{ clientId: 20, name: "Foreign site" }]];
     expect((await request("/users/2", { locationId: 22, permittedLocationIds: [22] })).status).toBe(403);
     expect(state.updates).toEqual({});
   });
   it("clears the old default when client changes without a replacement", async () => {
-    state.reads = [[{ clientId: 10, locationId: 11 }], [{ id: 11 }], [{ clientId: 10, locationId: 11 }]];
+    state.reads = [[{ clientId: 10, locationId: 11, role: "depot_user" }], [{ role: "depot_user" }], [{ id: 11 }], [{ clientId: 10, locationId: 11 }]];
     expect((await request("/users/2", { clientId: 20 })).status).toBe(200);
     expect(state.updates).toMatchObject({ clientId: 20, locationId: null, depot: null });
   });

@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { notificationsTable, jobsTable } from "@workspace/db/schema";
-import { eq, and, desc, asc, inArray, or, isNull } from "drizzle-orm";
+import { eq, and, desc, asc, inArray, notInArray, or, isNull } from "drizzle-orm";
+import { INTERNAL_DOCUMENT_NOTIFICATION_TYPES } from "../lib/notifications";
 import { isClientUser, jobScope } from "../lib/depot-access";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/auth";
 
@@ -17,6 +18,7 @@ router.get(
         .select()
         .from(notificationsTable)
         .where(and(eq(notificationsTable.userId, userId),
+          isClientUser(req.user!) ? notInArray(notificationsTable.type, INTERNAL_DOCUMENT_NOTIFICATION_TYPES) : undefined,
           isClientUser(req.user!) ? or(and(isNull(notificationsTable.jobId), eq(notificationsTable.type, "support_resolved")), inArray(notificationsTable.jobId, db.select({ id: jobsTable.id }).from(jobsTable).where(jobScope(req.user!)))) : undefined))
         .orderBy(asc(notificationsTable.isRead), desc(notificationsTable.createdAt))
         .limit(50);

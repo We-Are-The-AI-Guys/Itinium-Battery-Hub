@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { notificationsTable, usersTable, jobsTable, userLocationsTable } from "@workspace/db/schema";
 import { userLocationIds } from "./user-memberships";
 import { isClientUser, mayAccessDepot } from "./depot-access";
+import { isAdmin } from "./access-policy";
 import { eq, inArray, and, lt } from "drizzle-orm";
 import { Resend } from "resend";
 import { buildBrandedEmail } from "./email";
@@ -103,12 +104,15 @@ export type NotificationPayload = {
   attachments?: Array<{ filename: string; content: Buffer; contentType: string }>;
 };
 
+export const INTERNAL_DOCUMENT_NOTIFICATION_TYPES = ["statement_uploaded", "collection_documents_complete"];
+
 export async function dispatchNotification(
   userId: number,
   payload: NotificationPayload
 ): Promise<void> {
   const [recipient] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
   if (!recipient?.isActive) return;
+  if (INTERNAL_DOCUMENT_NOTIFICATION_TYPES.includes(payload.type) && !isAdmin(recipient)) return;
   // Resolve legacy callers' exact job reference; never guess a depot from text.
   const reference = `${payload.title} ${payload.body}`.match(/\bJOB-\d{4}-\d{5}\b/)?.[0];
   const linkedId = payload.jobId ?? Number(payload.link?.match(/^\/jobs\/(\d+)/)?.[1]);
@@ -642,14 +646,15 @@ export async function notifySiteContactScheduleConfirmed(
 // The collection company uploaded their statement — accounts raise the
 // Itinium invoice from it, so tell them it has arrived.
 export async function notifyAccountsStatementUploaded(job: JobRef, fileName: string): Promise<void> {
-  const { accountIds } = await recipientsForJob(job);
+  // Accounts is a customer role; internal invoicing notifications go to Itinium only.
+  const accountIds = await recipientsWithRoles(["head_office_admin"]);
   const link = portalLink(`/jobs/${job.id}`);
   const emailHtml = buildBrandedEmail(
     `Statement uploaded — ${escapeHtml(job.reference)}`,
     `<p style="color:#475569;margin:0 0 4px;">The collection company has uploaded their statement (<strong>${escapeHtml(fileName)}</strong>) for collection <strong>${escapeHtml(job.reference)}</strong>. You can now raise the invoice to them.</p>
     ${jobTable(job)}
     ${ctaButton(link, "View Documents")}`,
-    "You are receiving this because you are an accounts user on the Itinium Battery Portal."
+    "You are receiving this because you are an Itinium administrator on the Battery Portal."
   );
   await dispatchToMany(accountIds, {
     type: "statement_uploaded",

@@ -23,6 +23,7 @@ interface JobDocument {
 interface DocumentsState {
   documents: JobDocument[];
   canUpload: boolean;
+  releasePending: boolean;
 }
 
 // Post-collection documents panel. `mode="upload"` (collection company view)
@@ -47,7 +48,7 @@ export function JobDocumentsPanel({
       const res = await fetch(`${API_BASE}/api/jobs/${jobId}/documents`, { credentials: "include" });
       if (res.ok) {
         const data = await res.json();
-        setState({ documents: data.documents || [], canUpload: !!data.canUpload });
+        setState({ documents: data.documents || [], canUpload: !!data.canUpload, releasePending: !!data.releasePending });
         setError("");
       } else {
         setError("Could not load collection documents.");
@@ -156,7 +157,7 @@ export function JobDocumentsPanel({
   if (!state) return error ? <p role="alert">{error} <button className="underline" onClick={load}>Retry</button></p> : <p className="text-sm text-slate-500">Loading documents…</p>;
   if (mode === "review" && state.documents.length === 0 && !state.canUpload) return null;
 
-  const visibleTypes = DOC_TYPES.filter(d => d.type !== "statement" || ((mode === "review" || mode === "admin") && state.documents.some(doc => doc.docType === "statement")));
+  const visibleTypes = DOC_TYPES.filter(d => d.type !== "statement" || mode !== "customer");
   const canUploadHere = (mode === "upload" && state.canUpload) || mode === "admin";
   const outstanding = visibleTypes.filter((d) => !state.documents.some((doc) => doc.docType === d.type));
 
@@ -207,7 +208,7 @@ export function JobDocumentsPanel({
                   <p className="text-xs text-slate-400">Not uploaded yet</p>
                 )}
               </div>
-              {doc && (
+              {doc && !state.releasePending && (
                 <div className="flex items-center gap-2 shrink-0">
                   <Button
                     size="sm"
@@ -227,7 +228,7 @@ export function JobDocumentsPanel({
                   </Button>
                 </div>
               )}
-              {canUploadHere && type !== "statement" && (
+              {canUploadHere && (type !== "statement" || mode === "upload") && (
                 <Button
                   size="sm"
                   className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white shrink-0"
@@ -248,10 +249,11 @@ export function JobDocumentsPanel({
       </ul>
       {mode === "upload" && !state.canUpload && (
         <p className="text-xs text-slate-400 mt-1.5">
-          You can upload the signed collection sheet and consignment note once the collection has been carried out.
+          You can upload the signed collection sheet, consignment note and Statement to Itinium once the collection has been carried out.
         </p>
       )}
-      {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+      {mode === "upload" && state.releasePending && <p className="text-xs text-slate-500 mt-2">Uploaded status is shown below. File viewing and downloads are released when Itinium marks the job Completed.</p>}
+      {error && <p role="alert" className="text-sm text-red-600 mt-2">{error} <button className="underline" onClick={load}>Refresh status</button> · Retry an upload using its Upload or Replace button.</p>}
     </div>
   );
 }

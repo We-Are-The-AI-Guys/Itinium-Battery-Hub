@@ -31,7 +31,7 @@ const loginRateLimiter = rateLimit({
 });
 
 const loginBodySchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().toLowerCase().email(),
   password: z.string().min(1),
 });
 

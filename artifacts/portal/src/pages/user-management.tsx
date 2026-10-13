@@ -131,6 +131,7 @@ export default function UserManagementPage() {
   const [collectionCompanies, setCollectionCompanies] = useState<{ id: number; name: string }[]>([]);
 
   const [createdTempPassword, setCreatedTempPassword] = useState<string | null>(null);
+  const [createdEmail, setCreatedEmail] = useState("");
   const [copiedPassword, setCopiedPassword] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [linkError, setLinkError] = useState("");
@@ -319,6 +320,7 @@ export default function UserManagementPage() {
       if (res.ok) {
         const data = await res.json();
         setCreatedTempPassword(data.tempPassword || null);
+        setCreatedEmail(data.user.email);
         setNewUser({ fullName: "", email: "", role: "", clientId: "", locationId: "", collectionCompanyId: "" });
         setNewPermittedIds([]);
         fetchUsers();
@@ -366,6 +368,7 @@ export default function UserManagementPage() {
   function closeTempPasswordModal() {
     setShowModal(false);
     setCreatedTempPassword(null);
+    setCreatedEmail("");
     setCopiedPassword(false);
   }
 
@@ -760,6 +763,8 @@ export default function UserManagementPage() {
                     The account has been created. This temporary password will only be shown once. Send it privately, separately from the sign-in link. Never share a screenshot of this page.
                   </p>
                   <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
+                    <p className="text-sm text-slate-700">Sign-in email: <strong>{createdEmail}</strong></p>
+                    <p className="text-xs text-slate-500">These credentials work only in the portal environment where this account was created. A preview account is not a published-portal account.</p>
                     <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Temporary Password</p>
                     <div className="flex items-center gap-2">
                       <code className="flex-1 text-base font-mono font-bold text-[#0f2744] tracking-widest select-all">
@@ -1165,11 +1170,11 @@ export default function UserManagementPage() {
           clients={clients}
           companies={collectionCompanies}
           onClose={() => setAccessDialog(null)}
-          onSaved={({ tempPassword }) => {
+          onSaved={({ tempPassword, email }) => {
             setAccessDialog(null);
             fetchUsers();
             fetchStats();
-            if (tempPassword) { setCreatedTempPassword(tempPassword); setShowModal(true); }
+            if (tempPassword) { setCreatedEmail(email || ""); setCreatedTempPassword(tempPassword); setShowModal(true); }
           }}
         />
       )}

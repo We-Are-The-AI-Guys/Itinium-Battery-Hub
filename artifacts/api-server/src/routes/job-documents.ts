@@ -110,7 +110,7 @@ async function loadJobForCompany(req: AuthenticatedRequest, jobId: number) {
   if (!job) return null;
   if (isClientUser(req.user!) && !mayAccessDepot(req.user!, job)) return null;
   if (req.user!.role === "collection_company") {
-    if (!req.user!.collectionCompanyId || job.collectionCompanyId !== req.user!.collectionCompanyId) {
+    if (!req.user!.collectionCompanyId || job.collectionCompanyId !== req.user!.collectionCompanyId || !job.collectionReleasedAt) {
       return null;
     }
   }
@@ -147,7 +147,8 @@ router.get(
         res.status(404).json({ message: "Job not found" });
         return;
       }
-      const visibleTypes = isAdmin(req.user!) ? [...JOB_DOCUMENT_TYPES] : [...CUSTOMER_DOCUMENT_TYPES];
+      const collector = req.user!.role === "collection_company";
+      const visibleTypes = isAdmin(req.user!) || collector ? [...JOB_DOCUMENT_TYPES] : [...CUSTOMER_DOCUMENT_TYPES];
       const documents = await db
         .select({
           id: jobDocumentsTable.id,
@@ -160,7 +161,7 @@ router.get(
         .from(jobDocumentsTable)
         .where(and(eq(jobDocumentsTable.jobId, job.id), inArray(jobDocumentsTable.docType, visibleTypes)));
       res.json({
-        documents: documentsReleased(req.user!, job.status) ? documents : [],
+        documents: documentsReleased(req.user!, job.status) || collector ? documents : [],
         requiredTypes: visibleTypes,
         outstandingTypes: visibleTypes.filter((t) => !documents.some((d) => d.docType === t)),
         canUpload: !isClientUser(req.user!) && (isAdmin(req.user!) || canUploadDocuments(job)),
@@ -196,7 +197,7 @@ router.post(
         res.status(400).json({ message: parsed.error.issues[0]?.message || "Invalid upload request" });
         return;
       }
-      if (!(CUSTOMER_DOCUMENT_TYPES as readonly string[]).includes(parsed.data.docType)) {
+      if (isAdmin(req.user!) && parsed.data.docType === "statement") {
         res.status(403).json({ message: "Only signed collection sheets and consignment notes may be uploaded here" }); return;
       }
       const job = await loadJobForCompany(req, parseInt(String(req.params.id), 10));
@@ -257,7 +258,7 @@ router.post(
         return;
       }
       const { docType, name, size, contentType, objectPath, uploadToken } = parsed.data;
-      if (!(CUSTOMER_DOCUMENT_TYPES as readonly string[]).includes(docType)) {
+      if (isAdmin(req.user!) && docType === "statement") {
         res.status(403).json({ message: "This document type is not permitted" }); return;
       }
 
@@ -301,7 +302,7 @@ router.post(
         return;
       }
 
-      const { document, documentsBecameComplete } = await db.transaction(async (tx) => {
+      const { document, documentsBecameComplete, statementChanged } = await db.transaction(async (tx) => {
         // Serialise uploads for this job so two simultaneous final uploads
         // cannot miss or duplicate the one-time completion notification.
         await tx.execute(sql`SELECT id FROM jobs WHERE id = ${job.id} FOR UPDATE`);
@@ -341,13 +342,14 @@ router.post(
 
         return {
           document: savedDocument,
+          statementChanged: docType === "statement" && !previous.some(d => d.objectPath === objectPath),
           documentsBecameComplete: !wasComplete && completesRequiredDocumentSet(existingTypes, docType),
         };
       });
 
       // The statement triggers invoicing — tell accounts it has arrived.
-      if (docType === "statement") {
-        notifyAccountsStatementUploaded(
+      if (statementChanged) {
+        await notifyAccountsStatementUploaded(
           {
             id: job.id,
             reference: job.reference,
@@ -392,7 +394,7 @@ async function serveDocument(
   disposition: "inline" | "attachment"
 ) {
   const docType = String(req.params.docType);
-  if (!isAdmin(req.user!) && !(CUSTOMER_DOCUMENT_TYPES as readonly string[]).includes(docType)) {
+  if (!isAdmin(req.user!) && req.user!.role !== "collection_company" && !(CUSTOMER_DOCUMENT_TYPES as readonly string[]).includes(docType)) {
     res.status(404).json({ message: "Document not found" });
     return;
   }

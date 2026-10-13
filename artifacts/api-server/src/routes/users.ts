@@ -144,7 +144,7 @@ const createUserSchema = z.object({
   roles: z.array(z.enum(["head_office_admin", "lead_client", "accounts", "team_leader", "depot_user", "collection_company"])).min(1).optional(),
   permittedLocationIds: z.array(z.number().int().positive()).optional(),
   fullName: z.string().min(1),
-  email: z.string().email(),
+  email: z.string().trim().toLowerCase().email(),
   role: z.enum(["lead_client", "depot_user", "team_leader", "accounts", "head_office_admin", "collection_company"]),
   depot: z.string().nullable().optional(),
   clientId: z.number().nullable().optional(),
@@ -213,7 +213,7 @@ router.post(
 
       const permittedIds = [...new Set(parsed.data.permittedLocationIds ?? (locationId ? [locationId] : []))];
       // An administrator's explicit default selection is also an access grant.
-      if (parsed.data.permittedLocationIds === undefined && req.user!.role === "head_office_admin" && locationId && !permittedIds.includes(locationId)) permittedIds.push(locationId);
+      if (!permittedIds.length && req.user!.role === "head_office_admin" && locationId) permittedIds.push(locationId);
       for (const id of permittedIds) {
         const [loc] = await db.select().from(locationsTable).where(eq(locationsTable.id, id));
         if (!loc || loc.clientId !== clientId || (req.user!.role === "team_leader" && !req.user!.permittedLocationIds?.includes(id))) {
@@ -424,7 +424,7 @@ router.patch(
       if (parsed.data.locationId && !nextClient) {
         res.status(400).json({ message: "Cannot assign a location without a client" }); return;
       }
-      if (parsed.data.permittedLocationIds === undefined && req.user!.role === "head_office_admin" && parsed.data.locationId && !permittedIds.includes(parsed.data.locationId)) {
+      if (!permittedIds.length && req.user!.role === "head_office_admin" && parsed.data.locationId) {
         permittedIds.push(parsed.data.locationId);
       }
       for (const id of permittedIds) {

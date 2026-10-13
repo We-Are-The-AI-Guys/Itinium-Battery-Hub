@@ -873,12 +873,14 @@ router.get(
 
 export function canDownloadRawCollectionSheet(
   user: Pick<NonNullable<AuthenticatedRequest["user"]>, "role" | "collectionCompanyId">,
-  job: { collectionCompanyId: number | null; scheduleStatus: string | null }
+  job: { collectionCompanyId: number | null; scheduleStatus: string | null; collectionReleasedAt?: Date | string | null; collectionDate?: string | null }
 ) {
-  if (["team_leader", "accounts", "head_office_admin"].includes(user.role)) return true;
+  if (user.role === "head_office_admin") return true;
   return user.role === "collection_company"
     && user.collectionCompanyId != null
     && job.collectionCompanyId === user.collectionCompanyId
+    && !!job.collectionReleasedAt
+    && !!job.collectionDate
     && job.scheduleStatus === "confirmed";
 }
 
