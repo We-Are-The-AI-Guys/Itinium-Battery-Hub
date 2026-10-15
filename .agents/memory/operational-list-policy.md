@@ -5,11 +5,11 @@ description: Estimated versus confirmed Pb weights and non-financial operational
 
 ## Latest reported clarification — 15 October 2026
 
-The user subsequently clarified that KPIs and Dashboard should use estimated and confirmed **net** weights, not gross loading weights. They requested a read-only review before approving implementation changes.
+The user subsequently clarified that KPIs and Dashboard should use estimated and confirmed **net** weights, not gross loading weights. They explicitly chose: use estimated net until receipt review is complete, then replace it with confirmed net. The discussion remains review-first; selecting the rule does not independently authorise publishing.
 
 **Why:** Ingrid believes KPI tonnage is using the Dashboard's gross-weight source. This supersedes the older instruction below to retain gross operational Dashboard tonnage.
 
-**How to apply:** Keep gross loading/capacity calculations separate from reporting. Agree the estimated-to-confirmed transition and role visibility before changing reporting; this clarification alone does not authorise code or data changes.
+**How to apply:** Apply the chosen transition per job, only after its receipt review is complete; do not replace the estimate with a partially reviewed total. Keep gross loading/capacity calculations separate from reporting. Preserve role visibility and establish the confirmed-net source before implementation; the preceding request was to review before making changes.
 
 Ingrid's email specifies Job Management should show estimated/loading weight, while Dashboard should show confirmed weight used for payment. Use the chemical symbol “Pb”, not “PB”.
 
