@@ -24,7 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SidebarLayout } from "@/components/sidebar-layout";
-import { formatGrossWeightKg } from "@/lib/gross-weight";
+import { formatPbKg } from "@/lib/job-list-format";
 
 interface DashboardStats {
   pendingJobs: number;
@@ -48,6 +48,8 @@ interface Job {
   depot: string;
   submittedAt: string;
   tonnage: string;
+  pbContentKgSum: string | null;
+  weightConfirmed: boolean;
   reportingNetTonnage?: string | null;
   reportingWeightConfirmed?: boolean;
   customerTractionTonnage: string | null;
@@ -508,7 +510,8 @@ export default function AdminDashboardPage() {
                     {formatDate(job.submittedAt)}
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">
-                    {formatGrossWeightKg(job.tonnage)}
+                    {formatPbKg(job.pbContentKgSum)}
+                    {job.pbContentKgSum != null && <span className="block text-xs text-slate-500">{job.weightConfirmed ? "Confirmed" : "Estimated"}</span>}
                   </td>
                   {dashboardTab === "financial" && (
                     <>

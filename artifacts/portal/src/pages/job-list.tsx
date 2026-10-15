@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { useToast } from "@/hooks/use-toast";
-import { formatPbKg } from "@/lib/job-list-format";
+import { formatGrossWeightKg } from "@/lib/gross-weight";
 
 interface Job {
   signedDocumentTypes?: string[];
@@ -36,6 +36,7 @@ interface Job {
   collectionDate: string | null;
   submittedAt: string;
   pbContentKgSum: string | null;
+  tonnage: string | null;
   weightConfirmed: boolean;
   palletCount: number;
   status: string;
@@ -343,12 +344,7 @@ export default function JobListPage() {
                     {job.collectionPoint || "—"}
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">
-                    {formatPbKg(job.pbContentKgSum)}
-                    {job.pbContentKgSum !== null && (
-                      <span className="block text-xs font-normal text-slate-500">
-                        {job.weightConfirmed ? "Confirmed" : "Estimated"}
-                      </span>
-                    )}
+                    {formatGrossWeightKg(job.tonnage)}
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">{job.palletCount}</td>
                   <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
