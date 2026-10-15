@@ -18,7 +18,7 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       id: 1, reference: "WEIGHT-TEST", clientName: "Test", depot: "Depot",
       submittedAt: "2026-10-08", tonnage: "9.876", status: "request",
       customerTractionTonnage: traction, customerBlocsTonnage: blocs,
-      reportingNetTonnage: "5.000", reportingWeightConfirmed: false,
+      reportingNetTonnage: null, reportingWeightConfirmed: false,
       wasteTractionTonnage: "7.000", wasteBlocsTonnage: "2.000", pbContentKgSum: "8000",
       palletCount: 4, calculatedValue: "1250", grossProfit: "250",
     }], pagination: { limit: 8, offset: Number(new URL(url, "http://test").searchParams.get("offset")), total: 16, totalPages: 2 } }
@@ -40,20 +40,20 @@ describe("Customer Pb dashboard weight", () => {
     expect(formatCustomerPbWeight(a, b)).toBe(expected);
   });
 
-  it("uses reporting net weight in both tabs, filtering, pagination and reloads, never gross or editable financial weights", async () => {
+  it("shows gross kilograms even without net reporting weight, across tabs, filtering, pagination and reloads", async () => {
     const view = render(<AdminDashboardPage />);
-    await screen.findByText("5,000");
+    await screen.findByText("9,876");
     const table = within(screen.getByRole("table"));
     expect(table.getByRole("columnheader", { name: "Pb(Kg)" })).toBeTruthy();
     expect(screen.getByRole("table").querySelector("thead")).not.toHaveClass("uppercase");
-    expect(table.getByText("Estimated")).toBeTruthy();
+    expect(table.queryByText("Confirmed")).toBeNull();
     expect(table.getByRole("columnheader", { name: "Pallets" })).toBeTruthy();
     expect(table.getByRole("cell", { name: "4", exact: true })).toBeTruthy();
     expect(table.queryByRole("columnheader", { name: "Value", exact: true })).toBeNull();
     expect(table.queryByRole("columnheader", { name: "Gross Profit" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Financial", exact: true }));
     expect(table.getByRole("columnheader", { name: "Pb(Kg)" })).toBeTruthy();
-    expect(table.getByText("5,000")).toBeTruthy();
+    expect(table.getByText("9,876")).toBeTruthy();
     expect(table.queryByText("1.240t")).toBeNull();
     expect(table.getByRole("columnheader", { name: "Value", exact: true })).toBeTruthy();
     expect(table.getByRole("columnheader", { name: "Gross Profit" })).toBeTruthy();
@@ -64,9 +64,9 @@ describe("Customer Pb dashboard weight", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/jobs?status=request&limit=8&offset=0", expect.anything()));
     fireEvent.click(screen.getByRole("button", { name: "2", exact: true }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/jobs?status=request&limit=8&offset=8", expect.anything()));
-    expect(table.getByText("5,000")).toBeTruthy();
+    expect(table.getByText("9,876")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Operational", exact: true }));
-    expect(table.getByText("5,000")).toBeTruthy();
+    expect(table.getByText("9,876")).toBeTruthy();
     expect(table.queryByRole("columnheader", { name: "Value", exact: true })).toBeNull();
     expect(table.queryByRole("columnheader", { name: "Gross Profit" })).toBeNull();
     view.unmount();
@@ -77,7 +77,7 @@ describe("Customer Pb dashboard weight", () => {
     expect(headers.slice(headers.indexOf("Pallets"), headers.indexOf("Pallets") + 3)).toEqual(["Pallets", "Status", "Documents"]);
     expect(within(screen.getByRole("table")).getAllByText("Not uploaded")).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Financial", exact: true }));
-    expect(within(screen.getByRole("table")).getByText("5,000")).toBeTruthy();
+    expect(within(screen.getByRole("table")).getByText("9,876")).toBeTruthy();
     expect(within(screen.getByRole("table")).queryByText("2.005t")).toBeNull();
   });
 });

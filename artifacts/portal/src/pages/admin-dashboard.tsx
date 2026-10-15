@@ -24,7 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SidebarLayout } from "@/components/sidebar-layout";
-import { formatReportingNetWeight } from "@/lib/reporting-net-weight";
+import { formatGrossWeightKg } from "@/lib/gross-weight";
 
 interface DashboardStats {
   pendingJobs: number;
@@ -508,8 +508,7 @@ export default function AdminDashboardPage() {
                     {formatDate(job.submittedAt)}
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">
-                    {formatReportingNetWeight(job.reportingNetTonnage)}
-                    {job.reportingNetTonnage != null && <span className="block text-xs text-slate-500">{job.reportingWeightConfirmed ? "Confirmed" : "Estimated"}</span>}
+                    {formatGrossWeightKg(job.tonnage)}
                   </td>
                   {dashboardTab === "financial" && (
                     <>

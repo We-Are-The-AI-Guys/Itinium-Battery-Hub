@@ -7,7 +7,7 @@ import { canSeeInvoiceTotal, hasRole } from "@/lib/roles";
 import { JobDocumentDownloads } from "@/components/job-document-downloads";
 import { StatusPill, SkeletonRows, ErrorState, EmptyState } from "@/components/v16-ui";
 import { api, fmtDate, fmtGBP, type SafeJob } from "@/lib/v16-api";
-import { formatReportingNetWeight } from "@/lib/reporting-net-weight";
+import { formatGrossWeightKg } from "@/lib/gross-weight";
 
 interface CustomerStats {
   pendingJobs?: number;
@@ -177,8 +177,7 @@ export default function CustomerDashboardPage() {
                     <td className="px-6 py-3 text-slate-600">{j.depot || "—"}</td>
                     <td className="px-6 py-3 text-slate-600">{fmtDate(j.submittedAt)}</td>
                     <td className="px-6 py-3 text-slate-600 tabular-nums">
-                      {formatReportingNetWeight(j.reportingNetTonnage)}
-                      {j.reportingNetTonnage != null && <span className="block text-xs">{j.reportingWeightConfirmed ? "Confirmed" : "Estimated"}</span>}
+                      {formatGrossWeightKg(j.tonnage)}
                     </td>
                     <td className="px-6 py-3 text-slate-600 tabular-nums">{j.palletCount ?? "—"}</td>
                     <td className="px-6 py-3"><StatusPill status={j.status} /></td>
