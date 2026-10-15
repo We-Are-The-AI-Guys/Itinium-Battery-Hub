@@ -159,12 +159,12 @@ export default function CustomerDashboardPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
-              <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+              <thead className="text-xs text-slate-500 bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="px-6 py-3 font-semibold">Job ID</th>
                   <th className="px-6 py-3 font-semibold">Depot</th>
                   <th className="px-6 py-3 font-semibold">Date Submitted</th>
-                  <th className="px-6 py-3 font-semibold">Net weight (t)</th>
+                  <th className="px-6 py-3 font-semibold">Pb(Kg)</th>
                   <th className="px-6 py-3 font-semibold">Pallets</th>
                   <th className="px-6 py-3 font-semibold">Status</th>
                   <th className="px-6 py-3 font-semibold">Documents</th>

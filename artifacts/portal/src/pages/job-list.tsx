@@ -302,13 +302,13 @@ export default function JobListPage() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+            <thead className="text-xs text-slate-500 bg-slate-50 border-b border-slate-200">
               <tr>
                 <th className="px-6 py-3.5 font-semibold">Job No.</th>
                 <th className="px-6 py-3.5 font-semibold">Collection Date</th>
                 <th className="px-6 py-3.5 font-semibold">Customer</th>
                 <th className="px-6 py-3.5 font-semibold">Collection Point</th>
-                <th className="px-6 py-3.5 font-semibold">Pb (Kg)</th>
+                <th className="px-6 py-3.5 font-semibold">Pb(Kg)</th>
                 <th className="px-6 py-3.5 font-semibold">Pallets</th>
                 <th className="px-6 py-3.5 font-semibold">Status</th>
                 <th className="px-6 py-3.5 font-semibold">Documents</th>

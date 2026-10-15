@@ -5,6 +5,12 @@ description: Estimated versus confirmed Pb weights and non-financial operational
 
 ## Latest reported clarification — 15 October 2026
 
+Dashboard job-table headings must remain **Pb(Kg)** with kilograms displayed; do not rename them to Net Weight/Tonnage when changing the underlying reporting source. Preserve mixed-case column headings so the chemical symbol stays **Pb**, not **PB**.
+
+**Why:** The user explicitly corrected the unsolicited relabelling and forced uppercase formatting.
+
+**How to apply:** Keep reporting-source changes separate from label/unit changes. Retain the approved estimated-to-confirmed weight basis; convert tonnes to kilograms for these table displays only, without changing KPI totals or loading calculations.
+
 The user clarified that KPIs and Dashboard should use estimated and confirmed **net** weights, not gross loading weights. They explicitly chose: use estimated net until receipt review is complete, then replace it with confirmed net. They approved development implementation and testing, without publishing.
 
 **Why:** Ingrid believes KPI tonnage is using the Dashboard's gross-weight source. This supersedes the older instruction below to retain gross operational Dashboard tonnage.

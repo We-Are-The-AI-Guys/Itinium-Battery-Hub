@@ -33,7 +33,9 @@ describe("corrective specification customer surfaces", () => {
     const table = await screen.findByRole("table");
     const viewLinks = await within(table).findAllByRole("link", { name: /View signed/ });
     expect(viewLinks).toHaveLength(2);
-    expect(within(table).getByText("4.000t")).toBeInTheDocument();
+    expect(within(table).getByText("4,000")).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "Pb(Kg)" })).toBeInTheDocument();
+    expect(table.querySelector("thead")).not.toHaveClass("uppercase");
     expect(within(table).getByText("Confirmed")).toBeInTheDocument();
     expect(within(table).queryByText("14.0t")).not.toBeInTheDocument();
     expect(within(table).getAllByRole("button", { name: /Download signed/ })).toHaveLength(2);

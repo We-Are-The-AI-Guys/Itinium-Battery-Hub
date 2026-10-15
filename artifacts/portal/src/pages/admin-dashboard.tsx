@@ -469,14 +469,14 @@ export default function AdminDashboardPage() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+            <thead className="text-xs text-slate-500 bg-slate-50 border-b border-slate-200">
               <tr>
                 <th className="px-6 py-4 font-semibold">Job ID</th>
                 <th className="px-6 py-4 font-semibold">Client Name</th>
                 <th className="px-6 py-4 font-semibold">Depot</th>
                 <th className="px-6 py-4 font-semibold">Date Submitted</th>
                 <th className="px-6 py-4 font-semibold">
-                  Net weight (t)
+                  Pb(Kg)
                 </th>
                 {dashboardTab === "financial" && (
                   <>
