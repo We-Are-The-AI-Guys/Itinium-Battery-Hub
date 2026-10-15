@@ -3,6 +3,14 @@ name: Operational job lists
 description: Estimated versus confirmed Pb weights and non-financial operational tables.
 ---
 
+## Latest reported clarification — 15 October 2026
+
+Ingrid's email specifies Job Management should show estimated/loading weight, while Dashboard should show confirmed weight used for payment. Use the chemical symbol “Pb”, not “PB”.
+
+**Why:** She reports these weight sources are reversed. This is a business clarification supplied for review, not yet an approved implementation plan.
+
+**How to apply:** Reconcile the older rules below before further weight-display changes. Confirm which dashboard tab/role she means and distinguish gross loading weight from lead weight; do not infer broader customer Pb access or treat an absent confirmed weight as estimated payment weight.
+
 All jobs must show unconfirmed weight until Itinium confirms receipt, with pallet totals instead of monetary totals. The dashboard Operational table should not show Value or Gross Profit; financial views remain unchanged.
 
 The user explicitly clarified that the Operational dashboard needs a Pallets column, while the Financial dashboard must retain both Value and Gross Profit. Removal of financial columns applies only to Operational, not the shared table in both tabs.
