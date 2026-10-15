@@ -2,14 +2,17 @@ import { Router } from "express";
 import ExcelJS from "exceljs";
 import { db } from "@workspace/db";
 import { jobsTable } from "@workspace/db/schema";
-import { and, eq, sql, asc } from "drizzle-orm";
+import { and, eq, sql, asc, getTableColumns } from "drizzle-orm";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { jobScope } from "../lib/depot-access";
 import { isAdmin } from "../lib/access-policy";
 import { kpiDateRange } from "../lib/kpi-policy";
+import { reportingNetTonnage, reportingWeightConfirmed } from "../lib/reporting-net-weight";
 
 const router = Router();
-export function customerJobWorkbook(jobs: (typeof jobsTable.$inferSelect)[], includePbWeights = false) {
+export function customerJobWorkbook(jobs: (typeof jobsTable.$inferSelect & {
+  reportingNetTonnage?: string | null; reportingWeightConfirmed?: boolean;
+})[], includePbWeights = false) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("KPI jobs");
   ws.columns = [
@@ -18,8 +21,8 @@ export function customerJobWorkbook(jobs: (typeof jobsTable.$inferSelect)[], inc
     { header: "Client", key: "client", width: 30 },
     { header: "Collection Point", key: "collectionPoint", width: 40 },
     ...(includePbWeights ? [
-      { header: "Traction Tonnage (Kg)", key: "tractionTonnage", width: 24 },
-      { header: "Bloc Tonnage (Kg)", key: "blocs", width: 22 },
+      { header: "Net Weight (Kg)", key: "netWeight", width: 24 },
+      { header: "Weight Basis", key: "weightBasis", width: 22 },
     ] : []),
     { header: "LME Value £", key: "traction", width: 22 },
     { header: "Transport", key: "transport", width: 22 },
@@ -35,7 +38,10 @@ export function customerJobWorkbook(jobs: (typeof jobsTable.$inferSelect)[], inc
     collectionDate: job.collectionDate ? new Date(`${job.collectionDate}T00:00:00Z`) : null,
     client: job.clientName ?? "", collectionPoint: job.collectionPoint ?? "",
     traction: number(job.customerTractionRate),
-    ...(includePbWeights ? { blocs: kilograms(job.customerBlocsTonnage), tractionTonnage: kilograms(job.customerTractionTonnage) } : {}),
+    ...(includePbWeights ? {
+      netWeight: kilograms(job.reportingNetTonnage ?? null),
+      weightBasis: job.reportingNetTonnage == null ? "Unavailable" : job.reportingWeightConfirmed ? "Confirmed" : "Estimated",
+    } : {}),
     transport: number(job.customerTransportCost),
     invoice: number(job.customerInvoiceValue), invoiceNo: job.customerInvoiceNo ?? "" });
   const header = ws.getRow(1);
@@ -48,7 +54,7 @@ export function customerJobWorkbook(jobs: (typeof jobsTable.$inferSelect)[], inc
   });
   ws.views = [{ state: "frozen", ySplit: 1 }];
   ws.getColumn("collectionDate").numFmt = "dd/mm/yyyy";
-  if (includePbWeights) for (const key of ["tractionTonnage", "blocs"]) ws.getColumn(key).numFmt = "#,##0";
+  if (includePbWeights) ws.getColumn("netWeight").numFmt = "#,##0";
   ws.getColumn("traction").numFmt = '£#,##0.00';
   for (const key of ["transport", "invoice"]) ws.getColumn(key).numFmt = '£#,##0.00';
   ws.getColumn("invoiceNo").numFmt = "@";
@@ -65,7 +71,11 @@ router.get("/kpi/export.xlsx", requireAuth,
     catch (error) { res.status(400).json({ message: error instanceof Error ? error.message : "Invalid date range" }); return; }
     try {
       const { fromDate, toDate } = dates;
-      const jobs = await db.select().from(jobsTable).where(and(
+      const jobs = await db.select({
+        ...getTableColumns(jobsTable),
+        reportingNetTonnage: reportingNetTonnage(),
+        reportingWeightConfirmed: reportingWeightConfirmed(),
+      }).from(jobsTable).where(and(
         jobScope(req.user!),
         sql`${jobsTable.submittedAt} >= ${fromDate} AND ${jobsTable.submittedAt} < ${toDate}`,
         isAdmin(req.user!) && clientId && !isNaN(parseInt(clientId)) ? eq(jobsTable.clientId, parseInt(clientId)) : undefined,

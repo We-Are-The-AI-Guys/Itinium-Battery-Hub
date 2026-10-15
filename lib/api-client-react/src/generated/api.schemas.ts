@@ -9,6 +9,24 @@ export interface HealthStatus {
   status: string;
 }
 
+export type GetReportingJobs200JobsItem = {
+  id?: number;
+  /** Gross loading tonnes; unchanged */
+  tonnage?: string;
+  /**
+   * Estimated net tonnes until every receipt row is reviewed, then accepted receipt Pb tonnes. Unknown weights are null.
+   * @nullable
+   */
+  reportingNetTonnage?: string | null;
+  /** True only when all battery receipt rows have been reviewed. */
+  reportingWeightConfirmed?: boolean;
+  [key: string]: unknown;
+};
+
+export type GetReportingJobs200 = {
+  jobs?: GetReportingJobs200JobsItem[];
+};
+
 export type GetDocumentHistory200VersionsItem = {
   versionId: string;
   version: number;

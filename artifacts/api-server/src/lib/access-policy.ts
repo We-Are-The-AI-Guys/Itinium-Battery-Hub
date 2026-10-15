@@ -31,7 +31,7 @@ const JOB_FIELDS = new Set([
   "collectionDate", "submittedAt", "status", "tonnage", "palletCount", "notes",
   "siteContacts", "siteContactName", "siteContactPhone", "siteContact2Name", "siteContact2Phone",
   "siteContact3Name", "siteContact3Phone", "siteHours", "specialInstructions", "scheduleStatus",
-   "signedDocumentTypes", "createdAt",
+   "signedDocumentTypes", "createdAt", "reportingNetTonnage", "reportingWeightConfirmed",
 ]);
 const BATTERY_FIELDS = new Set([
   "id", "jobId", "palletNumber", "assetNumber", "batterySerial", "manufacture", "cellType",

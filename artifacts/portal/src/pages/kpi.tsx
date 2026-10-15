@@ -182,7 +182,7 @@ const CustomTooltipCurrency = ({ active, payload, label }: CustomTooltipProps) =
       <p className="font-semibold text-[#0f2744] mb-1">{label}</p>
       {payload.map((p) => (
         <p key={p.name} style={{ color: p.color }}>
-          {p.name}: {p.name?.toLowerCase().includes("tonnage")
+          {p.name}: {p.name?.toLowerCase().includes("weight")
             ? `${Number(p.value).toFixed(1)}t`
             : formatCurrencyDecimal(p.value)}
         </p>
@@ -198,7 +198,7 @@ const CustomTooltipOps = ({ active, payload, label }: CustomTooltipProps) => {
       <p className="font-semibold text-[#0f2744] mb-1">{label}</p>
       {payload.map((p) => (
         <p key={p.name} style={{ color: p.color }}>
-          {p.name}: {p.name === "Tonnage (t)" ? `${Number(p.value).toFixed(1)}t` : p.value}
+          {p.name}: {p.name === "Net weight (t)" ? `${Number(p.value).toFixed(3)}t` : p.value}
         </p>
       ))}
     </div>
@@ -258,7 +258,7 @@ export default function KpiPage() {
   const chartData = (data?.months ?? []).map((m) => ({
     month: formatMonthLabel(m.month),
     Jobs: m.jobCount,
-    "Tonnage (t)": m.tonnage,
+    "Net weight (t)": m.tonnage,
     "Invoice Value": m.invoiceValue,
     ...(isAdmin ? { "Gross Profit": m.grossProfit } : {}),
   }));
@@ -364,6 +364,7 @@ export default function KpiPage() {
 
         {data && (
           <div className="space-y-6">
+            <p className="text-sm text-slate-500">Net weights only: estimated until each job’s receipt review is complete, then confirmed receipt Pb. Unavailable weights excluded.</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <StatCard
                 label="Total Jobs"
@@ -372,8 +373,8 @@ export default function KpiPage() {
                 icon={<Package className="w-4 h-4" />}
               />
               <StatCard
-                label="Total Tonnage"
-                value={`${data.totals.tonnage.toFixed(1)}t`}
+                label="Total Net Weight"
+                value={`${data.totals.tonnage.toFixed(3)}t`}
                 color="#14b8a6"
                 icon={<Scale className="w-4 h-4" />}
               />
@@ -420,7 +421,7 @@ export default function KpiPage() {
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 print:shadow-none">
-                <h3 className="font-bold text-[#0f2744] mb-4">Monthly Jobs & Tonnage</h3>
+                <h3 className="font-bold text-[#0f2744] mb-4">Monthly Jobs & Net Weight</h3>
                 {chartData.length === 0 ? (
                   <div className="h-48 flex items-center justify-center text-slate-400 text-sm">
                     No data for selected period
@@ -435,7 +436,7 @@ export default function KpiPage() {
                       <Tooltip content={<CustomTooltipOps />} />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
                       <Bar yAxisId="left" dataKey="Jobs" fill="#0ea5e9" radius={[3, 3, 0, 0]} maxBarSize={40} />
-                      <Line yAxisId="right" type="monotone" dataKey="Tonnage (t)" stroke="#14b8a6" strokeWidth={2} dot={{ fill: "#14b8a6", r: 4 }} />
+                      <Line yAxisId="right" type="monotone" dataKey="Net weight (t)" stroke="#14b8a6" strokeWidth={2} dot={{ fill: "#14b8a6", r: 4 }} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 )}
@@ -508,7 +509,7 @@ export default function KpiPage() {
                       <tr>
                         <th className="px-4 py-3 font-semibold">Month</th>
                         <th className="px-4 py-3 font-semibold text-right">Jobs</th>
-                        <th className="px-4 py-3 font-semibold text-right">Tonnage</th>
+                        <th className="px-4 py-3 font-semibold text-right">Net weight (t)</th>
                         <th className="px-4 py-3 font-semibold text-right">Invoice Value</th>
                         {isAdmin && <><th className="px-4 py-3 font-semibold text-right">Gross Profit</th>
                         <th className="px-4 py-3 font-semibold text-right">Margin</th>
@@ -526,7 +527,7 @@ export default function KpiPage() {
                             {formatMonthLabel(m.month)}
                           </td>
                           <td className="px-4 py-3 text-right text-slate-700">{m.jobCount}</td>
-                          <td className="px-4 py-3 text-right text-slate-700">{m.tonnage.toFixed(1)}t</td>
+                          <td className="px-4 py-3 text-right text-slate-700">{m.tonnage.toFixed(3)}t</td>
                           <td className="px-4 py-3 text-right text-slate-700">
                             {m.invoiceValue > 0 ? formatCurrencyDecimal(m.invoiceValue) : "—"}
                           </td>
@@ -563,7 +564,7 @@ export default function KpiPage() {
                         <tr>
                           <td className="px-4 py-3 text-[#0f2744]">Total / Average</td>
                           <td className="px-4 py-3 text-right text-[#0f2744]">{data.totals.jobCount}</td>
-                          <td className="px-4 py-3 text-right text-[#0f2744]">{data.totals.tonnage.toFixed(1)}t</td>
+                          <td className="px-4 py-3 text-right text-[#0f2744]">{data.totals.tonnage.toFixed(3)}t</td>
                           <td className="px-4 py-3 text-right text-[#0f2744]">
                             {data.totals.invoiceValue > 0 ? formatCurrencyDecimal(data.totals.invoiceValue) : "—"}
                           </td>

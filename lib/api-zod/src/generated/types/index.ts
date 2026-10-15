@@ -8,4 +8,6 @@
 
 export * from "./getDocumentHistory200";
 export * from "./getDocumentHistory200VersionsItem";
+export * from "./getReportingJobs200";
+export * from "./getReportingJobs200JobsItem";
 export * from "./healthStatus";

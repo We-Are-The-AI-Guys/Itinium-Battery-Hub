@@ -54,6 +54,8 @@ const CSV_FLAG_REASON = "Missing from CSV import";
 const CSV_UNKNOWN_FLAG_REASON = "Unknown value from CSV — please correct";
 const TOKEN_WEIGHT_KG = 500;
 
+import { reportingNetTonnage, reportingWeightConfirmed } from "../lib/reporting-net-weight";
+
 const SAFE_LOAD_FACTOR = 1.4;
 
 // Match cell model names ignoring spacing, case and punctuation, mirroring
@@ -704,6 +706,8 @@ router.get(
         db
           .select({
             ...getTableColumns(jobsTable),
+            reportingNetTonnage: reportingNetTonnage(),
+            reportingWeightConfirmed: reportingWeightConfirmed(),
             batteryValueSum: sql<string | null>`(
               SELECT CAST(SUM(jb.value_gbp) AS TEXT)
               FROM job_batteries jb
@@ -2875,7 +2879,7 @@ router.get(
         const conditions = and(jobScope(_req.user!), buildJobsWhere(_req.query as Record<string, unknown>));
         const [operational] = await db.select({
           pendingJobs: sql<number>`COUNT(*) FILTER (WHERE ${jobsTable.status} = 'request')`,
-          monthlyTonnage: sql<string>`COALESCE(SUM(${jobsTable.tonnage}) FILTER (WHERE ${jobsTable.submittedAt} >= date_trunc('month', now())), 0)`,
+          monthlyTonnage: sql<string>`COALESCE(SUM(${reportingNetTonnage()}) FILTER (WHERE ${jobsTable.submittedAt} >= date_trunc('month', now())), 0)`,
         }).from(jobsTable).where(conditions);
         let totalInvoiceValue: number | undefined;
         if (canSeeFinance(_req.user!)) {
@@ -2898,7 +2902,7 @@ router.get(
 
       const [tonnageResult] = await db
         .select({
-          total: sql<string>`COALESCE(SUM(${jobsTable.tonnage}), 0)`,
+          total: sql<string>`COALESCE(SUM(${reportingNetTonnage()}), 0)`,
         })
         .from(jobsTable)
         .where(and(jobScope(_req.user!), sql`${jobsTable.submittedAt} >= ${startOfMonth}`));

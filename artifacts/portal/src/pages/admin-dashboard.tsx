@@ -24,7 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SidebarLayout } from "@/components/sidebar-layout";
-import { formatCustomerPbWeight } from "@/lib/customer-pb-weight";
+import { formatReportingNetWeight } from "@/lib/reporting-net-weight";
 
 interface DashboardStats {
   pendingJobs: number;
@@ -48,6 +48,8 @@ interface Job {
   depot: string;
   submittedAt: string;
   tonnage: string;
+  reportingNetTonnage?: string | null;
+  reportingWeightConfirmed?: boolean;
   customerTractionTonnage: string | null;
   customerBlocsTonnage: string | null;
   status: string;
@@ -271,11 +273,12 @@ export default function AdminDashboardPage() {
             <div className="flex justify-between items-start mb-4">
               <div>
                 <p className="text-sm font-medium text-slate-500 mb-1">
-                  Current Tonnage (Monthly)
+                  Net Weight (Monthly)
                 </p>
                 <h3 className="text-3xl font-bold text-[#0f2744]">
-                  {stats ? `${stats.monthlyTonnage.toFixed(1)}t` : "..."}
+                  {stats ? `${stats.monthlyTonnage.toFixed(3)}t` : "..."}
                 </h3>
+                <p className="text-xs text-slate-500">Estimated until receipt review is complete, then confirmed. Unavailable weights excluded.</p>
               </div>
               <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center">
                 <Scale className="w-5 h-5 text-teal-500" />
@@ -473,7 +476,7 @@ export default function AdminDashboardPage() {
                 <th className="px-6 py-4 font-semibold">Depot</th>
                 <th className="px-6 py-4 font-semibold">Date Submitted</th>
                 <th className="px-6 py-4 font-semibold">
-                  {dashboardTab === "financial" ? "Customer Pb weight (t)" : "Tonnage"}
+                  Net weight (t)
                 </th>
                 {dashboardTab === "financial" && (
                   <>
@@ -505,9 +508,8 @@ export default function AdminDashboardPage() {
                     {formatDate(job.submittedAt)}
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-700">
-                    {dashboardTab === "financial"
-                      ? formatCustomerPbWeight(job.customerTractionTonnage, job.customerBlocsTonnage)
-                      : `${parseFloat(job.tonnage).toFixed(1)}t`}
+                    {formatReportingNetWeight(job.reportingNetTonnage)}
+                    {job.reportingNetTonnage != null && <span className="block text-xs text-slate-500">{job.reportingWeightConfirmed ? "Confirmed" : "Estimated"}</span>}
                   </td>
                   {dashboardTab === "financial" && (
                     <>

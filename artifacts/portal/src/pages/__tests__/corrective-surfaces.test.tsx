@@ -17,7 +17,9 @@ beforeEach(() => {
       locations: [{ id: 11, name: "Authorised site" }],
     };
     else if (url.startsWith("/api/jobs?")) body = { jobs: [{
-      id: 48, reference: "Fictional-48", depot: "Authorised site", tonnage: "1", palletCount: 2, status: "invoice", signedDocumentTypes: ["collection_sheet", "consignment_note"],
+      id: 48, reference: "Fictional-48", depot: "Authorised site", tonnage: "14",
+      reportingNetTonnage: "4", reportingWeightConfirmed: true,
+      palletCount: 2, status: "invoice", signedDocumentTypes: ["collection_sheet", "consignment_note"],
     }] };
     else if (url.endsWith("/dashboard/stats")) body = { pendingJobs: 1, monthlyTonnage: 1, totalInvoiceValue: 999 };
     else if (url.endsWith("/job-drafts")) body = { drafts: [] };
@@ -31,6 +33,9 @@ describe("corrective specification customer surfaces", () => {
     const table = await screen.findByRole("table");
     const viewLinks = await within(table).findAllByRole("link", { name: /View signed/ });
     expect(viewLinks).toHaveLength(2);
+    expect(within(table).getByText("4.000t")).toBeInTheDocument();
+    expect(within(table).getByText("Confirmed")).toBeInTheDocument();
+    expect(within(table).queryByText("14.0t")).not.toBeInTheDocument();
     expect(within(table).getAllByRole("button", { name: /Download signed/ })).toHaveLength(2);
     const headings = within(table).getAllByRole("columnheader").map(node => node.textContent);
     expect(headings.slice(-3)).toEqual(["Pallets", "Status", "Documents"]);

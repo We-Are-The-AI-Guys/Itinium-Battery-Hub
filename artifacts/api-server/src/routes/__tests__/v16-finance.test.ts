@@ -5,15 +5,16 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { PgDialect } from "drizzle-orm/pg-core";
 import router from "../jobs";
-import exportRouter from "../customer-job-export";
+import exportRouter, { customerJobWorkbook } from "../customer-job-export";
 import kpiRouter from "../kpi";
 import ExcelJS from "exceljs";
 const state = vi.hoisted(() => ({
   role: "accounts", roles: ["accounts"], clientId: 1 as number | null,
-  rows: [] as any[][], scopes: [] as any[],
+  rows: [] as any[][], scopes: [] as any[], projections: [] as any[],
 }));
 vi.mock("@workspace/db", () => ({ db: {
-  select: () => {
+  select: (projection: any) => {
+    state.projections.push(projection);
     const result = state.rows.shift() ?? [];
     const q = { from: () => q, where: (scope: any) => { state.scopes.push(scope); return q; },
       groupBy: () => q, orderBy: () => q,
@@ -34,8 +35,39 @@ beforeAll(async () => {
   origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
 afterAll(() => new Promise<void>(resolve => server.close(() => resolve())));
-beforeEach(() => { state.role = "accounts"; state.roles = ["accounts"]; state.clientId = 1; state.rows = []; state.scopes = []; });
+beforeEach(() => { state.role = "accounts"; state.roles = ["accounts"]; state.clientId = 1; state.rows = []; state.scopes = []; state.projections = []; });
 describe("V16 dashboard finance", () => {
+  it.each(["head_office_admin", "lead_client", "accounts", "team_leader"])("%s Dashboard uses the shared reporting SQL without changing scope", async role => {
+    state.role = role; state.roles = [role];
+    expect((await fetch(origin + "/dashboard/stats")).status).toBe(200);
+    const projection = state.projections[role === "head_office_admin" ? 1 : 0];
+    const query = new PgDialect().sqlToQuery(projection.monthlyTonnage ?? projection.total);
+    expect(query.sql).toContain("BOOL_AND(rnw.receipt_reviewed IS TRUE)");
+    expect(query.sql).toContain("rnw.estimated_weight_kg");
+    expect(query.sql).toContain("rnw.pb_content_kg");
+    expect(query.sql).not.toContain('SUM("jobs"."tonnage")');
+    expect(query.sql).not.toContain("customer_traction_tonnage");
+    if (role !== "head_office_admin") {
+      expect(new PgDialect().sqlToQuery(state.scopes[0]).params).toContain(1);
+    }
+  });
+  it("uses the same reporting calculation in KPI aggregates", async () => {
+    expect((await fetch(origin + "/kpi/summary")).status).toBe(200);
+    const query = new PgDialect().sqlToQuery(state.projections[0].tonnage);
+    expect(query.sql).toContain("BOOL_AND(rnw.receipt_reviewed IS TRUE)");
+    expect(query.sql).toContain("rnw.pb_content_kg");
+    expect(query.sql).not.toContain('SUM("jobs"."tonnage")');
+  });
+  it("exports the net basis for Admin without leaking weights in customer workbooks", () => {
+    const fixture: any = { reference: "NET-FIXTURE", tonnage: "99", customerTractionTonnage: "80",
+      customerBlocsTonnage: "10", reportingNetTonnage: "4", reportingWeightConfirmed: true };
+    const admin = customerJobWorkbook([fixture], true).getWorksheet(1)!;
+    expect(admin.getColumn("netWeight").header).toBe("Net Weight (Kg)");
+    expect(admin.getCell("E2").value).toBe(4000);
+    expect(admin.getCell("F2").value).toBe("Confirmed");
+    const customer = customerJobWorkbook([fixture]).getWorksheet(1)!;
+    expect(JSON.stringify(customer.getRow(1).values)).not.toContain("Weight");
+  });
   it("includes distinct pallet count on the job detail response", async () => {
     state.rows = [
       [{ id: 12, clientId: 1, locationId: 10, tonnage: "3.125" }],

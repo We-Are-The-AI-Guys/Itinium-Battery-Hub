@@ -6,7 +6,8 @@ import { useAuth } from "@/contexts/auth-context";
 import { canSeeInvoiceTotal, hasRole } from "@/lib/roles";
 import { JobDocumentDownloads } from "@/components/job-document-downloads";
 import { StatusPill, SkeletonRows, ErrorState, EmptyState } from "@/components/v16-ui";
-import { api, fmtDate, fmtGBP, fmtTonnes, type SafeJob } from "@/lib/v16-api";
+import { api, fmtDate, fmtGBP, type SafeJob } from "@/lib/v16-api";
+import { formatReportingNetWeight } from "@/lib/reporting-net-weight";
 
 interface CustomerStats {
   pendingJobs?: number;
@@ -85,8 +86,9 @@ export default function CustomerDashboardPage() {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-teal-500 p-5 hover:shadow-md transition-shadow">
           <div className="flex justify-between items-start mb-4">
             <div>
-              <p className="text-sm font-medium text-slate-500 mb-1">Current Tonnage (Monthly)</p>
-              <h3 className="text-3xl font-bold text-[#0f2744]">{stats ? (tonnage != null ? `${tonnage.toFixed(1)}t` : "—") : "..."}</h3>
+              <p className="text-sm font-medium text-slate-500 mb-1">Net Weight (Monthly)</p>
+              <h3 className="text-3xl font-bold text-[#0f2744]">{stats ? (tonnage != null ? `${tonnage.toFixed(3)}t` : "—") : "..."}</h3>
+              <p className="text-xs text-slate-500">Estimated until receipt review is complete, then confirmed. Unavailable weights excluded.</p>
             </div>
             <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center"><Scale className="w-5 h-5 text-teal-500" /></div>
           </div>
@@ -162,7 +164,7 @@ export default function CustomerDashboardPage() {
                   <th className="px-6 py-3 font-semibold">Job ID</th>
                   <th className="px-6 py-3 font-semibold">Depot</th>
                   <th className="px-6 py-3 font-semibold">Date Submitted</th>
-                  <th className="px-6 py-3 font-semibold">Tonnage</th>
+                  <th className="px-6 py-3 font-semibold">Net weight (t)</th>
                   <th className="px-6 py-3 font-semibold">Pallets</th>
                   <th className="px-6 py-3 font-semibold">Status</th>
                   <th className="px-6 py-3 font-semibold">Documents</th>
@@ -174,7 +176,10 @@ export default function CustomerDashboardPage() {
                     <td className="px-6 py-3 font-semibold text-[#0f2744]">{j.reference}</td>
                     <td className="px-6 py-3 text-slate-600">{j.depot || "—"}</td>
                     <td className="px-6 py-3 text-slate-600">{fmtDate(j.submittedAt)}</td>
-                    <td className="px-6 py-3 text-slate-600 tabular-nums">{fmtTonnes(j.tonnage)}</td>
+                    <td className="px-6 py-3 text-slate-600 tabular-nums">
+                      {formatReportingNetWeight(j.reportingNetTonnage)}
+                      {j.reportingNetTonnage != null && <span className="block text-xs">{j.reportingWeightConfirmed ? "Confirmed" : "Estimated"}</span>}
+                    </td>
                     <td className="px-6 py-3 text-slate-600 tabular-nums">{j.palletCount ?? "—"}</td>
                     <td className="px-6 py-3"><StatusPill status={j.status} /></td>
                     <td className="px-6 py-3"><JobDocumentDownloads jobId={j.id} reference={j.reference} available={j.signedDocumentTypes ?? []} releasePending={!["invoice", "invoiced", "completed"].includes(j.status)} /></td>

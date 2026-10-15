@@ -8,6 +8,35 @@
 import * as zod from "zod";
 
 /**
+ * @summary Scoped job list with separate net reporting weight; tonnage remains gross
+ */
+export const GetReportingJobsResponse = zod.object({
+  jobs: zod
+    .array(
+      zod.object({
+        id: zod.number().optional(),
+        tonnage: zod
+          .string()
+          .optional()
+          .describe("Gross loading tonnes; unchanged"),
+        reportingNetTonnage: zod
+          .string()
+          .nullish()
+          .describe(
+            "Estimated net tonnes until every receipt row is reviewed, then accepted receipt Pb tonnes. Unknown weights are null.",
+          ),
+        reportingWeightConfirmed: zod
+          .boolean()
+          .optional()
+          .describe(
+            "True only when all battery receipt rows have been reviewed.",
+          ),
+      }),
+    )
+    .optional(),
+});
+
+/**
  * @summary Admin or assigned collector document version history
  */
 export const GetDocumentHistoryParams = zod.object({

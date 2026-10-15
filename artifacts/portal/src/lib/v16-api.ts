@@ -81,6 +81,8 @@ export interface SafeJob {
   status: string;
   palletCount?: number | null;
   tonnage?: string | number | null;
+  reportingNetTonnage?: string | null;
+  reportingWeightConfirmed?: boolean;
   signedDocumentTypes?: string[];
 }
 

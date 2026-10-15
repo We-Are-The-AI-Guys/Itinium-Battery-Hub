@@ -6,6 +6,7 @@ import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewa
 import { jobScope } from "../lib/depot-access";
 import { isAdmin } from "../lib/access-policy";
 import { kpiDateRange, publicKpiRow } from "../lib/kpi-policy";
+import { reportingNetTonnage } from "../lib/reporting-net-weight";
 
 const router = Router();
 
@@ -35,7 +36,7 @@ router.get(
         .select({
           month: sql<string>`TO_CHAR(${jobsTable.submittedAt}, 'YYYY-MM')`,
           jobCount: sql<number>`COUNT(*)::int`,
-          tonnage: sql<string>`COALESCE(SUM(${jobsTable.tonnage}), 0)`,
+          tonnage: sql<string>`COALESCE(SUM(${reportingNetTonnage()}), 0)`,
           invoiceValue: sql<string>`COALESCE(SUM(${jobsTable.calculatedValue}), 0)`,
           grossProfit: sql<string>`COALESCE(SUM(${jobsTable.grossProfit}), 0)`,
           avgCblLmePct: sql<string>`COALESCE(AVG(${jobsTable.cblLmePercent}) FILTER (WHERE ${jobsTable.cblLmePercent} IS NOT NULL), 0)`,
@@ -90,7 +91,7 @@ router.get(
         return {
           month: m,
           jobCount: row?.jobCount || 0,
-          tonnage: Math.round(parseFloat(row?.tonnage || "0") * 10) / 10,
+          tonnage: Math.round(parseFloat(row?.tonnage || "0") * 1000) / 1000,
           invoiceValue: Math.round(invVal * 100) / 100,
           grossProfit: Math.round(gp * 100) / 100,
           grossMarginPct: invVal > 0 ? Math.round((gp / invVal) * 10000) / 100 : 0,
@@ -124,7 +125,7 @@ router.get(
         months,
         totals: {
           jobCount: months.reduce((s, m) => s + m.jobCount, 0),
-          tonnage: Math.round(months.reduce((s, m) => s + m.tonnage, 0) * 10) / 10,
+          tonnage: Math.round(months.reduce((s, m) => s + m.tonnage, 0) * 1000) / 1000,
           invoiceValue: Math.round(totalInvoiceValue * 100) / 100,
           grossProfit: Math.round(totalGrossProfit * 100) / 100,
           grossMarginPct:

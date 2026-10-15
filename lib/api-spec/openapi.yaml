@@ -11,6 +11,32 @@ tags:
   - name: health
     description: Health operations
 paths:
+  /jobs:
+    get:
+      operationId: getReportingJobs
+      summary: Scoped job list with separate net reporting weight; tonnage remains gross
+      responses:
+        "200":
+          description: Existing job fields plus read-only net reporting values
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobs:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                      properties:
+                        id: { type: integer }
+                        tonnage: { type: string, description: Gross loading tonnes; unchanged }
+                        reportingNetTonnage:
+                          type: [string, "null"]
+                          description: Estimated net tonnes until every receipt row is reviewed, then accepted receipt Pb tonnes. Unknown weights are null.
+                        reportingWeightConfirmed:
+                          type: boolean
+                          description: True only when all battery receipt rows have been reviewed.
   /jobs/{id}/documents/{docType}/history:
     get:
       operationId: getDocumentHistory
