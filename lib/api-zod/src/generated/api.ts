@@ -8,6 +8,38 @@
 import * as zod from "zod";
 
 /**
+ * @summary Admin or assigned collector document version history
+ */
+export const GetDocumentHistoryParams = zod.object({
+  id: zod.coerce.number(),
+  docType: zod.enum(["collection_sheet", "consignment_note", "statement"]),
+});
+
+export const GetDocumentHistoryResponse = zod.object({
+  versions: zod.array(
+    zod.object({
+      versionId: zod.string(),
+      version: zod.number(),
+      fileName: zod.string(),
+      uploadedById: zod.number().nullable(),
+      uploadedAt: zod.string(),
+      replacedById: zod.number().nullish(),
+      replacedAt: zod.string().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Retrieve a preserved version with current assignment checks
+ */
+export const GetDocumentVersionFileParams = zod.object({
+  id: zod.coerce.number(),
+  docType: zod.enum(["collection_sheet", "consignment_note", "statement"]),
+  versionId: zod.coerce.string(),
+  action: zod.enum(["view", "download"]),
+});
+
+/**
  * Returns server health status
  * @summary Health check
  */

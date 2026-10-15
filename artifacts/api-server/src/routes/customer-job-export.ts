@@ -9,7 +9,7 @@ import { isAdmin } from "../lib/access-policy";
 import { kpiDateRange } from "../lib/kpi-policy";
 
 const router = Router();
-export function customerJobWorkbook(jobs: (typeof jobsTable.$inferSelect)[]) {
+export function customerJobWorkbook(jobs: (typeof jobsTable.$inferSelect)[], includePbWeights = false) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("KPI jobs");
   ws.columns = [
@@ -17,8 +17,10 @@ export function customerJobWorkbook(jobs: (typeof jobsTable.$inferSelect)[]) {
     { header: "Job Reference", key: "reference", width: 22 },
     { header: "Client", key: "client", width: 30 },
     { header: "Collection Point", key: "collectionPoint", width: 40 },
-    { header: "Traction Tonnage (Kg)", key: "tractionTonnage", width: 24 },
-    { header: "Bloc Tonnage (Kg)", key: "blocs", width: 22 },
+    ...(includePbWeights ? [
+      { header: "Traction Tonnage (Kg)", key: "tractionTonnage", width: 24 },
+      { header: "Bloc Tonnage (Kg)", key: "blocs", width: 22 },
+    ] : []),
     { header: "LME Value £", key: "traction", width: 22 },
     { header: "Transport", key: "transport", width: 22 },
     { header: "Net Invoice Value £", key: "invoice", width: 24 },
@@ -32,8 +34,8 @@ export function customerJobWorkbook(jobs: (typeof jobsTable.$inferSelect)[]) {
   for (const job of jobs) ws.addRow({ reference: job.reference,
     collectionDate: job.collectionDate ? new Date(`${job.collectionDate}T00:00:00Z`) : null,
     client: job.clientName ?? "", collectionPoint: job.collectionPoint ?? "",
-    traction: number(job.customerTractionRate), blocs: kilograms(job.customerBlocsTonnage),
-    tractionTonnage: kilograms(job.customerTractionTonnage),
+    traction: number(job.customerTractionRate),
+    ...(includePbWeights ? { blocs: kilograms(job.customerBlocsTonnage), tractionTonnage: kilograms(job.customerTractionTonnage) } : {}),
     transport: number(job.customerTransportCost),
     invoice: number(job.customerInvoiceValue), invoiceNo: job.customerInvoiceNo ?? "" });
   const header = ws.getRow(1);
@@ -46,7 +48,7 @@ export function customerJobWorkbook(jobs: (typeof jobsTable.$inferSelect)[]) {
   });
   ws.views = [{ state: "frozen", ySplit: 1 }];
   ws.getColumn("collectionDate").numFmt = "dd/mm/yyyy";
-  for (const key of ["tractionTonnage", "blocs"]) ws.getColumn(key).numFmt = "#,##0";
+  if (includePbWeights) for (const key of ["tractionTonnage", "blocs"]) ws.getColumn(key).numFmt = "#,##0";
   ws.getColumn("traction").numFmt = '£#,##0.00';
   for (const key of ["transport", "invoice"]) ws.getColumn(key).numFmt = '£#,##0.00';
   ws.getColumn("invoiceNo").numFmt = "@";
@@ -68,7 +70,7 @@ router.get("/kpi/export.xlsx", requireAuth,
         sql`${jobsTable.submittedAt} >= ${fromDate} AND ${jobsTable.submittedAt} < ${toDate}`,
         isAdmin(req.user!) && clientId && !isNaN(parseInt(clientId)) ? eq(jobsTable.clientId, parseInt(clientId)) : undefined,
       )).orderBy(asc(jobsTable.submittedAt), asc(jobsTable.id));
-      const buffer = await customerJobWorkbook(jobs).xlsx.writeBuffer();
+      const buffer = await customerJobWorkbook(jobs, isAdmin(req.user!)).xlsx.writeBuffer();
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="kpi-jobs-${fromDate.toISOString().slice(0, 10)}.xlsx"`);
       res.send(Buffer.from(buffer));

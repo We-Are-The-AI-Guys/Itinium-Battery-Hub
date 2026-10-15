@@ -93,10 +93,10 @@ describe("V16 dashboard finance", () => {
     });
     expect(sheet.views[0]).toMatchObject({ state: "frozen", ySplit: 1 });
     expect(sheet.getRow(1).values).toEqual([undefined, "Collection Date", "Job Reference", "Client", "Collection Point",
-      "Traction Tonnage (Kg)", "Bloc Tonnage (Kg)", "LME Value £", "Transport", "Net Invoice Value £", "Invoice Number"]);
-    expect(sheet.getRow(2).values).toEqual([undefined, new Date("2026-10-12T00:00:00Z"), "JOB-12", "Example Client", "North collection point", 1750, 500, 1125.5, 50, 750, "000123"]);
+      "LME Value £", "Transport", "Net Invoice Value £", "Invoice Number"]);
+    expect(sheet.getRow(2).values).toEqual([undefined, new Date("2026-10-12T00:00:00Z"), "JOB-12", "Example Client", "North collection point", 1125.5, 50, 750, "000123"]);
     for (const col of ["E", "F"]) {
-      expect(sheet.getCell(`${col}2`).numFmt).toBe("#,##0");
+      expect(sheet.getCell(`${col}2`).numFmt).toBe("£#,##0.00");
       expect(sheet.getCell(`${col}3`).value).toBeNull();
     }
     expect(sheet.getCell("A2").numFmt).toBe("dd/mm/yyyy");

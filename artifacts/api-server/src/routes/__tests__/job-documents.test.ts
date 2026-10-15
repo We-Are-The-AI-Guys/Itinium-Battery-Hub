@@ -26,13 +26,13 @@ function intent(overrides: Partial<UploadIntent> = {}): UploadIntent {
 describe("canUploadDocuments", () => {
   const today = "2026-08-12";
 
-  it("blocks uploads before the collection has been carried out", () => {
-    expect(canUploadDocuments({ scheduleStatus: "unassigned", status: "request", collectionDate: null }, today)).toBe(false);
-    expect(canUploadDocuments({ scheduleStatus: "proposed", status: "request", collectionDate: "2026-08-20" }, today)).toBe(false);
+  it("allows authorised uploads before collection, independent of schedule", () => {
+    expect(canUploadDocuments({ scheduleStatus: "unassigned", status: "request", collectionDate: null }, today)).toBe(true);
+    expect(canUploadDocuments({ scheduleStatus: "proposed", status: "request", collectionDate: "2026-08-20" }, today)).toBe(true);
     // Confirmed but the collection date is still in the future.
-    expect(canUploadDocuments({ scheduleStatus: "confirmed", status: "confirmed", collectionDate: "2026-08-20" }, today)).toBe(false);
+    expect(canUploadDocuments({ scheduleStatus: "confirmed", status: "confirmed", collectionDate: "2026-08-20" }, today)).toBe(true);
     // Confirmed schedule but no date at all.
-    expect(canUploadDocuments({ scheduleStatus: "confirmed", status: "confirmed", collectionDate: null }, today)).toBe(false);
+    expect(canUploadDocuments({ scheduleStatus: "confirmed", status: "confirmed", collectionDate: null }, today)).toBe(true);
   });
 
   it("allows uploads once the confirmed collection date has arrived", () => {

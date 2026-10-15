@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { actionRequestsTable as requests, supportEnquiriesTable as tickets, accessSettingsTable as settings, accessAuditTable as audit, jobsTable, jobBatteriesTable, usersTable, notificationsTable, exceptionEvidenceTable as evidence } from "@workspace/db/schema";
-import { and, desc, eq, sql, getTableColumns } from "drizzle-orm";
+import { and, desc, eq, sql, getTableColumns, inArray } from "drizzle-orm";
+import { requestAllowed } from "../lib/job-request-policy";
 import { z } from "zod";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { isAdmin, isCustomer, hasRole, customerJob } from "../lib/access-policy";
@@ -43,7 +44,14 @@ export async function accessibleJob(req: AuthenticatedRequest) {
   if (isAdmin(req.user!)) return job;
   if (isCustomer(req.user!)) return mayAccessDepot(req.user!, job) ? job : null;
   return hasRole(req.user!, "collection_company") && req.user!.collectionCompanyId &&
-    job.collectionCompanyId === req.user!.collectionCompanyId ? job : null;
+    job.collectionCompanyId === req.user!.collectionCompanyId && job.collectionReleasedAt ? job : null;
+}
+async function physicallyReported(conn: Pick<typeof db, "select">, jobId: number) {
+  const rows = await conn.select({ id: requests.id }).from(requests).where(and(
+    eq(requests.jobId, jobId), eq(requests.kind, "transport_exception"),
+    inArray(requests.outcome, ["completed", "partially_completed"]),
+  )).limit(1);
+  return rows.length > 0;
 }
 router.get("/operational-overview", requireAuth, async (req: AuthenticatedRequest, res) => {
   const jobs = await db.select().from(jobsTable).where(jobScope(req.user!)).orderBy(desc(jobsTable.submittedAt));
@@ -69,12 +77,13 @@ router.post("/jobs/:id/requests", requireAuth, async (req: AuthenticatedRequest,
   }
   const saved = await db.transaction(async tx => {
     const [current] = await tx.select().from(jobsTable).where(eq(jobsTable.id, job.id)).for("update");
-    if (!current || (!collector && !["request", "confirmed"].includes(current.status))) return null;
+    if (!current || (!collector && !requestAllowed(parsed.data.kind, current.status))) return null;
+    if (!collector && parsed.data.kind === "cancellation" && await physicallyReported(tx, job.id)) return null;
     const [item] = await tx.insert(requests).values({ ...parsed.data, jobId: job.id, requesterId: req.user!.id }).returning();
     await tx.insert(audit).values({ actorId: req.user!.id, jobId: job.id, action: "request.created", details: { requestId: item.id, ...parsed.data } });
     return item;
   });
-  if (!saved) { res.status(409).json({ message: "Amendment and cancellation requests are only available before collection. Once a job is Received or later, or cancelled, no further requests can be made." }); return; }
+  if (!saved) { res.status(409).json({ message: "Amendments are available before Completed; cancellations are available only before physical collection. Cancelled jobs are closed." }); return; }
   const notificationStatus = await notifyWorkflow("operationsEmail", `Job request: ${job.reference}`, `${parsed.data.kind}: ${parsed.data.notes}`);
   await db.update(requests).set({ notificationStatus }).where(eq(requests.id, saved.id));
   res.status(201).json({ request: { ...saved, notificationStatus } });
@@ -84,7 +93,9 @@ router.get("/jobs/:id/requests", requireAuth, async (req: AuthenticatedRequest, 
   if (!job) { res.status(404).json({ message: "Job not found" }); return; }
   const items = await db.select().from(requests).where(and(eq(requests.jobId, job.id),
     isAdmin(req.user!) ? undefined : eq(requests.requesterId, req.user!.id))).orderBy(desc(requests.createdAt));
-  res.json({ requests: items });
+  const physical = ["request", "confirmed"].includes(job.status) ? await physicallyReported(db, job.id) : true;
+  res.json({ requests: items, canRequestAmendment: isCustomer(req.user!) && requestAllowed("amendment", job.status),
+    canRequestCancellation: isCustomer(req.user!) && requestAllowed("cancellation", job.status, physical) });
 });
 router.get("/action-requests", requireAuth, requireRole("head_office_admin"), async (_req, res) => {
   const items = await db.select({ ...getTableColumns(requests), reference: jobsTable.reference, requesterName: usersTable.fullName })
@@ -99,7 +110,8 @@ router.patch("/action-requests/:id", requireAuth, requireRole("head_office_admin
     const [item] = await tx.select().from(requests).where(eq(requests.id, Number(req.params.id))).for("update");
     if (!item || item.status !== "Pending") return null;
     const [job] = await tx.select().from(jobsTable).where(eq(jobsTable.id, item.jobId)).for("update");
-    if (!job || (data.data.status === "Approved" && item.kind !== "transport_exception" && !["request", "confirmed"].includes(job.status))) return null;
+    if (!job || (data.data.status === "Approved" && !requestAllowed(item.kind, job.status))) return null;
+    if (data.data.status === "Approved" && item.kind === "cancellation" && await physicallyReported(tx, job.id)) return null;
     if (item.kind === "cancellation" && data.data.status === "Approved") {
       await tx.update(jobsTable).set({ status: "cancelled" }).where(eq(jobsTable.id, item.jobId));
     }
@@ -110,7 +122,7 @@ router.patch("/action-requests/:id", requireAuth, requireRole("head_office_admin
       title: `Request ${data.data.status}`, body: data.data.decisionNotes, link: item.kind === "transport_exception" ? "/collections" : `/jobs/${item.jobId}` });
     return updated;
   });
-  if (!result) { res.status(409).json({ message: "Request unavailable, already decided, or job is no longer eligible: amendments and cancellations cannot be approved after collection or cancellation." }); return; }
+  if (!result) { res.status(409).json({ message: "Request unavailable, already decided, or no longer eligible. Amendments close at Completed; cancellations close at physical collection." }); return; }
   const [requester] = await db.select().from(usersTable).where(eq(usersTable.id, result.requesterId));
   const notificationStatus = await notifyWorkflow(requester.email, `Request ${result.status}`, result.decisionNotes!);
   await db.update(requests).set({ notificationStatus }).where(eq(requests.id, result.id));

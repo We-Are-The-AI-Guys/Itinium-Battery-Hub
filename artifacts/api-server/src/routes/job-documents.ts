@@ -3,12 +3,14 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { jobsTable, jobDocumentsTable, accessAuditTable, JOB_DOCUMENT_TYPES, type JobDocumentType } from "@workspace/db/schema";
-import { isAdmin } from "../lib/access-policy";
+import { isAdmin, hasRole } from "../lib/access-policy";
 import { eq, and, sql, inArray, desc } from "drizzle-orm";
 import { isClientUser, mayAccessDepot, jobScope } from "../lib/depot-access";
 import { z } from "zod";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../middlewares/auth";
 import { ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage";
+import { storedDocuments } from "../lib/document-availability";
+import { documentHistoryRouter } from "./document-history";
 import {
   notifyAccountsStatementUploaded,
   notifyAdminsDocumentsComplete,
@@ -19,7 +21,7 @@ const CUSTOMER_DOCUMENT_TYPES = ["collection_sheet", "consignment_note"] as cons
 const DOCUMENT_READ_ROLES = ["accounts", "head_office_admin", "collection_company", "team_leader", "depot_user"];
 const objectStorage = new ObjectStorageService();
 export function documentsReleased(user: NonNullable<AuthenticatedRequest["user"]>, status: string): boolean {
-  return isAdmin(user) || status === "completed" || (isClientUser(user) && status === "invoice");
+  return isAdmin(user) || hasRole(user, "collection_company") || (isClientUser(user) && ["invoice", "invoiced", "completed"].includes(status));
 }
 
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
@@ -35,15 +37,13 @@ export const DOC_TYPE_LABELS: Record<JobDocumentType, string> = {
   statement: "Statement to Itinium",
 };
 
-// Documents are uploaded after the collection has been carried out: the job
-// has moved past collection, or the confirmed collection date has arrived.
-// Exported for tests.
+// Upload timing is deliberately independent of operational status.
+// Ownership and role checks are enforced before calling this helper.
 export function canUploadDocuments(
   job: { scheduleStatus: string; status: string; collectionDate: string | null },
   today: string = new Date().toISOString().slice(0, 10)
 ): boolean {
-  if (["received", "awaiting_invoice", "invoice", "completed"].includes(job.status)) return true;
-  return job.scheduleStatus === "confirmed" && !!job.collectionDate && job.collectionDate <= today;
+  return true;
 }
 
 export function completesRequiredDocumentSet(
@@ -110,7 +110,7 @@ async function loadJobForCompany(req: AuthenticatedRequest, jobId: number) {
   if (!job) return null;
   if (isClientUser(req.user!) && !mayAccessDepot(req.user!, job)) return null;
   if (req.user!.role === "collection_company") {
-    if (!req.user!.collectionCompanyId || job.collectionCompanyId !== req.user!.collectionCompanyId || !job.collectionReleasedAt) {
+    if (!req.user!.collectionCompanyId || job.collectionCompanyId !== req.user!.collectionCompanyId) {
       return null;
     }
   }
@@ -125,11 +125,12 @@ router.get("/customer/documents", requireAuth, requireRole("team_leader", "depot
       const documents = await db.select({
         jobId: jobsTable.id, reference: jobsTable.reference, depot: jobsTable.depot,
         docType: jobDocumentsTable.docType, fileName: jobDocumentsTable.fileName,
+        objectPath: jobDocumentsTable.objectPath,
         uploadedAt: jobDocumentsTable.uploadedAt,
       }).from(jobDocumentsTable).innerJoin(jobsTable, eq(jobsTable.id, jobDocumentsTable.jobId))
-        .where(and(jobScope(req.user!), inArray(jobsTable.status, ["invoice", "completed"]), inArray(jobDocumentsTable.docType, [...CUSTOMER_DOCUMENT_TYPES])))
+        .where(and(jobScope(req.user!), inArray(jobsTable.status, ["invoice", "invoiced", "completed"]), inArray(jobDocumentsTable.docType, [...CUSTOMER_DOCUMENT_TYPES])))
         .orderBy(desc(jobDocumentsTable.uploadedAt));
-      res.json({ documents });
+      res.json({ documents: (await storedDocuments(documents)).map(({ objectPath, ...doc }) => doc) });
     } catch (error) {
       console.error("Customer documents error:", error);
       res.status(500).json({ message: "Failed to load collection documents" });
@@ -157,13 +158,15 @@ router.get(
           contentType: jobDocumentsTable.contentType,
           sizeBytes: jobDocumentsTable.sizeBytes,
           uploadedAt: jobDocumentsTable.uploadedAt,
+          objectPath: jobDocumentsTable.objectPath,
         })
         .from(jobDocumentsTable)
         .where(and(eq(jobDocumentsTable.jobId, job.id), inArray(jobDocumentsTable.docType, visibleTypes)));
+      const existingFiles = await storedDocuments(documents);
       res.json({
-        documents: documentsReleased(req.user!, job.status) || collector ? documents : [],
+        documents: documentsReleased(req.user!, job.status) || collector ? existingFiles.map(({ objectPath, ...doc }) => doc) : [],
         requiredTypes: visibleTypes,
-        outstandingTypes: visibleTypes.filter((t) => !documents.some((d) => d.docType === t)),
+        outstandingTypes: visibleTypes.filter((t) => !existingFiles.some((d) => d.docType === t)),
         canUpload: !isClientUser(req.user!) && (isAdmin(req.user!) || canUploadDocuments(job)),
         releasePending: !documentsReleased(req.user!, job.status),
       });
@@ -196,9 +199,6 @@ router.post(
       if (!parsed.success) {
         res.status(400).json({ message: parsed.error.issues[0]?.message || "Invalid upload request" });
         return;
-      }
-      if (isAdmin(req.user!) && parsed.data.docType === "statement") {
-        res.status(403).json({ message: "Only signed collection sheets and consignment notes may be uploaded here" }); return;
       }
       const job = await loadJobForCompany(req, parseInt(String(req.params.id), 10));
       if (!job) {
@@ -258,9 +258,6 @@ router.post(
         return;
       }
       const { docType, name, size, contentType, objectPath, uploadToken } = parsed.data;
-      if (isAdmin(req.user!) && docType === "statement") {
-        res.status(403).json({ message: "This document type is not permitted" }); return;
-      }
 
       // The intent must match the caller and everything they now claim.
       const intent = verifyUploadIntent(uploadToken);
@@ -297,6 +294,9 @@ router.post(
         res.status(400).json({ message: "The uploaded file is empty or exceeds the 20 MB limit." });
         return;
       }
+      if (storedSize !== size || storedContentType !== contentType) {
+        res.status(400).json({ message: "The uploaded file does not match the authorised upload." }); return;
+      }
       if (storedContentType && !ALLOWED_CONTENT_TYPES.has(storedContentType)) {
         res.status(400).json({ message: "Only PDF or image files are allowed." });
         return;
@@ -314,7 +314,7 @@ router.post(
         const wasComplete = JOB_DOCUMENT_TYPES.every((type) => existingTypes.includes(type));
 
         const previous = await tx.select().from(jobDocumentsTable).where(and(eq(jobDocumentsTable.jobId, job.id), eq(jobDocumentsTable.docType, docType)));
-        await tx.insert(accessAuditTable).values({ actorId: req.user!.id, jobId: job.id, action: "document.upload",
+        await tx.insert(accessAuditTable).values({ actorId: req.user!.id, jobId: job.id, action: previous.length ? "document.replace" : "document.upload",
           details: { docType, objectPath, name, previous } });
         const [savedDocument] = await tx
           .insert(jobDocumentsTable)
@@ -470,4 +470,5 @@ router.get(
   }
 );
 
+router.use(documentHistoryRouter(loadJobForCompany));
 export default router;

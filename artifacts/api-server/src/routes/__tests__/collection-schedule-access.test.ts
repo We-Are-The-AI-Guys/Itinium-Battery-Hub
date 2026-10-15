@@ -22,12 +22,12 @@ describe("collection company access", () => {
     expect(res.status).toHaveBeenCalledWith(403);
   });
 
-  it("only schedules a job for the linked company, before confirmation", () => {
+  it("proposes schedules and schedule changes only for the linked company", () => {
     expect(mayProposeCollectionSchedule({ role: "collection_company", collectionCompanyId: 5 }, job)).toBe(true);
     expect(mayProposeCollectionSchedule({ role: "collection_company", collectionCompanyId: 8 }, job)).toBe(false);
     expect(mayProposeCollectionSchedule({ role: "collection_company", collectionCompanyId: null }, job)).toBe(false);
     expect(mayProposeCollectionSchedule({ role: "accounts", collectionCompanyId: 5 }, job)).toBe(false);
-    expect(mayProposeCollectionSchedule({ role: "collection_company", collectionCompanyId: 5 }, { ...job, scheduleStatus: "confirmed" })).toBe(false);
+    expect(mayProposeCollectionSchedule({ role: "collection_company", collectionCompanyId: 5 }, { ...job, scheduleStatus: "confirmed" })).toBe(true);
   });
 
   it("hides other companies' conversations and assignment history", () => {

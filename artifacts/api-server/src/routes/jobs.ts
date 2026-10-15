@@ -1,3 +1,4 @@
+import { storedDocuments } from "../lib/document-availability";
 import { Router, type IRouter } from "express";
 import { collectionReleaseSummary } from "../lib/collection-release";
 import { jobListSummary } from "../lib/job-list-summary";
@@ -731,16 +732,18 @@ router.get(
       }).from(jobBatteriesTable)
         .where(inArray(jobBatteriesTable.jobId, jobs.map(job => job.id))) : [];
 
-      const documents = jobs.length ? await db.select({
+      const documentRows = jobs.length ? await db.select({
         jobId: jobDocumentsTable.jobId, docType: jobDocumentsTable.docType,
+        objectPath: jobDocumentsTable.objectPath,
       }).from(jobDocumentsTable).where(and(
         inArray(jobDocumentsTable.jobId, jobs.map(job => job.id)),
         inArray(jobDocumentsTable.docType, ["consignment_note", "collection_sheet"]),
       )) : [];
+      const documents = await storedDocuments(documentRows);
       res.json({
         jobs: jobs.map(job => ({
           ...job,
-          signedDocumentTypes: isAdmin(req.user!) || ["invoice", "completed"].includes(job.status) ? documents.filter(doc => doc.jobId === job.id).map(doc => doc.docType) : [],
+          signedDocumentTypes: isAdmin(req.user!) || ["invoice", "invoiced", "completed"].includes(job.status) ? documents.filter(doc => doc.jobId === job.id).map(doc => doc.docType) : [],
           ...jobListSummary(rows.filter(row => row.jobId === job.id), job.tonnage),
         })),
         total,

@@ -73,6 +73,7 @@ export function policyAllows(user: Principal, method: string, path: string): boo
   if (path === "/dashboard/stats") return isCustomer(user) && !!user.clientId && hasRole(user, "lead_client", "accounts", "team_leader");
   if (path === "/operational-overview") return isCustomer(user) && !!user.clientId;
   if (/^\/collection\//.test(path)) return hasRole(user, "collection_company");
-  if (/^\/(stillages|job-drafts|depots)(\/|$)/.test(path)) return isCustomer(user) && !!user.clientId;
+  if (/^\/stillages(\/|$)/.test(path)) return get && isCustomer(user) && !!user.clientId;
+  if (/^\/(job-drafts|depots)(\/|$)/.test(path)) return isCustomer(user) && !!user.clientId;
   return true;
 }

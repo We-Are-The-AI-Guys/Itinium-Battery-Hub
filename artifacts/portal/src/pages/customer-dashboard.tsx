@@ -4,6 +4,7 @@ import { Clock, Scale, Package, PoundSterling, TrendingUp, ChevronRight, Plus, F
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { useAuth } from "@/contexts/auth-context";
 import { canSeeInvoiceTotal, hasRole } from "@/lib/roles";
+import { JobDocumentDownloads } from "@/components/job-document-downloads";
 import { StatusPill, SkeletonRows, ErrorState, EmptyState } from "@/components/v16-ui";
 import { api, fmtDate, fmtGBP, fmtTonnes, type SafeJob } from "@/lib/v16-api";
 
@@ -41,7 +42,7 @@ export default function CustomerDashboardPage() {
 
   useEffect(() => {
     api<CustomerStats>("/api/dashboard/stats").then(setStats).catch(() => setStats({}));
-    api<{ totalInCirculation: number }>("/api/stillages/summary").then((d) => setStillages(d.totalInCirculation)).catch(() => {});
+    api<{ scopedTotalInCirculation: number }>("/api/stillages/summary").then((d) => setStillages(d.scopedTotalInCirculation)).catch(() => {});
     api<{ drafts: JobDraft[] }>("/api/job-drafts").then((d) => setDrafts(d.drafts || [])).catch(() => {});
     loadJobs();
   }, [loadJobs]);
@@ -164,6 +165,7 @@ export default function CustomerDashboardPage() {
                   <th className="px-6 py-3 font-semibold">Tonnage</th>
                   <th className="px-6 py-3 font-semibold">Pallets</th>
                   <th className="px-6 py-3 font-semibold">Status</th>
+                  <th className="px-6 py-3 font-semibold">Documents</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -175,6 +177,7 @@ export default function CustomerDashboardPage() {
                     <td className="px-6 py-3 text-slate-600 tabular-nums">{fmtTonnes(j.tonnage)}</td>
                     <td className="px-6 py-3 text-slate-600 tabular-nums">{j.palletCount ?? "—"}</td>
                     <td className="px-6 py-3"><StatusPill status={j.status} /></td>
+                    <td className="px-6 py-3"><JobDocumentDownloads jobId={j.id} reference={j.reference} available={j.signedDocumentTypes ?? []} releasePending={!["invoice", "invoiced", "completed"].includes(j.status)} /></td>
                   </tr>
                 ))}
               </tbody>

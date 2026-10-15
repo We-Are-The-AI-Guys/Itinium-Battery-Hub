@@ -11,6 +11,52 @@ tags:
   - name: health
     description: Health operations
 paths:
+  /jobs/{id}/documents/{docType}/history:
+    get:
+      operationId: getDocumentHistory
+      summary: Admin or assigned collector document version history
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: docType, in: path, required: true, schema: { type: string, enum: [collection_sheet, consignment_note, statement] } }
+      responses:
+        "200":
+          description: Version metadata without storage paths; never customer-facing
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [versions]
+                properties:
+                  versions:
+                    type: array
+                    items:
+                      type: object
+                      required: [versionId, version, fileName, uploadedById, uploadedAt]
+                      properties:
+                        versionId: { type: string }
+                        version: { type: integer }
+                        fileName: { type: string }
+                        uploadedById: { type: [integer, "null"] }
+                        uploadedAt: { type: string }
+                        replacedById: { type: [integer, "null"] }
+                        replacedAt: { type: [string, "null"] }
+        "404": { description: History not found or inaccessible }
+  /jobs/{id}/documents/{docType}/history/{versionId}/{action}:
+    get:
+      operationId: getDocumentVersionFile
+      summary: Retrieve a preserved version with current assignment checks
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: docType, in: path, required: true, schema: { type: string, enum: [collection_sheet, consignment_note, statement] } }
+        - { name: versionId, in: path, required: true, schema: { type: string } }
+        - { name: action, in: path, required: true, schema: { type: string, enum: [view, download] } }
+      responses:
+        "200":
+          description: Private document stream
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "404": { description: File absent or inaccessible }
   /healthz:
     get:
       operationId: healthCheck

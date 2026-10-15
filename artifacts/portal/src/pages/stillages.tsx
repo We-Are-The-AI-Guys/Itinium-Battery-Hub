@@ -14,9 +14,11 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { SidebarLayout } from "@/components/sidebar-layout";
 import { useToast } from "@/hooks/use-toast";
+import { hasRole } from "@/lib/roles";
 
 interface StillageMovement {
   id: number;
+  locationId?: number | null;
   depot: string;
   movementDate: string;
   collected: number;
@@ -26,6 +28,7 @@ interface StillageMovement {
 }
 
 interface DepotSummary {
+  locationId?: number;
   depot: string;
   totalCollected: number;
   totalDroppedOff: number;
@@ -37,10 +40,10 @@ interface AuthUser {
   email: string;
   fullName: string;
   role: string;
+  roles?: string[];
   depot: string | null;
 }
 
-const ADMIN_ROLES = ["team_leader", "accounts", "head_office_admin"];
 
 function formatDate(dateStr: string) {
   return new Date(dateStr + "T00:00:00").toLocaleDateString("en-GB", {
@@ -60,6 +63,7 @@ export default function StillagesPage() {
   const [totalInCirculation, setTotalInCirculation] = useState(0);
   const [movements, setMovements] = useState<StillageMovement[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [selectedDepotFilter, setSelectedDepotFilter] = useState<string>("all");
   const [formData, setFormData] = useState({
     locationId: "",
@@ -70,7 +74,7 @@ export default function StillagesPage() {
   });
   const [submitting, setSubmitting] = useState(false);
 
-  const isAdmin = user ? ADMIN_ROLES.includes(user.role) : false;
+  const isAdmin = hasRole(user, "head_office_admin");
 
   useEffect(() => {
     fetch("/api/auth/me", { credentials: "include" })
@@ -100,7 +104,7 @@ export default function StillagesPage() {
       .then((data) => {
         if (data) {
           setSummary(data.summary);
-          setTotalInCirculation(data.totalInCirculation);
+          setTotalInCirculation(data.totalInCirculation ?? data.scopedTotalInCirculation ?? 0);
         }
       })
       .catch(() => {});
@@ -112,7 +116,7 @@ export default function StillagesPage() {
     fetch(`/api/stillages?${params}`, { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data) setMovements(data.movements);
+        if (data) setMovements(data.movements ?? []);
       })
       .catch(() => {});
   }
@@ -126,8 +130,8 @@ export default function StillagesPage() {
     setSubmitting(true);
 
     try {
-      const res = await fetch("/api/stillages", {
-        method: "POST",
+      const res = await fetch(editingId ? `/api/stillages/${editingId}` : "/api/stillages", {
+        method: editingId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify(formData),
@@ -146,6 +150,7 @@ export default function StillagesPage() {
           notes: "",
         });
         setShowForm(false);
+        setEditingId(null);
         loadData();
       } else {
         const err = await res.json();
@@ -171,21 +176,21 @@ export default function StillagesPage() {
       title="Stillage Tracking"
       subtitle="Track stillage container movements across depots"
       headerActions={
-        <Button
-          onClick={() => setShowForm(!showForm)}
+        isAdmin ? <Button
+          onClick={() => { setEditingId(null); setShowForm(!showForm); }}
           className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
         >
           <Plus className="w-4 h-4 mr-2" />
           Log Movement
-        </Button>
+        </Button> : undefined
       }
     >
       {locationError && <p role="alert" className="mb-4 text-red-700">{locationError}</p>}
       {!locationsLoading && !locationError && !locations.length && <p role="alert" className="mb-4 text-amber-700">No permitted locations are available. Ask your administrator to assign the sites you need before logging a movement.</p>}
-      {showForm && (
+      {isAdmin && showForm && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
           <h3 className="text-lg font-bold text-[#0f2744] mb-4">
-            Log Stillage Movement
+            {editingId ? "Edit Stillage Movement" : "Log Stillage Movement"}
           </h3>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
@@ -288,7 +293,7 @@ export default function StillagesPage() {
           <div className="flex justify-between items-start mb-2">
             <div>
               <p className="text-sm font-medium text-slate-500 mb-1">
-                Total In Circulation
+                {isAdmin ? "Total In Circulation" : "Stillages at authorised locations"}
               </p>
               <h3 className="text-3xl font-bold text-[#0f2744]">
                 {totalInCirculation}
@@ -308,7 +313,7 @@ export default function StillagesPage() {
 
         {summary.slice(0, 3).map((s) => (
           <div
-            key={s.depot}
+            key={s.locationId ?? s.depot}
             className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-shadow"
           >
             <div className="flex justify-between items-start mb-2">
@@ -338,7 +343,7 @@ export default function StillagesPage() {
         ))}
       </div>
 
-      {isAdmin && summary.length > 0 && (
+      {summary.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
           <div className="px-6 py-5 border-b border-slate-200">
             <h3 className="text-lg font-bold text-[#0f2744]">
@@ -364,7 +369,7 @@ export default function StillagesPage() {
               <tbody className="divide-y divide-slate-100">
                 {summary.map((s, i) => (
                   <tr
-                    key={s.depot}
+                    key={s.locationId ?? s.depot}
                     className={`hover:bg-slate-50/80 transition-colors ${
                       i % 2 === 0 ? "bg-white" : "bg-slate-50/30"
                     }`}
@@ -411,7 +416,7 @@ export default function StillagesPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      {isAdmin && <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="px-6 py-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <History className="w-5 h-5 text-slate-400" />
@@ -492,6 +497,11 @@ export default function StillagesPage() {
                   </td>
                   <td className="px-6 py-4 text-slate-500 max-w-[200px] truncate">
                     {m.notes || "-"}
+                    <button className="block text-sky-700 underline text-xs mt-1" onClick={() => {
+                      setEditingId(m.id); setShowForm(true);
+                      setFormData({ locationId: m.locationId ? String(m.locationId) : "", movementDate: m.movementDate, collected: String(m.collected), droppedOff: String(m.droppedOff), notes: m.notes || "" });
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}>Edit movement</button>
                   </td>
                 </tr>
               ))}
@@ -508,7 +518,7 @@ export default function StillagesPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
     </SidebarLayout>
   );
 }

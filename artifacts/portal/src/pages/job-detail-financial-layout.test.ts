@@ -191,8 +191,8 @@ describe("job-detail save controls", () => {
     expect(depotFormSource).not.toContain("voltage: b.isLooseCells ? null");
   });
 
-  it("distinguishes unconfirmed manufacturers in the TAB-weight message", () => {
-    expect(source).toContain("unconfirmed manufacturers will be confirmed with TAB weights");
+  it("leaves unknown or token weights pending in the TAB confirmation message", () => {
+    expect(source).toContain("Rows with missing details or only token weights will remain pending.");
     expect(source).not.toContain("items with TAB weights");
   });
 });

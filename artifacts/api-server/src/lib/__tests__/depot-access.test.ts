@@ -20,7 +20,7 @@ describe("explicit depot access", () => {
   });
   it("keeps staff access separate from collectors", () => {
     expect(mayAccessDepot({ ...user, role: "head_office_admin" }, { clientId: null, locationId: null })).toBe(true);
-    expect(mayAccessDepot({ ...user, role: "accounts" }, { clientId: null, locationId: null })).toBe(true);
+    expect(mayAccessDepot({ ...user, role: "accounts" }, { clientId: null, locationId: null })).toBe(false);
     expect(mayAccessDepot({ ...user, role: "collection_company" }, { clientId: 1, locationId: 10 })).toBe(false);
   });
 });

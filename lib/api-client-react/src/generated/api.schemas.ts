@@ -8,3 +8,20 @@
 export interface HealthStatus {
   status: string;
 }
+
+export type GetDocumentHistory200VersionsItem = {
+  versionId: string;
+  version: number;
+  fileName: string;
+  /** @nullable */
+  uploadedById: number | null;
+  uploadedAt: string;
+  /** @nullable */
+  replacedById?: number | null;
+  /** @nullable */
+  replacedAt?: string | null;
+};
+
+export type GetDocumentHistory200 = {
+  versions: GetDocumentHistory200VersionsItem[];
+};

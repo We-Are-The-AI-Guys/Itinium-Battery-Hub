@@ -6,20 +6,21 @@ beforeEach(() => vi.stubGlobal("fetch", vi.fn(async () => ({
 }))));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 describe("customer request controls", () => {
-  it.each(["received", "invoice", "awaiting_invoice", "completed"])("greys out both actions and explains the cutoff at %s", async jobStatus => {
+  it.each(["completed", "cancelled"])("greys out both actions and explains the cutoff at %s", async jobStatus => {
     render(<JobRequestsPanel jobId={5} variant="customer" jobStatus={jobStatus} />);
     await waitFor(() => expect(fetch).toHaveBeenCalled());
     expect(screen.getByTestId("button-request-amendment")).toBeDisabled();
     expect(screen.getByTestId("button-request-cancellation")).toBeDisabled();
-    expect(screen.getByRole("status")).toHaveTextContent("Items have been collected");
+    expect(screen.getByRole("status")).toHaveTextContent("This job is closed");
   });
-  it("disables an already-open form when the job becomes Received", async () => {
+  it("keeps an amendment form open at Received but disables cancellation", async () => {
     const { rerender } = render(<JobRequestsPanel jobId={5} variant="customer" jobStatus="confirmed" />);
     await waitFor(() => expect(fetch).toHaveBeenCalled());
     expect(screen.getByTestId("button-request-amendment")).toBeEnabled();
     fireEvent.click(screen.getByTestId("button-request-amendment"));
     rerender(<JobRequestsPanel jobId={5} variant="customer" jobStatus="received" />);
-    expect(screen.getByTestId("input-request-notes")).toBeDisabled();
+    expect(screen.getByTestId("input-request-notes")).toBeEnabled();
+    expect(screen.getByTestId("button-request-cancellation")).toBeDisabled();
   });
   it("keeps collector exception reporting enabled", async () => {
     render(<JobRequestsPanel jobId={5} variant="collector" jobStatus="received" />);

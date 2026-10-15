@@ -9,11 +9,12 @@ import jobsRouter from "../jobs";
 import usersRouter from "../users";
 import authRouter from "../auth";
 import { notifyAccountsStatementUploaded, notifyAdminsDocumentsComplete } from "../../lib/notifications";
-import { jobsTable, jobDocumentsTable, usersTable, sessionsTable, userLocationsTable } from "@workspace/db/schema";
+import { jobsTable, jobDocumentsTable, usersTable, sessionsTable, userLocationsTable, accessAuditTable } from "@workspace/db/schema";
 
 const state = vi.hoisted(() => ({
   reads: [] as any[][], writes: [] as { table: any; rows: any[] }[],
   storedSize: 7, storedType: "application/pdf", file: vi.fn(),
+  missingFile: false, Missing: class extends Error {},
 }));
 vi.mock("@workspace/db", () => ({
   db: {
@@ -42,11 +43,11 @@ vi.mock("../../lib/notifications", () => ({
 }));
 vi.mock("../../lib/email", () => ({ sendEmail: vi.fn(), buildPasswordResetEmail: vi.fn() }));
 vi.mock("../../lib/objectStorage", () => ({
-  ObjectNotFoundError: class extends Error {},
+  ObjectNotFoundError: state.Missing,
   ObjectStorageService: class {
     getObjectEntityUploadURL = async () => "https://fixture.invalid/upload";
     normalizeObjectEntityPath = () => "/objects/fixture";
-    getObjectEntityFile = async () => { state.file(); return { getMetadata: async () => [{ size: state.storedSize, contentType: state.storedType }] }; };
+    getObjectEntityFile = async (path: string) => { state.file(path); if (state.missingFile) throw new state.Missing(); return { getMetadata: async () => [{ size: state.storedSize, contentType: state.storedType }] }; };
     downloadObject = async () => new Response("fixture document");
   },
 }));
@@ -73,9 +74,56 @@ beforeAll(async () => {
 afterAll(async () => { vi.unstubAllEnvs(); await new Promise<void>(resolve => server.close(() => resolve())); });
 beforeEach(() => {
   state.reads = []; state.writes = []; state.file.mockClear(); state.storedSize = 7; state.storedType = "application/pdf";
+  state.missingFile = false;
   vi.mocked(notifyAccountsStatementUploaded).mockClear(); vi.mocked(notifyAdminsDocumentsComplete).mockClear();
 });
 describe("authenticated collector document workflow", () => {
+  it("treats missing backing files as missing rather than advertising broken links", async () => {
+    state.missingFile = true;
+    signedIn(); state.reads.push([job], [{ docType: "statement", objectPath: "/objects/missing", fileName: "missing.pdf" }]);
+    const response = await request("/jobs/5/documents");
+    expect(await response.json()).toMatchObject({ documents: [], outstandingTypes: ["collection_sheet", "consignment_note", "statement"] });
+    signedIn(); state.reads.push([job], [{ docType: "statement", objectPath: "/objects/missing", fileName: "missing.pdf" }]);
+    expect((await request("/jobs/5/documents/statement/download")).status).toBe(404);
+  });
+  it.each(["head_office_admin", "collection_company"].flatMap(role =>
+    ["request", "confirmed", "received", "processing", "awaiting_invoice", "invoice", "completed", "cancelled"].flatMap(status =>
+      ["collection_sheet", "consignment_note", "statement"].map(docType => ({ role, status, docType })))
+  ))("uploads and downloads $docType for $role at $status", async ({ role, status, docType }) => {
+    const user = { ...collector, role, roles: [role] };
+    const currentJob = { ...job, status, collectionDate: null, collectionReleasedAt: null, scheduleStatus: "unassigned" };
+    const meta = { docType, name: "fictional.pdf", size: 7, contentType: "application/pdf" };
+    signedIn(user); state.reads.push([currentJob]);
+    const response = await request("/collection/jobs/5/documents/upload-url", meta);
+    expect(response.status).toBe(200);
+    const intent = await response.json() as any;
+    signedIn(user); state.reads.push([currentJob], [], []);
+    expect((await request("/collection/jobs/5/documents", { ...meta, ...intent })).status).toBe(201);
+    signedIn(user); state.reads.push([currentJob], [{ ...meta, objectPath: intent.objectPath, fileName: meta.name }]);
+    expect((await request(`/jobs/5/documents/${docType}/download`)).status).toBe(200);
+  });
+  it("records replacement history without modifying the other two types", async () => {
+    const meta = { docType: "statement", name: "new.pdf", size: 7, contentType: "application/pdf" };
+    signedIn(); state.reads.push([job]);
+    const intent = await (await request("/collection/jobs/5/documents/upload-url", meta)).json() as any;
+    const previous = { docType: "statement", objectPath: "/objects/old", fileName: "old.pdf", uploadedById: 44, uploadedAt: "2026-10-01" };
+    signedIn(); state.reads.push([job], ["collection_sheet", "consignment_note", "statement"].map(docType => ({ docType })), [previous]);
+    expect((await request("/collection/jobs/5/documents", { ...meta, ...intent })).status).toBe(201);
+    expect(state.writes.filter(w => w.table === jobDocumentsTable)).toHaveLength(1);
+    expect(state.writes.find(w => w.table === accessAuditTable)?.rows[0]).toMatchObject({ actorId: 1, action: "document.replace", details: { previous: [previous] } });
+    signedIn(); state.reads.push([job], [{ docType: "statement", objectPath: "/objects/fixture", fileName: "new.pdf", uploadedById: 1 }],
+      [{ id: 80, actorId: 1, createdAt: new Date(), details: { docType: "statement", previous: [previous] } }]);
+    const history = await request("/jobs/5/documents/statement/history");
+    expect(history.status).toBe(200);
+    const data = await history.json() as any;
+    expect(data.versions).toHaveLength(2);
+    expect(data.versions[1]).toMatchObject({ fileName: "old.pdf", replacedById: 1, version: 1 });
+    expect(JSON.stringify(data)).not.toContain("/objects/");
+    signedIn(); state.reads.push([job], [{ docType: "statement", objectPath: "/objects/fixture", fileName: "new.pdf" }],
+      [{ id: 80, actorId: 1, createdAt: new Date(), details: { docType: "statement", previous: [{ ...previous, contentType: "application/pdf" }] } }]);
+    expect((await request("/jobs/5/documents/statement/history/80/download")).status).toBe(200);
+    expect(state.file).toHaveBeenLastCalledWith("/objects/old");
+  });
   it.each(["collection_sheet", "consignment_note", "statement"])("authorises and records %s with a bound intent", async docType => {
     const meta = { docType, name: "fictional.pdf", size: 7, contentType: "application/pdf" };
     signedIn(); state.reads.push([job]);
@@ -98,29 +146,28 @@ describe("authenticated collector document workflow", () => {
     expect(notifyAccountsStatementUploaded).not.toHaveBeenCalled();
     expect(notifyAdminsDocumentsComplete).not.toHaveBeenCalled();
   });
-  it("shows uploaded metadata before Completed without enabling downloads", async () => {
+  it("shows uploaded metadata and enables assigned collector downloads before Completed", async () => {
     signedIn(); state.reads.push([job], [{ docType: "statement", fileName: "fixture.pdf" }]);
     const res = await request("/jobs/5/documents");
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ documents: [{ docType: "statement" }], requiredTypes: ["collection_sheet", "consignment_note", "statement"], releasePending: true });
-    signedIn(); state.reads.push([job]);
-    expect((await request("/jobs/5/documents/collection_sheet/download")).status).toBe(403);
+    expect(await res.json()).toMatchObject({ documents: [{ docType: "statement" }], requiredTypes: ["collection_sheet", "consignment_note", "statement"], releasePending: false });
+    signedIn(); state.reads.push([job], [{ objectPath: "/objects/fixture", fileName: "fictional.pdf", contentType: "application/pdf" }]);
+    expect((await request("/jobs/5/documents/collection_sheet/download")).status).toBe(200);
   });
   it.each(["collection_sheet", "consignment_note", "statement"])("allows assigned collector to download %s at Completed", async docType => {
     signedIn(); state.reads.push([{ ...job, status: "completed" }], [{ docType, objectPath: "/objects/fixture", fileName: "fictional.pdf", contentType: "application/pdf" }]);
     expect((await request(`/jobs/5/documents/${docType}/download`)).status).toBe(200);
   });
   it.each([
-    { collectionReleasedAt: null },
     { collectionCompanyId: 20 },
   ])("denies uploads to unavailable collection %j", async override => {
     signedIn(); state.reads.push([{ ...job, ...override }]);
     expect((await request("/collection/jobs/5/documents/upload-url", { docType: "statement", name: "fixture.pdf", size: 7, contentType: "application/pdf" })).status).toBe(404);
   });
-  it("rejects future collection uploads and oversize files", async () => {
+  it("allows future collection uploads but rejects oversize files", async () => {
     const meta = { docType: "statement", name: "fixture.pdf", size: 7, contentType: "application/pdf" };
     signedIn(); state.reads.push([{ ...job, status: "confirmed", collectionDate: "2099-01-01" }]);
-    expect((await request("/collection/jobs/5/documents/upload-url", meta)).status).toBe(400);
+    expect((await request("/collection/jobs/5/documents/upload-url", meta)).status).toBe(200);
     state.reads = []; signedIn();
     expect((await request("/collection/jobs/5/documents/upload-url", { ...meta, size: 21 * 1024 * 1024 })).status).toBe(400);
   });
@@ -139,6 +186,25 @@ describe("authenticated collector document workflow", () => {
     expect((await request("/collection/jobs/5/documents/upload-url", { docType: "statement" })).status).toBe(403);
     expect(state.file).not.toHaveBeenCalled();
     expect((await request("/objects/fixture")).status).toBe(404);
+  });
+  it.each(["lead_client", "accounts", "team_leader", "depot_user"])("enforces Invoice release and tenant scope on signed files for %s", async role => {
+    const user = { ...collector, role, roles: [role], clientId: 1, collectionCompanyId: null };
+    for (const status of ["request", "confirmed", "received", "awaiting_invoice", "invoice", "invoiced", "completed"]) {
+      for (const type of ["collection_sheet", "consignment_note"]) for (const action of ["view", "download"]) {
+        state.reads = []; signedIn(user);
+        const current = { ...job, clientId: 1, locationId: 11, status };
+        state.reads.push([current], [current], [{ docType: type, objectPath: "/objects/fixture", fileName: "signed.pdf", contentType: "application/pdf" }]);
+        expect((await request(`/jobs/5/documents/${type}/${action}`)).status).toBe(["invoice", "invoiced", "completed"].includes(status) ? 200 : 403);
+      }
+    }
+    for (const override of [{ clientId: 2 }, ...(["team_leader", "depot_user"].includes(role) ? [{ locationId: 22 }] : [])]) {
+      state.reads = []; signedIn(user); state.reads.push([{ ...job, clientId: 1, locationId: 11, status: "invoice", ...override }]);
+      state.file.mockClear();
+      expect((await request("/jobs/5/documents/collection_sheet/view")).status).toBe(404);
+      expect(state.file).not.toHaveBeenCalled();
+    }
+    state.reads = []; signedIn(user); state.reads.push([{ ...job, clientId: 1, locationId: 11 }]);
+    expect((await request("/jobs/5/documents/statement/history")).status).toBe(404);
   });
 });
 describe("driver sheet HTTP access", () => {
@@ -159,19 +225,25 @@ describe("driver sheet HTTP access", () => {
   });
 });
 describe("admin creation to sign-in with issued credentials", () => {
-  it.each([undefined, "Fictional-Supplied-Password"])("authenticates issued password and retains only assigned site (%s)", async password => {
+  it.each([undefined, "Fictional-Supplied-Password"].flatMap(password =>
+    [["depot_user"], ["team_leader", "depot_user"], ["accounts", "depot_user"], ["lead_client", "team_leader"]].map(roles => ({ password, roles }))
+  ))("authenticates issued password and combined roles with one client ($roles)", async ({ password, roles }) => {
     signedIn({ ...collector, role: "head_office_admin", roles: ["head_office_admin"] });
     state.reads.push([{ clientId: 1 }], [{ clientId: 1 }], [], [{ name: "Fictional New Site" }]);
-    const created = await request("/users", { fullName: "Fictional Warehouse User", email: "  NEW.SITE@EXAMPLE.TEST  ", role: "depot_user", clientId: 1, locationId: 11, permittedLocationIds: [], ...(password ? { password } : {}) });
+    const created = await request("/users", { fullName: "Fictional Warehouse User", email: "  NEW.SITE@EXAMPLE.TEST  ", role: roles[0], roles, clientId: 1, locationId: 11, permittedLocationIds: [], ...(password ? { password } : {}) });
     expect(created.status).toBe(201);
     const issued = await created.json() as { user: { email: string }; tempPassword: string };
     const saved = state.writes.find(w => w.table === usersTable)!.rows[0];
+    expect(saved.roles).toEqual(expect.arrayContaining(roles));
+    expect(saved.clientId).toBe(1);
     expect(issued.user).toMatchObject({ email: "new.site@example.test", permittedLocationIds: [11], locationId: 11 });
     expect(state.writes.find(w => w.table === userLocationsTable)?.rows).toEqual([{ userId: 99, locationId: 11 }]);
+    state.reads = [[{ ...saved, id: 99, isActive: false }]];
+    expect((await request("/auth/login", { email: issued.user.email, password: issued.tempPassword })).status).toBe(403);
     state.reads = [[{ ...saved, id: 99 }], [{ name: "Fictional Client" }], [{ name: "Fictional New Site" }], [{ ...saved, id: 99 }], [{ id: 11 }]];
     const login = await request("/auth/login", { email: " NEW.SITE@EXAMPLE.TEST ", password: issued.tempPassword });
     expect(login.status).toBe(200);
-    expect(await login.json()).toMatchObject({ user: { role: "depot_user", locationName: "Fictional New Site", permittedLocationIds: [11] } });
+    expect(await login.json()).toMatchObject({ user: { roles: expect.arrayContaining(roles), locationName: "Fictional New Site", permittedLocationIds: [11], clientId: 1 } });
     expect(login.headers.get("set-cookie")).toContain("HttpOnly");
     expect(state.writes.some(w => w.table === sessionsTable)).toBe(true);
     const persistedSession = state.writes.filter(w => w.table === sessionsTable).at(-1)!.rows[0];

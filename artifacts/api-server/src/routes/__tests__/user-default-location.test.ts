@@ -55,6 +55,18 @@ beforeAll(async () => {
   await once(server, "listening");
   origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
 });
+it("lets Admin activate a newly created scoped user without changing their client or default location", async () => {
+  state.reads = [
+    [{ id: 2, role: "depot_user", roles: ["depot_user"], clientId: 10, locationId: 11, isActive: false }],
+    [{ role: "depot_user", roles: ["depot_user"], clientId: 10 }],
+    [{ id: 11 }], [{ clientId: 10 }], [{ clientId: 10, locationId: 11 }], [{ clientId: 10 }], [{ id: 11 }],
+  ];
+  const response = await fetch(origin + "/users/2", {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isActive: true }),
+  });
+  expect(response.status).toBe(200);
+  expect(state.updates).toEqual({ isActive: true });
+});
 afterAll(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
 beforeEach(() => {
   state.reads = []; state.updates = {}; state.inserts = [];

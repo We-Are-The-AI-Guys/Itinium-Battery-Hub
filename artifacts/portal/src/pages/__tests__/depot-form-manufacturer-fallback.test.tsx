@@ -59,6 +59,9 @@ function installFetchMock() {
     "fetch",
     vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.includes("/api/clients/1/locations")) return Promise.resolve(jsonResponse(200, {
+        locations: [{ id: 11, clientId: 1, name: "Fixture Test Depot", address: "Fixture address" }],
+      }));
       if (url.includes("/api/job-drafts")) {
         if (init?.method === "POST") {
           savedDraftForm = JSON.parse(String(init.body)).formData;
@@ -79,7 +82,7 @@ function installFetchMock() {
       }
       if (url.includes("/api/auth/me")) {
         return Promise.resolve(jsonResponse(200, {
-          user: { id: 1, email: "test@example.invalid", fullName: "Test User", role: userRole, clientId: null, locationId: null },
+          user: { id: 1, email: "test@example.invalid", fullName: "Test User", role: userRole, clientId: 1, locationId: 11, permittedLocationIds: [11] },
         }));
       }
       if (url.includes("/api/jobs") && init?.method === "POST") {

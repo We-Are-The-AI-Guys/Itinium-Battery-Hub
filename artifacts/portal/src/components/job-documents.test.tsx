@@ -6,7 +6,7 @@ let documents: any[];
 let releasePending: boolean;
 let failUpload: boolean;
 beforeEach(() => {
-  documents = []; releasePending = true; failUpload = false;
+  documents = []; releasePending = false; failUpload = false;
   vi.stubGlobal("fetch", vi.fn(async (url: string, options?: RequestInit) => {
     if (url === "https://fixture.invalid/upload") return { ok: !failUpload };
     if (url.endsWith("upload-url")) return { ok: true, json: async () => ({ uploadURL: "https://fixture.invalid/upload", objectPath: "/objects/fixture", uploadToken: "fixture-token" }) };
@@ -19,7 +19,22 @@ beforeEach(() => {
   }));
 });
 describe("collector documents", () => {
-  it("uploads all three types and shows accurate status while downloads stay held", async () => {
+  it.each(["admin", "upload"] as const)("offers all three upload/view/download/replace controls in %s mode", async mode => {
+    documents = ["collection_sheet", "consignment_note", "statement"].map(docType => ({ docType, fileName: `${docType}.pdf`, uploadedAt: "2026-10-14" }));
+    render(<JobDocumentsPanel jobId={5} mode={mode} />);
+    await screen.findByText("All received");
+    for (const type of ["collection_sheet", "consignment_note", "statement"]) {
+      expect(screen.getByTestId(`button-view-${type}-5`)).toBeInTheDocument();
+      expect(screen.getByTestId(`button-download-${type}-5`)).toBeInTheDocument();
+      expect(screen.getByTestId(`button-upload-${type}-5`)).toHaveTextContent("Replace");
+    }
+  });
+  it("offers Admin a Statement Upload even when no Statement exists", async () => {
+    render(<JobDocumentsPanel jobId={51} mode="admin" />);
+    await screen.findByText("3 outstanding");
+    expect(screen.getByTestId("button-upload-statement-51")).toHaveTextContent("Upload");
+  });
+  it("uploads all three types and keeps assigned collector downloads available", async () => {
     const { container, unmount } = render(<JobDocumentsPanel jobId={5} mode="upload" />);
     await screen.findByText("3 outstanding");
     for (const type of ["collection_sheet", "consignment_note", "statement"]) {
@@ -29,7 +44,7 @@ describe("collector documents", () => {
       await waitFor(() => expect(screen.getByTestId(`button-upload-${type}-5`)).toBeEnabled());
     }
     expect(screen.getByText("All received")).toBeInTheDocument();
-    expect(screen.queryByTestId("button-download-collection_sheet-5")).not.toBeInTheDocument();
+    expect(screen.getByTestId("button-download-collection_sheet-5")).toBeInTheDocument();
     unmount();
     render(<JobDocumentsPanel jobId={5} mode="upload" />);
     expect(await screen.findByText("All received")).toBeInTheDocument();

@@ -6,4 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./getDocumentHistory200";
+export * from "./getDocumentHistory200VersionsItem";
 export * from "./healthStatus";

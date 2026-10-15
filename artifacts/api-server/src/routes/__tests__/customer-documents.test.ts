@@ -100,8 +100,9 @@ describe.each(["lead_client", "accounts", "team_leader", "depot_user"])("%s Invo
     expect(await res.json()).toMatchObject({ releasePending: false, canUpload: false });
   });
 });
-it("retains the collector Completed-only gate", () => {
+it("releases assigned collector documents irrespective of status", () => {
   const collector = { role: "collection_company", clientId: null } as Parameters<typeof documentsReleased>[0];
-  expect(documentsReleased(collector, "invoice")).toBe(false);
+  expect(documentsReleased(collector, "invoice")).toBe(true);
+  expect(documentsReleased(collector, "request")).toBe(true);
   expect(documentsReleased(collector, "completed")).toBe(true);
 });

@@ -52,12 +52,15 @@ export function JobRequestsPanel({
   const [formError, setFormError] = useState("");
   const [sent, setSent] = useState(false);
   const [evidence, setEvidence] = useState<File | null>(null);
-  const [serverClosed, setServerClosed] = useState(false);
+  const [capabilities, setCapabilities] = useState<{ canRequestAmendment: boolean; canRequestCancellation: boolean } | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const data = await api<{ requests: JobRequest[] }>(`/api/jobs/${jobId}/requests`);
+      const data = await api<{ requests: JobRequest[]; canRequestAmendment?: boolean; canRequestCancellation?: boolean }>(`/api/jobs/${jobId}/requests`);
       setRequests(data.requests || []);
+      if (typeof data.canRequestAmendment === "boolean" && typeof data.canRequestCancellation === "boolean") {
+        setCapabilities({ canRequestAmendment: data.canRequestAmendment, canRequestCancellation: data.canRequestCancellation });
+      }
       setLoadError("");
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Could not load requests.");
@@ -66,10 +69,13 @@ export function JobRequestsPanel({
 
   useEffect(() => {
     load();
+    const timer = setInterval(load, 30000);
+    return () => clearInterval(timer);
   }, [load]);
 
-  const closed = serverClosed || !["request", "confirmed"].includes(jobStatus);
-  const customerCanRequest = variant === "customer" && !closed;
+  const canAmend = variant === "customer" && !["completed", "cancelled", "draft"].includes(jobStatus) && capabilities?.canRequestAmendment !== false;
+  const canCancel = variant === "customer" && ["request", "confirmed"].includes(jobStatus) && capabilities?.canRequestCancellation !== false;
+  const closed = !canAmend;
   const visible = (requests || []).filter((r) =>
     variant === "collector" ? r.kind === "transport_exception" : r.kind !== "transport_exception",
   );
@@ -77,7 +83,7 @@ export function JobRequestsPanel({
 
   async function submit() {
     if (!kind) return;
-    if (variant === "customer" && !customerCanRequest) return;
+    if (variant === "customer" && !(kind === "amendment" ? canAmend : canCancel)) return;
     if (!notes.trim()) {
       setFormError(kind === "transport_exception" ? "Describe what happened on the collection." : "Explain what needs to change.");
       return;
@@ -110,7 +116,7 @@ export function JobRequestsPanel({
       setSent(true);
       await load();
     } catch (e) {
-      if (variant === "customer" && e instanceof ApiError && e.status === 409) setServerClosed(true);
+      if (variant === "customer" && e instanceof ApiError && e.status === 409) await load();
       setFormError(e instanceof Error ? e.message : "Could not send the request.");
     } finally {
       setSubmitting(false);
@@ -124,7 +130,7 @@ export function JobRequestsPanel({
           <Button
             variant="outline"
             size="sm"
-            disabled={!customerCanRequest || kind !== null}
+            disabled={!canAmend || kind !== null}
             onClick={() => { setKind("amendment"); setSent(false); }}
             data-testid="button-request-amendment"
           >
@@ -134,7 +140,7 @@ export function JobRequestsPanel({
             variant="outline"
             size="sm"
             className="text-red-700 border-red-200 hover:bg-red-50"
-            disabled={!customerCanRequest || kind !== null || pendingCancellation}
+            disabled={!canCancel || kind !== null || pendingCancellation}
             onClick={() => { setKind("cancellation"); setSent(false); }}
             data-testid="button-request-cancellation"
           >
@@ -144,10 +150,10 @@ export function JobRequestsPanel({
       )}
       {variant === "customer" && closed && (
         <p role="status" className="text-sm text-slate-600 rounded-md border border-slate-200 bg-slate-100 p-3">
-          {jobStatus === "cancelled" ? "This job has been cancelled." : "Items have been collected (Received or later)."}
-          {" "}Amendment and cancellation requests can no longer be made. Contact Itinium through Help & Support if something is wrong.
+          This job is closed. Amendments are available before Completed; cancellation requests only before physical collection.
         </p>
       )}
+      {variant === "customer" && canAmend && !canCancel && <p className="text-xs text-slate-500">Amendments remain available until Completed. Cancellation is unavailable after physical collection.</p>}
       {variant === "collector" && kind === null && (
         <Button variant="outline" size="sm" onClick={() => { setKind("transport_exception"); setSent(false); }} data-testid={`button-report-exception-${jobId}`}>
           <AlertTriangle className="w-4 h-4 mr-1.5 text-amber-600" /> Report transport exception
@@ -155,7 +161,7 @@ export function JobRequestsPanel({
       )}
 
       {kind && (
-        <fieldset disabled={variant === "customer" && closed} className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3 disabled:opacity-50">
+        <fieldset disabled={submitting || (variant === "customer" && !(kind === "amendment" ? canAmend : canCancel))} className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-3 disabled:opacity-50">
           <p className="text-sm font-semibold text-[#0f2744]">{REQUEST_KIND_LABELS[kind]}</p>
           {kind === "transport_exception" && (
             <label className="block">

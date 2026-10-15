@@ -42,6 +42,15 @@ export function JobDocumentsPanel({
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingTypeRef = useRef<string | null>(null);
+  const [history, setHistory] = useState<{ type: string; versions: { versionId: string; version: number; fileName: string; uploadedById: number; uploadedAt: string; replacedById?: number; replacedAt?: string }[] } | null>(null);
+  async function showHistory(type: string) {
+    try {
+      const res = await fetch(`${API_BASE}/api/jobs/${jobId}/documents/${type}/history`, { credentials: "include" });
+      if (!res.ok) throw new Error("Could not load document history.");
+      const data = await res.json();
+      setHistory({ type, versions: data.versions });
+    } catch { fail("Could not load document history."); }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -205,7 +214,7 @@ export function JobDocumentsPanel({
                     {doc.fileName} · {new Date(doc.uploadedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                   </p>
                 ) : (
-                  <p className="text-xs text-slate-400">Not uploaded yet</p>
+                  <p className="text-xs text-slate-400">{state.releasePending ? "Released at Invoice" : "Not uploaded yet"}</p>
                 )}
               </div>
               {doc && !state.releasePending && (
@@ -228,7 +237,7 @@ export function JobDocumentsPanel({
                   </Button>
                 </div>
               )}
-              {canUploadHere && (type !== "statement" || mode === "upload") && (
+              {canUploadHere && (
                 <Button
                   size="sm"
                   className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white shrink-0"
@@ -243,16 +252,26 @@ export function JobDocumentsPanel({
                   {uploadingType === type ? "Uploading…" : doc ? "Replace" : "Upload"}
                 </Button>
               )}
+              {canUploadHere && <button className="text-xs text-sky-700 underline" onClick={() => showHistory(type)}>History</button>}
             </li>
           );
         })}
       </ul>
+      {history && <section className="mt-3 rounded border p-3" aria-label="Document version history">
+        <div className="flex justify-between"><h4 className="font-medium">Version history · {DOC_TYPES.find(d => d.type === history.type)?.label}</h4><button className="underline text-sm" onClick={() => setHistory(null)}>Close history</button></div>
+        {!history.versions.length ? <p>No recorded versions.</p> : history.versions.map(version => <div key={version.versionId} className="border-t py-2 text-xs">
+          <p>Version {version.version} · {version.fileName} · Uploaded by user {version.uploadedById} · {new Date(version.uploadedAt).toLocaleString("en-GB")}</p>
+          {version.replacedAt && <p>Replaced by user {version.replacedById} · {new Date(version.replacedAt).toLocaleString("en-GB")}</p>}
+          {["view", "download"].map(action => <a key={action} className="mr-3 text-sky-700 underline" target="_blank" rel="noopener noreferrer"
+            href={`${API_BASE}/api/jobs/${jobId}/documents/${history.type}/history/${version.versionId}/${action}`}>{action === "view" ? "View" : "Download"}</a>)}
+        </div>)}
+      </section>}
       {mode === "upload" && !state.canUpload && (
         <p className="text-xs text-slate-400 mt-1.5">
           You can upload the signed collection sheet, consignment note and Statement to Itinium once the collection has been carried out.
         </p>
       )}
-      {mode === "upload" && state.releasePending && <p className="text-xs text-slate-500 mt-2">Uploaded status is shown below. File viewing and downloads are released when Itinium marks the job Completed.</p>}
+      {mode === "customer" && state.releasePending && <p className="text-xs text-slate-500 mt-2">Signed documents are released at Invoice, when Itinium invoices the collection company, and remain available afterwards.</p>}
       {error && <p role="alert" className="text-sm text-red-600 mt-2">{error} <button className="underline" onClick={load}>Refresh status</button> · Retry an upload using its Upload or Replace button.</p>}
     </div>
   );

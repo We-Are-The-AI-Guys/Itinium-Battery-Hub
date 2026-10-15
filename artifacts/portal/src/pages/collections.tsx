@@ -449,14 +449,12 @@ export default function CollectionsPage() {
                         {downloadError?.jobId === job.id && <p role="alert" className="text-sm text-red-600 mt-2">{downloadError.message} <button className="underline" onClick={() => void downloadCollectionSheet(job)}>Retry</button></p>}
                       </div>
                     )}
-                    {(job.scheduleStatus === "confirmed" ||
-                      ["received", "awaiting_invoice", "invoice", "completed"].includes(job.status)) && (
+                    {(
                       <div className="mt-4 pt-4 border-t border-slate-100">
                         <JobDocumentsPanel jobId={job.id} mode="upload" />
                       </div>
                     )}
-                    {(job.scheduleStatus === "confirmed" ||
-                      ["received", "awaiting_invoice", "invoice", "completed"].includes(job.status)) && (
+                    {(
                       <div className="mt-4 pt-4 border-t border-slate-100">
                         <JobRequestsPanel jobId={job.id} variant="collector" jobStatus={job.status} />
                       </div>

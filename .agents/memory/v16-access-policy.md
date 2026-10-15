@@ -6,23 +6,23 @@ V16 is the authority: Admin alone administers access, internal finance/Pb/resolv
 
 **Why:** The user supplied the approved V16 specification with explicit overrides to previous spreadsheets and instructions.
 
-**How to apply:** Warehouse uses operational overview, not the main dashboard. Customers request amendments/cancellation only before collection (Requested or Confirmed); Admin decides separately from official job status. Only signed consignment notes and collection sheets are customer-approved. Customers may download at Invoice or Completed; assigned collectors remain Completed-only. Admin and assigned collectors may upload PDF/JPEG/PNG up to 20MB; exception evidence remains Admin-only, and Statement uploads follow the override below. Provisional unknown weights are allowed at request time, not confirmation; 26t remains the hard limit.
+**How to apply:** Warehouse uses Operational Overview, not the main dashboard. Customer roles combine features but never bypass their one client or permitted depot scope. Lead Client/Accounts are client-wide; Team Leader/Warehouse have no finance unless combined with a finance-entitled customer role. Provisional unknown weights are allowed at request time, not confirmation; 26t remains the hard limit.
 
-**Why (request cutoff override):** On 2026-10-12 the user specified that once items are collected, amendment/cancellation requests are unavailable. Received and later statuses must show disabled controls and a clear explanation. Collector exception reporting is separate.
+**Why (request cutoff override):** On 2026-10-14 the corrective specification superseded the earlier shared pre-collection cutoff: authorised customers may request amendments until Completed, including Received/Processing. Cancellation closes at physical collection, not scheduling. Collector completed/partial reports constitute collection evidence; a proposed or confirmed date alone does not. Requests never mutate official job data; Admin decides and actions them.
 
-**Why (document release override):** On 2026-10-12 the user explicitly moved client document access from Completed to Invoice. Awaiting Invoice is not Invoice; do not change the status ordering or collector release policy as part of this override.
+**Why (document release override):** On 2026-10-14 the user reiterated that customer signed-document release is the actual Invoice/Invoiced stage (Itinium invoices the collection company), NOT Completed (Itinium pays the customer). Awaiting Invoice is not Invoice. Keep released signed files accessible at Completed.
 
-Assigned collectors must be able to upload their Statement to Itinium as the third post-collection document. Clients must never see it. Collectors also need the generated unsigned driver Collection Sheet before collection, separately from signed-document downloads.
+Admin and the assigned Collection Co may Upload, View, Download and Replace ALL THREE job document types at ANY status: signed collection sheet, signed consignment note and Statement to Itinium. No timing or Completed gate applies to these internal actors. Retain actor/date/version history and the other files when replacing one type. PDF/JPEG/PNG, 20MB per file.
 
-**Why:** The user supplied an email on 2026-10-13 reporting loss of both capabilities and explicitly confirming that clients do not see Statements.
+**Why:** The corrective specification dated 2026-10-14 supersedes previous collector upload timing and Completed-only download rules, and explicitly gives Admin the same full document controls.
 
-**How to apply:** Preserve customer Statement exclusion across UI, metadata, file endpoints and notifications while restoring assigned-collector upload. Do not apply the Completed-only signed-document gate to the unsigned driver sheet; retain explicit collection release, confirmed schedule and assigned-company checks.
+**How to apply:** Customer metadata, files and notifications must never expose Statements, internal version history or internal resolved details. Only the two approved signed types are customer-facing. Verify backing files exist before advertising current-file links. Preserve the separate unsigned driver-sheet download before collection, with assigned-company, explicit release and confirmed-schedule checks.
 
-Collectors need uploaded-file metadata before Completed to track all three outstanding documents; metadata visibility is not permission to view or download the file itself.
+Stillages movement logs, internal notes, editing and global company totals are Admin-only. Lead Client/Accounts get read-only counts for their client; Team Leader/Warehouse only their permitted depots. Collection Co has no Stillages access.
 
-**Why:** The collector workflow must confirm successful uploads and retain accurate progress after reload while preserving the signed-file release gate.
+**Why:** The 2026-10-14 correction explicitly separates operational depot counts from internal movement/notes records.
 
-**How to apply:** Separate upload progress from content release. Customer requirements and metadata always exclude Statements, and internal document notifications go to Itinium Admin, never the customer Accounts role.
+**How to apply:** Enforce restrictions in SQL scope and response allowlists as well as UI/export controls. Do not return movement rows with their notes merely because the UI hides the table. Internal document notifications target Itinium Admin, never customer Accounts.
 
 Real support/operations addresses, retention duration, extra document types and collector assignment redesign remain deferred. Keep KPI presentation/functionality unchanged apart from enforcing tenant isolation. No automatic publishing.
 
@@ -38,7 +38,7 @@ KPI exception: non-Itinium users must not receive Gross Profit, Gross Margin, Ov
 
 **How to apply:** Retain these metrics for Admin only, including in printable views and chart tooltips.
 
-Accounts and Lead Client may download a date-filtered Excel spreadsheet from KPI Reporting containing one row per job. The user clarified that “LME Value £” means the customer's agreed traction rate (£/t), NOT the underlying LME market price. Traction and bloc weights must be exported in kilograms despite the requested “Tonnage (Kg)” headings. The separate total-tonnage and ad hoc-cost columns are excluded. Review flags stay Itinium-only.
+Accounts and Lead Client may download the existing date-filtered KPI spreadsheet containing one row per job. “LME Value £” means the customer's agreed traction rate (£/t), NOT the underlying LME market price. The 2026-10-14 Admin-only Pb rule excludes derived traction/bloc Pb weight columns from customer exports; retain these for Admin. Review flags stay Itinium-only.
 
 **Why:** The user explicitly extended export permissions on 2026-10-12, then corrected the placement: this must be a KPI date-range export, NOT a per-job download. This is an exception to the earlier invoice-total-only financial rule.
 
@@ -53,3 +53,9 @@ Warehouse teams also have read-only Schedule access for their assigned sites.
 **Why:** These are the user's explicit scope boundaries, not implementation assumptions.
 
 **How to apply:** Require configured mailbox/sender addresses, retain requests even when email is pending configuration, and preserve original files/history.
+
+The reported Wellingborough login issue is resolved. Do not attempt targeted account repair or password reset; test new-user creation, activation, sign-in, role unions and scope with isolated fictional users instead.
+
+**Why:** The user explicitly confirmed the issue was separately resolved in the 2026-10-14 corrective specification.
+
+**How to apply:** Treat earlier proposed account-specific reset work as obsolete unless the user reports a new issue and explicitly authorises remediation. Never publish or deploy these corrective changes automatically.

@@ -13,7 +13,7 @@ import type {
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type { GetDocumentHistory200, HealthStatus } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
 import type { ErrorType } from "../custom-fetch";
@@ -23,6 +23,230 @@ type AwaitedInput<T> = PromiseLike<T> | T;
 type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
+
+/**
+ * @summary Admin or assigned collector document version history
+ */
+export const getGetDocumentHistoryUrl = (
+  id: number,
+  docType: "collection_sheet" | "consignment_note" | "statement",
+) => {
+  return `/api/jobs/${id}/documents/${docType}/history`;
+};
+
+export const getDocumentHistory = async (
+  id: number,
+  docType: "collection_sheet" | "consignment_note" | "statement",
+  options?: RequestInit,
+): Promise<GetDocumentHistory200> => {
+  return customFetch<GetDocumentHistory200>(
+    getGetDocumentHistoryUrl(id, docType),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetDocumentHistoryQueryKey = (
+  id: number,
+  docType: "collection_sheet" | "consignment_note" | "statement",
+) => {
+  return [`/api/jobs/${id}/documents/${docType}/history`] as const;
+};
+
+export const getGetDocumentHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDocumentHistory>>,
+  TError = ErrorType<void>,
+>(
+  id: number,
+  docType: "collection_sheet" | "consignment_note" | "statement",
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDocumentHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetDocumentHistoryQueryKey(id, docType);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDocumentHistory>>
+  > = ({ signal }) =>
+    getDocumentHistory(id, docType, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(id && docType),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDocumentHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDocumentHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDocumentHistory>>
+>;
+export type GetDocumentHistoryQueryError = ErrorType<void>;
+
+/**
+ * @summary Admin or assigned collector document version history
+ */
+
+export function useGetDocumentHistory<
+  TData = Awaited<ReturnType<typeof getDocumentHistory>>,
+  TError = ErrorType<void>,
+>(
+  id: number,
+  docType: "collection_sheet" | "consignment_note" | "statement",
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDocumentHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDocumentHistoryQueryOptions(id, docType, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Retrieve a preserved version with current assignment checks
+ */
+export const getGetDocumentVersionFileUrl = (
+  id: number,
+  docType: "collection_sheet" | "consignment_note" | "statement",
+  versionId: string,
+  action: "view" | "download",
+) => {
+  return `/api/jobs/${id}/documents/${docType}/history/${versionId}/${action}`;
+};
+
+export const getDocumentVersionFile = async (
+  id: number,
+  docType: "collection_sheet" | "consignment_note" | "statement",
+  versionId: string,
+  action: "view" | "download",
+  options?: RequestInit,
+): Promise<Blob> => {
+  return customFetch<Blob>(
+    getGetDocumentVersionFileUrl(id, docType, versionId, action),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetDocumentVersionFileQueryKey = (
+  id: number,
+  docType: "collection_sheet" | "consignment_note" | "statement",
+  versionId: string,
+  action: "view" | "download",
+) => {
+  return [
+    `/api/jobs/${id}/documents/${docType}/history/${versionId}/${action}`,
+  ] as const;
+};
+
+export const getGetDocumentVersionFileQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDocumentVersionFile>>,
+  TError = ErrorType<void>,
+>(
+  id: number,
+  docType: "collection_sheet" | "consignment_note" | "statement",
+  versionId: string,
+  action: "view" | "download",
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDocumentVersionFile>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getGetDocumentVersionFileQueryKey(id, docType, versionId, action);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDocumentVersionFile>>
+  > = ({ signal }) =>
+    getDocumentVersionFile(id, docType, versionId, action, {
+      signal,
+      ...requestOptions,
+    });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(id && docType && versionId && action),
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDocumentVersionFile>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDocumentVersionFileQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDocumentVersionFile>>
+>;
+export type GetDocumentVersionFileQueryError = ErrorType<void>;
+
+/**
+ * @summary Retrieve a preserved version with current assignment checks
+ */
+
+export function useGetDocumentVersionFile<
+  TData = Awaited<ReturnType<typeof getDocumentVersionFile>>,
+  TError = ErrorType<void>,
+>(
+  id: number,
+  docType: "collection_sheet" | "consignment_note" | "statement",
+  versionId: string,
+  action: "view" | "download",
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getDocumentVersionFile>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDocumentVersionFileQueryOptions(
+    id,
+    docType,
+    versionId,
+    action,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * Returns server health status
