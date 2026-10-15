@@ -9,7 +9,7 @@ The user subsequently clarified that KPIs and Dashboard should use estimated and
 
 **Why:** Ingrid believes KPI tonnage is using the Dashboard's gross-weight source. This supersedes the older instruction below to retain gross operational Dashboard tonnage.
 
-**How to apply:** Apply the chosen transition per job, only after its receipt review is complete; do not replace the estimate with a partially reviewed total. Keep gross loading/capacity calculations separate from reporting. Preserve role visibility and establish the confirmed-net source before implementation; the preceding request was to review before making changes.
+**How to apply:** Apply the chosen transition per job, only after its receipt review is complete; do not replace the estimate with a partially reviewed total. The user explicitly approved receipt-confirmed battery Pb totals as the authoritative confirmed net source, not separately editable Customer Financial Master weights. Keep gross loading/capacity calculations separate and preserve role visibility. The preceding request was to review before making changes.
 
 Ingrid's email specifies Job Management should show estimated/loading weight, while Dashboard should show confirmed weight used for payment. Use the chemical symbol “Pb”, not “PB”.
 
