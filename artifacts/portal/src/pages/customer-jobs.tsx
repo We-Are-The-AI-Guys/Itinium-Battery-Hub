@@ -115,7 +115,7 @@ export default function CustomerJobsPage() {
                     <td className="px-6 py-3 text-slate-500">
                       {["invoice", "completed"].includes(j.status) ? (
                         <JobDocumentDownloads jobId={j.id} reference={j.reference} available={j.signedDocumentTypes ?? []} releasePending={!["invoice", "invoiced", "completed"].includes(j.status)} />
-                      ) : <span className="text-xs">Available from Invoice</span>}
+                      ) : <span className="text-xs">Available on confirmation of receipt</span>}
                     </td>
                   </tr>
                 ))}

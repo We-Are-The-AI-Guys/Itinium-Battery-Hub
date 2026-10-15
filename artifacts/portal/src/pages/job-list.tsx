@@ -308,7 +308,7 @@ export default function JobListPage() {
                 <th className="px-6 py-3.5 font-semibold">Collection Date</th>
                 <th className="px-6 py-3.5 font-semibold">Customer</th>
                 <th className="px-6 py-3.5 font-semibold">Collection Point</th>
-                <th className="px-6 py-3.5 font-semibold">Pb (kg)</th>
+                <th className="px-6 py-3.5 font-semibold">Pb (Kg)</th>
                 <th className="px-6 py-3.5 font-semibold">Pallets</th>
                 <th className="px-6 py-3.5 font-semibold">Status</th>
                 <th className="px-6 py-3.5 font-semibold">Documents</th>

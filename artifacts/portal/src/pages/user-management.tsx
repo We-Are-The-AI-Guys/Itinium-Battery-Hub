@@ -175,14 +175,14 @@ export default function UserManagementPage() {
   const roleFilters = isAdmin
     ? [
         { label: "All", value: "all" },
-        { label: "Depot User", value: "depot_user" },
+        { label: "Warehouse User", value: "depot_user" },
         { label: "Team Leader", value: "team_leader" },
         { label: "Accounts", value: "accounts" },
         { label: "Head Office", value: "head_office_admin" },
       ]
     : [
         { label: "All", value: "all" },
-        { label: "Depot User", value: "depot_user" },
+        { label: "Warehouse User", value: "depot_user" },
       ];
 
   const fetchStats = useCallback(async () => {

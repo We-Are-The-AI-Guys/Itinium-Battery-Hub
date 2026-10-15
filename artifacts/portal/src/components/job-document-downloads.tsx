@@ -39,7 +39,7 @@ export function JobDocumentDownloads({ jobId, reference, available, releasePendi
         className="flex items-center gap-2 text-sky-700 underline min-h-9 text-left disabled:opacity-50">
         <Download className="h-4 w-4 shrink-0" />{busy === type ? "Downloading…" : label}
       </button></div> :
-      <div key={type} className="text-slate-500 py-1">{label}<span className="block text-slate-500">{releasePending ? "Released at Invoice" : "Not uploaded"}</span></div>)}
+      <div key={type} className="text-slate-500 py-1">{label}<span className="block text-slate-500">{releasePending ? "Available on confirmation of receipt" : "Not uploaded"}</span></div>)}
     {error && <p role="alert" className="text-red-700 max-w-56">{error}</p>}
   </div>;
 }
